@@ -1,12 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="White pawn">
-  <title>White pawn</title>
-  <!-- Original MeowlChess vector artwork. GPL-3.0-or-later. -->
-  <defs><linearGradient id="body" x1="0" y1="0" x2="0.85" y2="1"><stop stop-color="#fffdf5"/><stop offset="1" stop-color="#e8e5d9"/></linearGradient></defs>
-  <ellipse cx="50" cy="88" rx="34" ry="5" fill="#182019" opacity=".16"/>
-  <g fill="url(#body)" stroke="#383b33" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="50" cy="26" r="12.5"/><path d="M42 39h16c-1 5-3 9-3 14 0 8 6 14 11 18H34c5-4 11-10 11-18 0-5-2-9-3-14Z"/><path d="M35 69h30l4 8H31Z"/>
-    <path d="M29 76h42c3 0 4 4 5 7l2 5H22l2-5c1-3 2-7 5-7Z"/>
-    <path d="M27 83h46" fill="none" stroke="#c9c9bc" stroke-width="1.5"/>
-  </g>
-  
-</svg>
+<title>White pawn</title>
+<!-- Original MeowlChess geometric piece artwork. GPL-3.0-or-later. -->
+<defs><clipPath id="silhouette"><path d="M45 55C45 66 40 70 32 77C27 81 25 85 25 90H75C75 85 73 81 68 77C60 70 55 66 55 55Z"/><path d="M43 46L35 51L38 57H62L65 51L57 46Z"/><circle cx="50" cy="35" r="12"/></clipPath></defs>
+<g stroke-linejoin="round" stroke-linecap="round">
+<g fill="#f8f8f8" stroke="#50514f" stroke-width="2.6"><path d="M45 55C45 66 40 70 32 77C27 81 25 85 25 90H75C75 85 73 81 68 77C60 70 55 66 55 55Z"/><path d="M43 46L35 51L38 57H62L65 51L57 46Z"/><circle cx="50" cy="35" r="12"/></g>
+<g fill="#cfcfce" clip-path="url(#silhouette)"><path d="M55 24C66 31 63 43 55 46L65 51L62 57H53C55 70 64 73 68 78C59 76 49 69 48 57H50L56 51L50 47C60 42 63 31 55 24Z"/></g>
+<g fill="none" stroke="#50514f" stroke-width="2.6"><path d="M45 55C45 66 40 70 32 77C27 81 25 85 25 90H75C75 85 73 81 68 77C60 70 55 66 55 55Z"/><path d="M43 46L35 51L38 57H62L65 51L57 46Z"/><circle cx="50" cy="35" r="12"/></g>
+
+
+</g></svg>

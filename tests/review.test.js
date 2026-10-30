@@ -172,7 +172,7 @@ test('checkmate resolves without evaluating the final position', async () => {
   const fixture = fakeEngine([evaluation(), evaluation(), evaluation(), evaluation(-99900, -1, 'd8h4')]);
   const result = await analyzeGame(MATE, { engineFactory: fixture.engineFactory });
   assert.equal(fixture.calls.length, 4);
-  assert.deepEqual(result.positions[4], { cp: -100000, mate: 0, bestMove: null, pv: [], depth: 0 });
+  assert.deepEqual(result.positions[4], { cp: -100000, mate: 0, bestMove: null, pv: [], depth: 0, candidates: [] });
   assert.equal(result.moves[3].label, 'Best');
   assert.equal(result.moves[3].explanation, 'Qh4# delivers checkmate.');
   assert.equal(result.moves[2].label, 'Blunder');
@@ -194,7 +194,7 @@ test('repetition detection includes the entire replay', async () => {
   const fixture = fakeEngine();
   const result = await analyzeGame(pgn, { engineFactory: fixture.engineFactory });
   assert.equal(fixture.calls.length, 8);
-  assert.deepEqual(result.positions[8], { cp: 0, mate: null, bestMove: null, pv: [], depth: 0 });
+  assert.deepEqual(result.positions[8], { cp: 0, mate: null, bestMove: null, pv: [], depth: 0, candidates: [] });
 });
 
 test('a pre-cancelled review does not start an engine', async () => {
@@ -225,4 +225,12 @@ test('initialization and evaluation failures always dispose the engine', async (
     await assert.rejects(analyzeGame(SHORT, { engineFactory: fixture.engineFactory }), /Engine failure/);
     assert.equal(fixture.engine.disposed, true);
   }
+});
+
+test('review forwards candidate count and thinking time, retaining lines per position', async () => {
+  const candidate = { rank: 1, cp: 25, mate: null, bestMove: 'e2e4', pv: ['e2e4', 'e7e5'], depth: 12 };
+  const fixture = fakeEngine([{ ...evaluation(25, null, 'e2e4'), candidates: [candidate] }]);
+  const result = await analyzeGame(SHORT, { engineFactory: fixture.engineFactory, moveTimeMs: 3000, multiPV: 3 });
+  assert(fixture.calls.every(call => call.options.multiPV === 3 && call.options.moveTimeMs === 3000));
+  assert.deepEqual(result.positions[0].candidates, [candidate]);
 });

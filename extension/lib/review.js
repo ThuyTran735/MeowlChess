@@ -85,7 +85,7 @@ function explain(move, verdict, bestSan, after) {
   return `${move.san} reduces your estimated winning chances by ${Math.round(verdict.probabilityLoss * 100)} percentage points.${bestSan ? ` Consider ${bestSan} instead.` : ''}`;
 }
 
-export async function analyzeGame(pgn, { moveTimeMs = 150, onProgress = () => {}, signal, engineFactory = () => new StockfishEngine() } = {}) {
+export async function analyzeGame(pgn, { moveTimeMs = 150, multiPV = 1, onProgress = () => {}, signal, engineFactory = () => new StockfishEngine() } = {}) {
   abortCheck(signal);
   const game = parseGame(pgn);
   const engine = engineFactory();
@@ -103,11 +103,11 @@ export async function analyzeGame(pgn, { moveTimeMs = 150, onProgress = () => {}
       }
       let evaluation;
       if (replay.isCheckmate()) {
-        evaluation = { cp: replay.turn() === 'w' ? -100000 : 100000, mate: 0, bestMove: null, pv: [], depth: 0 };
+        evaluation = { cp: replay.turn() === 'w' ? -100000 : 100000, mate: 0, bestMove: null, pv: [], depth: 0, candidates: [] };
       } else if (replay.isDraw()) {
-        evaluation = { cp: 0, mate: null, bestMove: null, pv: [], depth: 0 };
+        evaluation = { cp: 0, mate: null, bestMove: null, pv: [], depth: 0, candidates: [] };
       } else {
-        evaluation = await engine.evaluate(game.positions[i], { moveTimeMs, signal, initialFen: game.positions[0], moves: [...uciMoves] });
+        evaluation = await engine.evaluate(game.positions[i], { moveTimeMs, multiPV, signal, initialFen: game.positions[0], moves: [...uciMoves] });
       }
       abortCheck(signal);
       positions.push(evaluation);

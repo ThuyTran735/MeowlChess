@@ -1,12 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Black king">
-  <title>Black king</title>
-  <!-- Original MeowlChess vector artwork. GPL-3.0-or-later. -->
-  <defs><linearGradient id="body" x1="0" y1="0" x2="0.85" y2="1"><stop stop-color="#5b5b55"/><stop offset="1" stop-color="#30322f"/></linearGradient></defs>
-  <ellipse cx="50" cy="88" rx="34" ry="5" fill="#182019" opacity=".16"/>
-  <g fill="url(#body)" stroke="#20231f" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M46 7h8v7h8v8h-8v9h-8v-9h-8v-8h8Z"/><path d="M50 35c-13-18-31-3-22 9l9 12h26l9-12c9-12-9-27-22-9Z"/><path d="M38 54h24c-1 8 0 12 5 19H33c5-7 6-11 5-19Z"/><path d="M37 54h26M39 60h22" fill="none"/><path d="M32 70h36l5 7H27Z"/>
-    <path d="M29 76h42c3 0 4 4 5 7l2 5H22l2-5c1-3 2-7 5-7Z"/>
-    <path d="M27 83h46" fill="none" stroke="#71716a" stroke-width="1.5"/>
-  </g>
-  
-</svg>
+<title>Black king</title>
+<!-- Original MeowlChess geometric piece artwork. GPL-3.0-or-later. -->
+<defs><clipPath id="silhouette"><path fill-rule="evenodd" d="M44 10H56V17H64V25H56L58 33C71 25 88 34 88 46C88 58 76 67 69 76H31C24 67 12 58 12 46C12 34 29 25 42 33L44 25H36V17H44ZM42 47C33 40 25 44 31 52L42 61ZM58 47V61L69 52C75 44 67 40 58 47Z"/><path d="M22 89V82C22 76 30 73 50 73S78 76 78 82V89Z"/></clipPath></defs>
+<g stroke-linejoin="round" stroke-linecap="round">
+<g fill="#585655" stroke="#292a28" stroke-width="2.6"><path fill-rule="evenodd" d="M44 10H56V17H64V25H56L58 33C71 25 88 34 88 46C88 58 76 67 69 76H31C24 67 12 58 12 46C12 34 29 25 42 33L44 25H36V17H44ZM42 47C33 40 25 44 31 52L42 61ZM58 47V61L69 52C75 44 67 40 58 47Z"/></g>
+<g fill="#454443" clip-path="url(#silhouette)"><path d="M77 32C84 42 81 49 75 57L61 74H70L84 57C95 42 85 34 77 32Z"/></g>
+<g fill="none" stroke="#292a28" stroke-width="2.6"><path fill-rule="evenodd" d="M44 10H56V17H64V25H56L58 33C71 25 88 34 88 46C88 58 76 67 69 76H31C24 67 12 58 12 46C12 34 29 25 42 33L44 25H36V17H44ZM42 47C33 40 25 44 31 52L42 61ZM58 47V61L69 52C75 44 67 40 58 47Z"/></g>
+<g fill="#585655" stroke="#292a28" stroke-width="2.6"><path d="M22 89V82C22 76 30 73 50 73S78 76 78 82V89Z"/></g>
+
+</g></svg>

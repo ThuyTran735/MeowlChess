@@ -6,7 +6,7 @@ MeowlChess is an independent browser extension for local analysis of completed c
 
 You enter a Chess.com username to request that player's publicly available completed games. Those records can include player usernames, ratings, results, timestamps, and the moves of each game. The username is part of the request URL sent directly to `api.chess.com`.
 
-The extension remembers your entered username in local browser storage. Game data and computed analysis are processed in your browser. They are not uploaded to a MeowlChess server or an external analysis service.
+The extension remembers your entered username and review settings in `chrome.storage.local`, the browser's local extension storage. Saved settings include review speed, number of engine lines, arrow/badge/coordinate visibility, and playback speed. These preferences are not synced to a MeowlChess account or sent to an analysis service. Game data and computed analysis are processed in your browser and remain in memory while the review tab is open.
 
 ## Network requests
 
@@ -27,6 +27,6 @@ The extension does not use content scripts or request permission to read live ga
 
 ## Control and deletion
 
-You can replace the saved username by entering another one. Uninstalling the extension removes its local extension storage. Public games remain on Chess.com; removing MeowlChess does not change or delete those records. Close the review tab to end its active analysis and discard its in-memory review state.
+You can replace the saved username by entering another one and loading its games. Changes to review and display settings update the locally saved preferences. Uninstalling the extension removes its local extension storage. Public games remain on Chess.com; removing MeowlChess does not change or delete those records. Close the review tab to end its active analysis and discard its in-memory review state.
 
 This notice describes the source supplied with this local build. If you modify the extension or install a modified version, review that version's behavior and privacy notice separately.

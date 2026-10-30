@@ -38,9 +38,44 @@ try {
   assert.equal(await page.locator('#move-list .move-badge').count(), 4);
   assert.equal(await page.locator('.board-move-badge').count(), 1);
   assert.match(await page.locator('#review-status').innerText(), /complete/i);
+  await page.locator('#first-button').click();
+  assert.equal(await page.locator('#engine-lines .engine-line').count(), 3);
+  assert.equal(await page.locator('#board .engine-arrow').count(), 3);
+  await page.waitForFunction(() => [...document.querySelectorAll('.move-badge img')].every(image => image.complete && image.naturalWidth > 0));
+
+  // Preferences survive reloading the real extension page via chrome.storage.
+  await page.locator('#review-settings > summary').click();
+  await page.locator('#depth').selectOption('500');
+  await page.locator('#multipv').selectOption('2');
+  await page.locator('#show-arrows').uncheck();
+  await page.locator('#show-badges').uncheck();
+  await page.locator('#show-coordinates').uncheck();
+  await page.locator('#play-speed').selectOption('2000');
+  await page.reload();
+  await page.waitForFunction(() => document.querySelector('#depth').value === '500' && document.querySelector('#multipv').value === '2');
+  assert.equal(await page.locator('#show-arrows').isChecked(), false);
+  assert.equal(await page.locator('#show-badges').isChecked(), false);
+  assert.equal(await page.locator('#show-coordinates').isChecked(), false);
+  assert.equal(await page.locator('#play-speed').inputValue(), '2000');
+  assert.equal(await page.locator('#board .coordinate').count(), 0);
+  assert.equal(await page.locator('#board .engine-arrow').count(), 0);
+  await page.locator('#review-settings > summary').click();
+  await page.locator('#depth').selectOption('150');
+  await page.locator('#multipv').selectOption('3');
+  await page.locator('#show-arrows').check();
+  await page.locator('#show-badges').check();
+  await page.locator('#show-coordinates').check();
+  await page.locator('#demo-button').click();
+  await page.locator('#analyze-button').click();
+  await page.waitForFunction(() => !document.querySelector('#summary').hidden);
+  await page.locator('#first-button').click();
+  assert.equal(await page.locator('#board .engine-arrow').count(), 3);
+  await page.locator('#review-settings > summary').click();
+  await page.locator('#move-list .move-button').nth(1).click();
+  await page.waitForFunction(() => [...document.querySelectorAll('#board img')].every(image => image.complete && image.naturalWidth > 0));
   await mkdir(join(root, 'test-results'), { recursive: true });
-  await page.screenshot({ path: join(root, 'test-results', 'review-extension.png'), fullPage: true });
-  console.log(`Actual extension passed: v${expectedVersion}, service worker, local SVG assets, WASM analysis, and move badges.`);
+  await page.screenshot({ path: join(root, 'test-results', 'review-engine-arrows.png'), fullPage: true });
+  console.log(`Actual extension passed: v${expectedVersion}, service worker, local SVG assets, WASM MultiPV analysis, arrows, move badges, and persisted review settings.`);
 
   if (process.env.LIVE_API_USERNAME) {
     const username = process.env.LIVE_API_USERNAME;

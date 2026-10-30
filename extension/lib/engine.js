@@ -21,6 +21,8 @@ export class StockfishEngine {
     this.initPromise = null;
     this.disposed = false;
     this.busy = false;
+    this.supportsMultiPV = false;
+    this.multiPV = 1;
   }
 
   async init(signal) {
@@ -55,7 +57,8 @@ export class StockfishEngine {
       const commands = [];
       if (options.has('Threads')) commands.push('setoption name Threads value 1');
       if (options.has('Hash')) commands.push('setoption name Hash value 32');
-      if (options.has('MultiPV')) commands.push('setoption name MultiPV value 1');
+      this.supportsMultiPV = options.has('MultiPV');
+      if (this.supportsMultiPV) commands.push('setoption name MultiPV value 1');
       commands.push('ucinewgame', 'isready');
       await this._command(commands, (line) => line === 'readyok' ? { done: true } : null, this.bootTimeoutMs, signal);
       this.initialized = true;
@@ -105,9 +108,12 @@ export class StockfishEngine {
     });
   }
 
-  async evaluate(fen, { moveTimeMs = 150, signal, moves = [], initialFen } = {}) {
+  async evaluate(fen, { moveTimeMs = 150, multiPV = 1, signal, moves = [], initialFen } = {}) {
     validateFen(fen);
     if (initialFen !== undefined) validateFen(initialFen);
+    if (!Number.isInteger(multiPV) || multiPV < 1 || multiPV > 3) {
+      throw new Error('Choose between one and three engine lines.');
+    }
     if (!Array.isArray(moves) || moves.some((move) => typeof move !== 'string' || !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move))) {
       throw new Error('The engine received an invalid move history.');
     }
@@ -116,30 +122,64 @@ export class StockfishEngine {
     this.busy = true;
     try {
       await this.init(signal);
+      if (multiPV > 1 && !this.supportsMultiPV) throw new Error('This engine does not support multiple candidate moves.');
+      if (multiPV !== this.multiPV) {
+        await this._command([`setoption name MultiPV value ${multiPV}`, 'isready'],
+          (line) => line === 'readyok' ? { done: true } : null, this.bootTimeoutMs, signal);
+        this.multiPV = multiPV;
+      }
       const time = Math.max(50, Math.min(5000, Math.round(Number(moveTimeMs) || 150)));
       const perspective = fen.split(/\s+/)[1] === 'w' ? 1 : -1;
-      let evaluation = null;
+      const iterations = new Map();
+      let primary = null;
       const position = initialFen === undefined ? `position fen ${fen}` : `position fen ${initialFen}${moves.length ? ` moves ${moves.join(' ')}` : ''}`;
       return await this._command([position, `go movetime ${time}`], (line) => {
         if (line.startsWith('info ') && !/\b(?:lowerbound|upperbound)\b/.test(line)) {
-          const multipv = line.match(/\bmultipv (\d+)\b/);
+          const rank = Number(line.match(/\bmultipv (\d+)\b/)?.[1] || 1);
           const score = line.match(/\bscore (cp|mate) (-?\d+)\b/);
-          if (score && (!multipv || multipv[1] === '1')) {
+          if (score && rank >= 1 && rank <= multiPV) {
             const raw = Number(score[2]);
             const mate = score[1] === 'mate' ? raw * perspective : null;
-            evaluation = {
-              cp: mate === null ? raw * perspective : Math.sign(mate) * Math.max(10000, 100000 - Math.abs(mate) * 100),
+            const rawPv = line.match(/\bpv (.+)$/)?.[1].split(/\s+/) || [];
+            const pv = rawPv.every((move) => /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move)) ? rawPv : [];
+            const evaluation = {
+              rank,
+              cp: mate === null ? raw * perspective : raw === 0 ? -100000 * perspective : Math.sign(mate) * Math.max(10000, 100000 - Math.abs(mate) * 100),
               mate,
-              pv: line.match(/\bpv (.+)$/)?.[1].split(/\s+/).filter((move) => /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move)) || [],
+              pv,
               depth: Number(line.match(/\bdepth (\d+)\b/)?.[1] || 0),
+              bestMove: pv[0] || null,
             };
+            if (rank === 1 && (!primary || evaluation.depth >= primary.depth)) primary = evaluation;
+            if (!iterations.has(evaluation.depth)) iterations.set(evaluation.depth, new Map());
+            iterations.get(evaluation.depth).set(rank, evaluation);
           }
         }
         const best = line.match(/^bestmove (\S+)/);
         if (!best) return null;
         const bestMove = /^(?:\(none\)|0000)$/.test(best[1]) ? null : best[1];
-        if (!evaluation && bestMove) throw new Error('The chess engine returned no evaluation. Try reviewing again.');
-        return { done: true, value: { ...(evaluation || { cp: 0, mate: null, pv: [], depth: 0 }), bestMove } };
+        if (bestMove && !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(bestMove)) throw new Error('The chess engine returned an invalid best move.');
+        if (!primary && bestMove) throw new Error('The chess engine returned no evaluation. Try reviewing again.');
+
+        // UCI may stop halfway through a deeper MultiPV iteration. Never mix
+        // ranks from different depths or display a stale rank-one alternative.
+        let candidates = [];
+        for (const depth of [...iterations.keys()].sort((a, b) => b - a)) {
+          const iteration = iterations.get(depth);
+          if (!bestMove || iteration.get(1)?.bestMove !== bestMove) continue;
+          const group = [];
+          const seen = new Set();
+          for (let rank = 1; rank <= multiPV; rank++) {
+            const candidate = iteration.get(rank);
+            if (!candidate?.bestMove || seen.has(candidate.bestMove)) break;
+            group.push(candidate); seen.add(candidate.bestMove);
+          }
+          if (!candidates.length) candidates = group;
+          if (group.length === multiPV) { candidates = group; break; }
+        }
+        if (bestMove && primary?.bestMove && !candidates.length) throw new Error('The chess engine returned inconsistent candidate moves. Try reviewing again.');
+        const chosen = candidates[0] || primary || { cp: 0, mate: null, pv: [], depth: 0 };
+        return { done: true, value: { cp: chosen.cp, mate: chosen.mate, pv: chosen.pv, depth: chosen.depth, bestMove, candidates } };
       }, time + 10000, signal);
     } finally {
       this.busy = false;

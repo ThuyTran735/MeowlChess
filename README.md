@@ -4,7 +4,7 @@
 
 A free Brave, Chrome, and Edge extension for reviewing completed Chess.com games. MeowlChess opens a separate review tab and runs Stockfish locally on your computer. No subscription, paid analysis API, or Chess.com login is required.
 
-**Version 1.0.0 — first release.** A focused dark interface, green-and-cream board, original vector pieces, move badges on the board and move list, estimated study scores, an interactive evaluation graph, and key-moment navigation. The cat/owl logo is MeowlChess's own branding.
+**Version 1.1.0.** A focused dark interface, green-and-cream board, original vector pieces and move badges, up to three engine lines with board arrows, estimated study scores, an interactive evaluation graph, and key-moment navigation. The cat/owl logo is MeowlChess's own branding.
 
 **Independent project. Not affiliated with, endorsed by, or approved by Chess.com.** This is a locally installable extension, not a Chrome Web Store or Edge Add-ons release.
 
@@ -15,24 +15,43 @@ A free Brave, Chrome, and Edge extension for reviewing completed Chess.com games
 3. Turn on **Developer mode**, choose **Load unpacked**, and select the `extension/` folder inside the extracted download (it contains `manifest.json`).
 4. Pin MeowlChess from your browser's extensions menu if you want easy access.
 
-The download is ready to load; no build step is needed. To change the source, use the commands below.
+The download is ready to load; no build step is needed. If you edit a local copy, load the `extension/` folder from that same copy, then click **Reload** on its browser extension card and reopen the review tab. Loading a different extracted copy will not show your edits. To change the source, use the commands below.
 
 ## Review a finished game
 
 1. Finish your game on Chess.com, then click the MeowlChess toolbar icon.
 2. Enter your Chess.com username and fetch your recent games.
-3. Choose a completed game, select quick or deeper analysis, and start the review.
-4. Step through the board and move list to inspect evaluations and suggested alternatives. Use the left/right arrow keys, click the evaluation graph, or jump between key moments. You can flip the board or cancel an analysis in progress.
+3. Choose a completed game, select a review speed and the number of engine lines, then click **Review game**.
+4. Step through the board and move list to inspect evaluations and suggested alternatives. Use the left/right arrow keys, click the evaluation graph, jump between key moments, or press **Play** to step through automatically. You can flip the board or cancel an analysis in progress.
 
 Use the demo to try the review without fetching a username's games. Only standard chess is supported. The extension does not accept arbitrary FEN positions or pasted PGNs, read Chess.com pages, or automatically detect the end of a game.
 
 Newly completed games may take time to appear. Chess.com's API documentation describes cache refresh windows of up to 12 or 24 hours, depending on the endpoint and guidance; this extension cannot force a fresh archive. Try again later if your latest game is missing.
+
+### Review options
+
+| Review speed | Engine time per position |
+| --- | --- |
+| Quick | 0.15 seconds |
+| Standard | 0.5 seconds |
+| Deep | 1.5 seconds |
+| Thorough | 3 seconds |
+
+Longer searches take more time and CPU. The total review time also depends on the game's length and your computer. In **Review settings**, choose the best move only, the top two moves, or the top three moves. More lines divide the search time among alternatives and can reduce the depth reached for each line.
+
+**Top engine moves** and the arrows always describe the **currently displayed position and the side to move**. They are continuations from that board, not alternatives to the move that was just played. The best line is green, the second blue, and the third orange. Click a line to focus its arrow. At a terminal position such as checkmate, no engine continuation is shown.
+
+Use **Analyze this position** to search the displayed position for at least 1.5 seconds, or for the selected review time if it is longer. This works only on positions from the selected completed game. It updates that position's engine lines and displayed evaluation; it does not recalculate the whole game's move labels, study scores, or evaluation graph. Click **Review again** to recalculate the complete review with your current settings.
+
+You can hide engine arrows, move badges, or board coordinates in **Review settings**. Playback offers Fast (0.7 seconds per move), Normal (1.2 seconds), and Slow (2 seconds). Review speed, engine-line count, display choices, and playback speed are remembered locally in your browser.
 
 ## What the review means
 
 Stockfish 18's lite, single-threaded build evaluates positions inside a browser worker. Its code and WebAssembly are bundled with the extension; the installed extension does not download executable code from a CDN. Game retrieval needs an internet connection; the analysis itself runs locally.
 
 Evaluations, move classifications, and any summary scores are estimates based on limited engine searches. They are not Chess.com's proprietary accuracy scores or classifications. Short searches and the lite engine can miss tactics, change their assessment with more thinking time, or recommend a move that is difficult for a human to understand. Deeper analysis takes longer and uses more CPU and battery. This is an engine review, not an automated human coach.
+
+The piece silhouettes and annotation symbols are original, reference-inspired SVG artwork. Chess.com's proprietary piece and icon image files are not bundled.
 
 ### Move labels
 
@@ -41,7 +60,8 @@ Evaluations, move classifications, and any summary scores are estimates based on
 | Teal `!!` | Brilliant | The engine's preferred piece sacrifice, with compensation and a material investment that remains at the end of its continuation. |
 | Blue `!` | Great | The engine's preferred response preserving a substantial opportunity created by the opponent's previous move. |
 | Green star | Best | The engine's preferred move. |
-| Green check | Excellent / Good | Little estimated loss compared with the previous position. |
+| Green thumbs-up | Excellent | Almost no estimated loss compared with the previous position. |
+| Green check | Good | Little estimated loss compared with the previous position. |
 | Yellow `?!` | Inaccuracy | A small reduction in estimated chances. |
 | Orange `?` | Mistake | A significant reduction in estimated chances. |
 | Red `??` | Blunder | A large reduction in estimated chances. |
@@ -67,7 +87,7 @@ The design follows the published guidance, but these documents do not amount to 
 
 ## Permissions and privacy
 
-- `storage`: remembers local preferences such as your entered username.
+- `storage`: remembers your username, review speed, engine-line count, display options, and playback speed locally.
 - `https://api.chess.com/*`: fetches public game archive data directly from Chess.com.
 
 There are no content scripts, account credentials, analytics, advertising, or developer-operated analysis servers. See [PRIVACY.md](PRIVACY.md) for details.
@@ -88,7 +108,7 @@ The build copies the pinned chess library and Stockfish assets into `extension/`
 
 Browser checks use Playwright. Install its Chromium with `npx playwright-core install chromium`, then run `npm run test:browser`. An optional `CHROMIUM_PATH` selects a compatible Chromium executable. Tests exercise the implementation; they do not certify Chess.com approval, Chrome Web Store review, or compatibility with every browser version.
 
-Validation: 32 unit tests cover completed-game filtering, API URL validation, UCI engine behavior, scoring, conservative Brilliant/Great labels, terminal positions, and cancellation. Brave and Edge browser checks exercised bundled WASM, SVG pieces, badges, graph navigation, flipping, cancellation/retry, responsive layout, and sample archive responses. An isolated Brave profile loaded the real unpacked extension, completed a demo review, retrieved 20 completed games from Chess.com's live API, opened the first game, and saved the username preference locally. The user also confirmed successful installation in their usual Brave profile. Chrome has not been tested directly. Tests used Node 24 and the environment's available Playwright 1.62.1; the project lockfile retains Playwright 1.56.1.
+Validation: 42 unit tests cover completed-game filtering, API URL validation, UCI engine behavior, coherent MultiPV candidate results, arrow geometry, scoring, conservative Brilliant/Great labels, terminal positions, and cancellation. Brave and Edge browser checks exercised bundled WASM, SVG pieces and move icons, graph navigation, MultiPV line selection, arrows and flipping, display toggles, position searches and cancellation, playback, responsive layout, and sample archive responses. The actual Brave extension also verified that review settings persist after reload. An isolated Brave profile loaded the real unpacked extension, completed a demo review, retrieved 20 completed games from Chess.com's live API, opened the first game, and saved the username preference locally. The user also confirmed successful installation in their usual Brave profile. Chrome has not been tested directly. Tests used Node 24 and the environment's available Playwright 1.62.1; the project lockfile retains Playwright 1.56.1.
 
 To test the actual extension in a disposable profile, run `npm run test:extension`. Set `CHROMIUM_PATH` to Brave or a Chromium build that supports unpacked-extension flags. Set `LIVE_API_USERNAME` to a public Chess.com username to include real archive retrieval; this optional check needs network access. The test does not install anything into your usual browser profile. For environments blocking loopback connections, `BROWSER_OFFLINE_ASSETS=1 npm run test:browser` fulfills local test-page assets directly while preserving the extension's content security policy.
 
@@ -109,7 +129,7 @@ Keep `LICENSE`, both third-party notices, and `third-party-source/` with the pro
 
 The `.gitignore` file may be hidden by your file manager. On macOS, press Command–Shift–period to show hidden files. If it was omitted from your upload, use **Add file → Create new file**, name it `.gitignore`, and copy the provided file's contents.
 
-To offer an easy download, open your repository's **Releases**, choose **Create a new release**, use tag `v1.0.0`, and attach the complete `meowlchess.zip` file. The ZIP includes both the ready-to-load extension and its corresponding source materials. This does not publish it to the Chrome Web Store or Edge Add-ons.
+To offer an easy download, open your repository's **Releases**, choose **Create a new release**, use tag `v1.1.0`, and attach the complete `meowlchess.zip` file. The ZIP includes both the ready-to-load extension and its corresponding source materials. This does not publish it to the Chrome Web Store or Edge Add-ons.
 
 ## License
 
