@@ -73,7 +73,7 @@ try {
     assert.equal(await page.locator('#board .engine-arrow').count(), 0);
   };
   await page.goto(`chrome-extension://${new URL(worker.url()).hostname}/review.html`);
-  await page.locator('#library-dialog').waitFor({ state: 'visible' });
+  await openLibrary(page);
 
   stage = 'mixed collection picker and completion guards';
   await paste([MATE, UNFINISHED, DRAW, INVALID].join('\n\n'));

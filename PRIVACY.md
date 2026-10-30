@@ -1,6 +1,6 @@
 # MeowlChess privacy notice
 
-MeowlChess is an independent browser extension for local analysis of completed chess games. It is not affiliated with Chess.com or Lichess. This notice describes version 1.3.0.
+MeowlChess is an independent browser extension for local analysis of completed chess games. It is not affiliated with Chess.com or Lichess. This notice describes version 1.4.0.
 
 ## Game data
 
@@ -10,7 +10,7 @@ You can also choose, drag and drop, or paste PGNs exported from other websites, 
 
 ## Local storage and processing
 
-The extension saves website selection, remembered website inputs, engine choice, thinking time, line count, selective recheck setting, board orientation preference, arrow mode, badge/coordinate visibility, and playback speed in `chrome.storage.local`. These preferences are not synced to a MeowlChess account or sent to an analysis service.
+The extension saves website selection, remembered website inputs, engine choice, thinking time, line count, selective recheck setting, board orientation preference, arrow mode, badge/coordinate visibility, playback speed, and the tutorial’s **Never show again** choice in `chrome.storage.local`. A browser preview without extension storage keeps the tutorial choice in localStorage instead. These preferences are not synced to a MeowlChess account or sent to an analysis service.
 
 Successful full reviews are automatically saved in the extension's **local IndexedDB**. Each record includes the PGN, player/source information, evaluations and engine continuations, move classifications, summary scores, opening metadata, engine settings and analysis version, saved timestamps, and bookmarked positions. Re-reviewing the same game replaces its saved analysis and retains its bookmarks. The Practice list is derived from mistakes and bookmarks in these saved records.
 

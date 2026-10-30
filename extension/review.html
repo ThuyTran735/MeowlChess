@@ -80,7 +80,7 @@
       </div>
     </section>
   </section>
-  <footer><span>MeowlChess v1.3.0 · Local analysis</span><span>Completed games only · <a href="https://www.chess.com/legal/fair-play" target="_blank" rel="noopener noreferrer">Fair play</a></span></footer>
+  <footer><span>MeowlChess v1.4.0 · Local analysis · <button id="open-tutorial" class="footer-link" type="button" disabled aria-haspopup="dialog" aria-controls="tutorial-dialog">Tutorial</button></span><span>Completed games only · <a href="https://www.chess.com/legal/fair-play" target="_blank" rel="noopener noreferrer">Fair play</a></span></footer>
 </main>
 
 <dialog id="library-dialog" class="library-dialog" aria-labelledby="library-title">
@@ -111,6 +111,21 @@
   <h2 id="promotion-title">Promote pawn</h2><p id="promotion-help">Choose a piece.</p>
   <div class="promotion-choices"><button type="button" data-promotion="q" aria-label="Promote to queen"><img src="pieces/wq.png" width="64" height="64" alt="" draggable="false"><span>Queen</span></button><button type="button" data-promotion="r" aria-label="Promote to rook"><img src="pieces/wr.png" width="64" height="64" alt="" draggable="false"><span>Rook</span></button><button type="button" data-promotion="b" aria-label="Promote to bishop"><img src="pieces/wb.png" width="64" height="64" alt="" draggable="false"><span>Bishop</span></button><button type="button" data-promotion="n" aria-label="Promote to knight"><img src="pieces/wn.png" width="64" height="64" alt="" draggable="false"><span>Knight</span></button></div>
   <button id="cancel-promotion" type="button" class="secondary-button">Cancel</button>
+</dialog>
+<dialog id="tutorial-dialog" class="tutorial-dialog" aria-labelledby="tutorial-title" aria-describedby="tutorial-progress">
+  <svg id="tutorial-overlay" aria-hidden="true" focusable="false"></svg>
+  <div id="tutorial-highlight" aria-hidden="true" inert></div>
+  <div id="tutorial-card" class="tutorial-card">
+  <div class="tutorial-heading"><h2 id="tutorial-title">Quick start</h2><p id="tutorial-progress" aria-live="polite" aria-atomic="true">1 of 3</p></div>
+  <div class="tutorial-body">
+    <section data-tutorial-step="0"><h3 tabindex="-1">Choose a game</h3><p>Open <strong>Games</strong> to find completed Chess.com or Lichess games by username. You can also import a PGN or try the sample.</p></section>
+    <section data-tutorial-step="1" hidden><h3 tabindex="-1">Review it</h3><p>Choose <strong>Review game</strong> to analyze it on your device. <strong>Settings</strong> lets you choose the engine and review speed.</p></section>
+    <section data-tutorial-step="2" hidden><h3 tabindex="-1">Explore the review</h3><p>Reviews open at move 0 on <strong>Summary</strong>; choose <strong>Moves</strong> and use ← / → to step through the game, or open <strong>Engine lines</strong> for suggestions.</p><p>Use <strong>Try again</strong> or <strong>Practice</strong> to revisit mistakes, and find saved reviews under <strong>Games</strong>.</p></section>
+  </div>
+  <div class="tutorial-preference"><label for="tutorial-never"><input id="tutorial-never" type="checkbox"> Never show again</label><p>Open Tutorial in the footer any time.</p></div>
+  <p id="tutorial-storage-status" class="tutorial-storage-status" role="status" hidden></p>
+  <div class="tutorial-actions"><button id="tutorial-skip" type="button">Skip</button><button id="tutorial-back" type="button" hidden>Back</button><button id="tutorial-next" class="primary-button" type="button">Next</button></div>
+  </div>
 </dialog>
 <script type="module" src="review.js"></script>
 </body>

@@ -4,7 +4,7 @@
 
 Free local reviews of completed chess games, in Brave, Chrome, and Edge. Load games from **Chess.com or Lichess**, or import completed games from PGN files exported by other websites. Stockfish and Lozza run on your device; no subscription, paid analysis service, or chess-site login is required.
 
-**Version 1.3.0.** A simpler review screen, multi-game PGN imports, and a visual promotion chooser. Completed and saved reviews open at move 0 on Summary. Retry mistakes without hints, explore legal variations, and keep reviews and bookmarks in your local library. MeowlChess uses its own cat/owl logo and is independent of Chess.com and Lichess.
+**Version 1.4.0.** An optional, three-step guided tutorial points out the review controls with animated arrows, spotlights, and gentle zooms. Skip it, save your preference with Never show again, or reopen it from the footer. Completed and saved reviews still open at move 0 on Summary, with local engines, PGN imports, and practice tools ready when you are. MeowlChess uses its own cat/owl logo and is independent of Chess.com and Lichess.
 
 ## Install or update
 
@@ -14,6 +14,10 @@ Free local reviews of completed chess games, in Brave, Chrome, and Edge. Load ga
 4. Pin MeowlChess, then click its toolbar icon to open the review page.
 
 For this working copy, load `C:\Users\thuyv\Downloads\meowlchess\extension`. After updates, click **Reload** on its extension card and reopen the review tab. Make sure the installed extension points to the same folder you edited. This is an unpacked extension, not a Chrome Web Store or Edge Add-ons listing.
+
+## Quick tutorial
+
+A three-step guided tour appears when you open MeowlChess. Spotlights, animated arrows, and enlarged previews point out Games, Review game, and the review tabs. The tour follows the controls on smaller screens, restores your scroll position when it closes, and respects reduced-motion preferences. Use **Next** and **Back**, or **Skip** (also Escape) to go straight to the extension. Check **Never show again** to stop it opening automatically in this browser profile. Without that check, it appears again the next time you open the review page. The small **Tutorial** link in the footer reopens it at any time; uncheck the box there to restore automatic display. The guide never starts a review or changes the selected game.
 
 ## Choose a game
 
@@ -113,12 +117,13 @@ npm run test:browser
 npm run test:extension
 npm run test:features
 npm run test:imports
+npm run test:tutorial
 npm run package
 ```
 
 The build refreshes the pinned chess.js and Stockfish assets. Lozza, artwork, and the generated opening data are checked in. To regenerate opening data from its bundled, pinned TSV sources, run `node scripts/build-openings.mjs`. Packaging creates `dist/meowlchess.zip`, containing the ready-to-load extension, project source, tests, notices, opening sources, and Stockfish's corresponding source and evaluation network. It excludes dependencies, generated test results, and Git data.
 
-Browser checks use Playwright. Set `CHROMIUM_PATH` to a compatible Brave/Chromium executable, or install Playwright's Chromium with `npx playwright-core install chromium`. `test:imports` covers multi-game imports, file/text drops, promotion choices, and the review landing view. `test:features` exercises the study and saved-library flows in a disposable extension profile. `BROWSER_OFFLINE_ASSETS=1` makes the page tests serve local assets directly. Extension tests do not change your usual browser installation. `LIVE_API_USERNAME` optionally enables a real Chess.com lookup. `LIVE_LICHESS_USERNAME` checks a live Lichess archive and game URL; pair it with `HEADED_EXT_TEST=1` to use a normal minimized browser, since Lichess rejects headless browser user-agents. Chrome compatibility has not been checked directly.
+Browser checks use Playwright. Set `CHROMIUM_PATH` to a compatible Brave/Chromium executable, or install Playwright's Chromium with `npx playwright-core install chromium`. `test:tutorial` covers onboarding, Skip, remembered opt-out, keyboard access, and startup behavior. `test:imports` covers multi-game imports, file/text drops, promotion choices, and the review landing view. `test:features` exercises the study and saved-library flows in a disposable extension profile. `BROWSER_OFFLINE_ASSETS=1` makes the page tests serve local assets directly. Extension tests do not change your usual browser installation. `LIVE_API_USERNAME` optionally enables a real Chess.com lookup. `LIVE_LICHESS_USERNAME` checks a live Lichess archive and game URL; pair it with `HEADED_EXT_TEST=1` to use a normal minimized browser, since Lichess rejects headless browser user-agents. Chrome compatibility has not been checked directly.
 
 Source repository: [ThuyTran735/MeowlChess](https://github.com/ThuyTran735/MeowlChess).
 

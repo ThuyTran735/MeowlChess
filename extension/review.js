@@ -8,11 +8,16 @@ import { createStudyLine } from './lib/study.js';
 import { gradeRetry } from './lib/practice.js';
 import { explainConsequence } from './lib/tactics.js';
 import { importPgnCollection, importPgnFiles, PGN_IMPORT_MAX_BYTES } from './lib/pgn-import.js';
+import { createTutorial } from './lib/tutorial.js';
 import { createReviewLibrary } from './lib/library.js';
 const reviewLibrary = createReviewLibrary({ analysisVersion: ANALYSIS_VERSION });
 
 const $ = (id) => document.getElementById(id);
-const state = { reviewTab: 'moves', importGames: [], importing: false, games: [], selected: null, parsed: null, result: null, ply: 0, flipped: false, busy: false, loading: false, controller: null, positionController: null, positionAnalysis: new Map(), selectedLine: null, playTimer: null, study: null, retry: null, selectedSquare: null, focusSquare: 'a8', pendingPromotion: null, hoverLine: null, reviewId: null, bookmarks: [], savedReviews: [], practiceItems: [], bookmarkItems: [], libraryBusy: false, branchAnalysis: new Map(), opening: null, recordMeta: null };
+const state = { starting: true, reviewTab: 'moves', importGames: [], importing: false, games: [], selected: null, parsed: null, result: null, ply: 0, flipped: false, busy: false, loading: false, controller: null, positionController: null, positionAnalysis: new Map(), selectedLine: null, playTimer: null, study: null, retry: null, selectedSquare: null, focusSquare: 'a8', pendingPromotion: null, hoverLine: null, reviewId: null, bookmarks: [], savedReviews: [], practiceItems: [], bookmarkItems: [], libraryBusy: false, branchAnalysis: new Map(), opening: null, recordMeta: null };
+const tutorial = createTutorial({
+  onOpen: () => { stopPlayback(); updateControls(); },
+  onSaveError: message => { $('save-status').textContent = message; }
+});
 const lineColors = ['#96bc4b', '#55a7d7', '#efa64a'];
 const badgeDescriptions = { Book: 'A recorded opening move without a detected tactical error', Brilliant: 'Sound sacrifice in the engine line', Great: 'Best reply after an opponent’s error', Best: 'The engine’s first choice', Excellent: 'Almost no estimated loss', Good: 'A reasonable move', Inaccuracy: 'A small missed opportunity', Mistake: 'A significant loss of chances', Blunder: 'A large loss of chances' };
 function makeBadge(label, extraClass = '') {
@@ -75,8 +80,9 @@ function displayEvaluation(evaluation) {
   return `${evaluation.cp > 0 ? '+' : ''}${(evaluation.cp / 100).toFixed(1)}`;
 }
 function updateControls() {
-  const unavailable = state.busy || state.loading || !!state.positionController || !!state.retry?.controller || state.libraryBusy || state.importing;
+  const unavailable = state.starting || state.busy || state.loading || !!state.positionController || !!state.retry?.controller || state.libraryBusy || state.importing;
   $('library-toggle').disabled = unavailable;
+  $('open-tutorial').disabled = unavailable || !tutorial.ready || !!state.retry;
   $('summary-tab').disabled = !state.result || !!state.retry;
   $('practice-tab').disabled = !!state.retry;
   $('smart-analysis').disabled = unavailable;
@@ -974,7 +980,7 @@ for (const label of MOVE_LABELS) {
   row.append(makeBadge(label), name, description); $('classification-legend').append(row);
 }
 document.addEventListener('keydown', event => {
-  if ($('library-dialog').open || $('promotion-picker').open || answersHidden() || event.target.closest('#board') || ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName) || event.ctrlKey || event.metaKey || event.altKey) return;
+  if ($('tutorial-dialog').open || $('library-dialog').open || $('promotion-picker').open || answersHidden() || event.target.closest('#board') || ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName) || event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.key === 'ArrowLeft') { event.preventDefault(); navigatePosition(positionIndex() - 1); }
   if (event.key === 'ArrowRight') { event.preventDefault(); navigatePosition(positionIndex() + 1); }
   if (event.key === 'Home') { event.preventDefault(); navigatePosition(0); }
@@ -983,13 +989,23 @@ document.addEventListener('keydown', event => {
 });
 window.addEventListener('beforeunload', () => { state.controller?.abort(); cancelPositionSearch(); cancelRetry(); stopPlayback(); reviewLibrary.close().catch(() => {}); });
 syncEngine(); syncSource(); renderBoard(); refreshLibrary();
-if (globalThis.chrome?.storage?.local) {
-  chrome.storage.local.get(['username', 'usernames', 'reviewSettings']).then(({ username, usernames, reviewSettings }) => {
-    if (usernames && typeof usernames === 'object') for (const source of ['chesscom', 'lichess']) if (typeof usernames[source] === 'string') savedUsernames[source] = usernames[source];
-    if (username && !savedUsernames.chesscom && !usernames) savedUsernames.chesscom = username;
-    restorePreferences(reviewSettings); syncEngine(); syncSource(); renderMoves(); renderBoard();
-    const remembered = savedUsernames[$('game-source').value];
-    if (remembered && !$('username').value && !state.selected && !state.loading) { $('username').value = remembered; setLibraryOpen(true); loadGames(); }
-    else if (!state.selected) setLibraryOpen(true);
-  }).catch(() => { if (!state.selected) setLibraryOpen(true); });
-} else setLibraryOpen(true);
+async function initializeReview() {
+  let remembered;
+  try {
+    if (globalThis.chrome?.storage?.local) {
+      const { username, usernames, reviewSettings } = await chrome.storage.local.get(['username', 'usernames', 'reviewSettings']);
+      if (usernames && typeof usernames === 'object') for (const source of ['chesscom', 'lichess']) if (typeof usernames[source] === 'string') savedUsernames[source] = usernames[source];
+      if (username && !savedUsernames.chesscom && !usernames) savedUsernames.chesscom = username;
+      restorePreferences(reviewSettings);
+      remembered = savedUsernames[$('game-source').value];
+    }
+  } catch { /* The game picker remains usable when preferences are unavailable. */ }
+  syncEngine(); syncSource(); renderMoves(); renderBoard();
+  // Finish the optional guide before opening Games or fetching a remembered account.
+  await tutorial.start();
+  state.starting = false; updateControls();
+  if (remembered && !$('username').value && !state.selected && !state.loading) {
+    $('username').value = remembered; setLibraryOpen(true); loadGames();
+  } else if (!state.selected) setLibraryOpen(true);
+}
+initializeReview();

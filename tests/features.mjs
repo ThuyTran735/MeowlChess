@@ -75,6 +75,7 @@ try {
   await page.goto(`chrome-extension://${id}/review.html`);
   await page.waitForFunction(() => document.querySelectorAll('#board .square').length === 64);
 
+  await openLibrary(page);
   stage = 'archive orientation and smart review';
   await page.locator('#username').fill('bob'); await page.locator('#load-button').click();
   await page.waitForFunction(() => !document.querySelector('#load-button').disabled);

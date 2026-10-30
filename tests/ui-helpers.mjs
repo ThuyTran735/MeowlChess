@@ -4,12 +4,25 @@ import { resolve, dirname, basename } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
+// Complete first-use onboarding through its real controls before legacy workflows.
+export async function dismissTutorial(page) {
+  await page.waitForFunction(() => document.querySelector('#tutorial-dialog')?.open || document.querySelector('#library-dialog')?.open || document.querySelector('#open-tutorial')?.disabled === false);
+  if (await page.locator('#tutorial-dialog').evaluate(dialog => dialog.open)) {
+    await page.locator('#tutorial-never').check();
+    await page.locator('#tutorial-skip').click();
+    await page.locator('#tutorial-dialog').waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => !document.querySelector('#open-tutorial').disabled);
+  }
+}
+
 // Operate the real dialogs and tabs rather than clicking through hidden controls.
 export async function openLibrary(page) {
+  await dismissTutorial(page);
   if (!await page.locator('#library-dialog').evaluate(dialog => dialog.open)) await page.locator('#library-toggle').click();
   await page.locator('#library-dialog').waitFor({ state: 'visible' });
 }
 export async function closeLibrary(page) {
+  await dismissTutorial(page);
   if (await page.locator('#library-dialog').evaluate(dialog => dialog.open)) await page.locator('#close-library').click();
 }
 export async function openImport(page) {
