@@ -133,67 +133,98 @@ class LocalUciEngine {
     try {
       await this.init(signal);
       if (multiPV > 1 && !this.supportsMultiPV) throw new Error('This engine does not support multiple candidate moves.');
-      if (multiPV !== this.multiPV) {
-        await this._command([`setoption name MultiPV value ${multiPV}`, 'isready'],
-          (line) => line === 'readyok' ? { done: true } : null, this.bootTimeoutMs, signal);
-        this.multiPV = multiPV;
-      }
       const time = Math.max(50, Math.min(5000, Math.round(Number(moveTimeMs) || 150)));
       const perspective = fen.split(/\s+/)[1] === 'w' ? 1 : -1;
-      const iterations = new Map();
-      let primary = null;
       const position = initialFen === undefined ? `position fen ${fen}` : `position fen ${initialFen}${moves.length ? ` moves ${moves.join(' ')}` : ''}`;
-      return await this._command([position, `go movetime ${time}`], (line) => {
-        if (line.startsWith('info ') && !/\b(?:lowerbound|upperbound)\b/.test(line)) {
-          const rank = Number(line.match(/\bmultipv (\d+)\b/)?.[1] || 1);
-          const score = line.match(/\bscore (cp|mate) (-?\d+)\b/);
-          if (score && rank >= 1 && rank <= multiPV) {
-            const raw = Number(score[2]);
-            const mate = score[1] === 'mate' ? raw * perspective : null;
-            const rawPv = line.match(/\bpv (.+)$/)?.[1].split(/\s+/) || [];
-            const pv = rawPv.every((move) => /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move)) ? rawPv : [];
-            const evaluation = {
-              rank,
-              cp: mate === null ? (raw * perspective || 0) : raw === 0 ? -100000 * perspective : Math.sign(mate) * Math.max(10000, 100000 - Math.abs(mate) * 100),
-              mate,
-              pv,
-              depth: Number(line.match(/\bdepth (\d+)\b/)?.[1] || 0),
-              bestMove: pv[0] || null,
-            };
-            if (rank === 1 && (!primary || evaluation.depth >= primary.depth)) primary = evaluation;
-            if (!iterations.has(evaluation.depth)) iterations.set(evaluation.depth, new Map());
-            iterations.get(evaluation.depth).set(rank, evaluation);
-          }
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const lines = attempt === 0 ? multiPV : 1;
+        if (lines !== this.multiPV) {
+          await this._command([`setoption name MultiPV value ${lines}`, 'isready'],
+            (line) => line === 'readyok' ? { done: true } : null, this.bootTimeoutMs, signal);
+          this.multiPV = lines;
         }
-        const best = line.match(/^bestmove (\S+)/);
-        if (!best) return null;
-        const bestMove = /^(?:\(none\)|0000)$/.test(best[1]) ? null : best[1];
-        if (bestMove && !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(bestMove)) throw new Error('The chess engine returned an invalid best move.');
-        if (!primary && bestMove) throw new Error('The chess engine returned no evaluation. Try reviewing again.');
-
-        // UCI may stop halfway through a deeper MultiPV iteration. Never mix
-        // ranks from different depths or display a stale rank-one alternative.
-        let candidates = [];
-        for (const depth of [...iterations.keys()].sort((a, b) => b - a)) {
-          const iteration = iterations.get(depth);
-          if (!bestMove || iteration.get(1)?.bestMove !== bestMove) continue;
-          const group = [];
-          const seen = new Set();
-          for (let rank = 1; rank <= multiPV; rank++) {
-            const candidate = iteration.get(rank);
-            if (!candidate?.bestMove || seen.has(candidate.bestMove)) break;
-            group.push(candidate); seen.add(candidate.bestMove);
-          }
-          if (!candidates.length) candidates = group;
-          if (group.length === multiPV) { candidates = group; break; }
-        }
-        if (bestMove && primary?.bestMove && !candidates.length) throw new Error('The chess engine returned inconsistent candidate moves. Try reviewing again.');
-        const chosen = candidates[0] || primary || { cp: 0, mate: null, pv: [], depth: 0 };
-        return { done: true, value: { cp: chosen.cp, mate: chosen.mate, pv: chosen.pv, depth: chosen.depth, bestMove, candidates } };
-      }, time + 10000, signal);
+        const result = await this._search(position, {
+          time: attempt === 0 ? time : Math.max(500, time), multiPV: lines, perspective, signal,
+        });
+        if (result) return result;
+        // A timed search can stop before its final move has an exact score.
+        // Re-search this same position once, with its full history and one line.
+      }
+      const error = new Error('The chess engine returned no evaluation for its chosen move after a second search. Try a different engine or more thinking time.');
+      this._fail(error);
+      throw error;
     } finally {
       this.busy = false;
     }
+  }
+
+  _search(position, { time, multiPV, perspective, signal }) {
+    const reports = [];
+    const observations = new Map();
+    let report = new Map();
+    let terminalScore = null;
+    const finishReport = () => {
+      const first = report.get(1), group = [], seen = new Set();
+      if (!first?.bestMove) return;
+      for (let rank = 1; rank <= multiPV; rank++) {
+        const candidate = report.get(rank);
+        if (!candidate?.bestMove || candidate.depth !== first.depth || seen.has(candidate.bestMove)) break;
+        group.push(candidate); seen.add(candidate.bestMove);
+      }
+      if (group.length) reports.push(group);
+    };
+    return this._command([position, `go movetime ${time}`], (line) => {
+      if (line.startsWith('info ')) {
+        const rank = Number(line.match(/\bmultipv (\d+)\b/)?.[1] || 1);
+        const score = line.match(/\bscore (cp|mate) (-?\d+)\b/);
+        if (rank === 1 && (score || /\bpv\b/.test(line))) {
+          // Repeated depths are separate reports. Even a bound or malformed
+          // primary starts a new report: its alternatives cannot reuse old ranks.
+          finishReport(); report = new Map();
+        } else if (score && report.has(rank)) {
+          // A repeated secondary rank is a separate update, not a replacement
+          // that can erase a completed report or borrow its other alternatives.
+          finishReport(); report = new Map();
+        }
+        if (score && rank >= 1 && rank <= multiPV && !/\b(?:lowerbound|upperbound)\b/.test(line)) {
+          const raw = Number(score[2]);
+          const mate = score[1] === 'mate' ? raw * perspective : null;
+          const rawPv = line.match(/\bpv (.+)$/)?.[1].split(/\s+/) || [];
+          const validPv = rawPv.every(move => /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move));
+          const pv = validPv ? rawPv : [];
+          const evaluation = {
+            rank,
+            cp: mate === null ? (raw * perspective || 0) : raw === 0 ? -100000 * perspective : Math.sign(mate) * Math.max(10000, 100000 - Math.abs(mate) * 100),
+            mate, pv,
+            depth: Number(line.match(/\bdepth (\d+)\b/)?.[1] || 0),
+            bestMove: pv[0] || null,
+          };
+          report.set(rank, evaluation);
+          if (evaluation.bestMove) {
+            const previous = observations.get(evaluation.bestMove);
+            if (!previous || evaluation.depth >= previous.depth) observations.set(evaluation.bestMove, evaluation);
+          } else if (rank === 1 && !rawPv.length && (mate === 0 || (mate === null && raw === 0))) terminalScore = evaluation;
+        } else if (score && rank >= 1 && rank <= multiPV) report.delete(rank);
+      }
+      const best = line.match(/^bestmove (\S+)/);
+      if (!best) return null;
+      const bestMove = /^(?:\(none\)|0000)$/.test(best[1]) ? null : best[1];
+      if (bestMove && !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(bestMove)) throw new Error('The chess engine returned an invalid best move.');
+      finishReport();
+      if (!bestMove) return { done: true, value: terminalScore ? { cp: terminalScore.cp, mate: terminalScore.mate, pv: [], depth: terminalScore.depth, bestMove: null, candidates: [] } : null };
+
+      // Prefer the most recent complete, same-depth report for the final move.
+      // Stockfish can promote a previously secondary move when a search stops.
+      // In that case retain only that move's own exact score and continuation.
+      const matching = reports.filter(group => group[0].bestMove === bestMove).reverse().sort((a, b) => b[0].depth - a[0].depth);
+      let candidates = matching.find(group => group.length === multiPV) || matching[0];
+      if (!candidates) {
+        const observation = observations.get(bestMove);
+        if (observation) candidates = [{ ...observation, rank: 1 }];
+      }
+      const chosen = candidates?.[0];
+      return { done: true, value: chosen ? { cp: chosen.cp, mate: chosen.mate, pv: chosen.pv, depth: chosen.depth, bestMove, candidates } : null };
+    }, time + 10000, signal);
   }
 
   _fail(error) {

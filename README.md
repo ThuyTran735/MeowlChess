@@ -1,10 +1,10 @@
 # MeowlChess
 
-<img src="extension/icons/logo.png" alt="MeowlChess cat and owl mascot on a chessboard" width="180">
+<img src="extension/icons/logo.png" alt="MeowlChess crowned cat and owl mascot on a green-and-cream chessboard" width="180">
 
 Free local reviews of completed chess games, in Brave, Chrome, and Edge. Load games from **Chess.com or Lichess**, or import a finished game's PGN from another website. Stockfish and Lozza run on your device; no subscription, paid analysis service, or chess-site login is required.
 
-**Version 1.2.0.** Review games, retry mistakes without hints, explore legal variations, and follow concrete engine continuations. Completed reviews and bookmarked positions stay in your local library. A bundled opening reference, selective deeper searches, and a quieter board help you focus on the game. MeowlChess uses its own cat/owl logo and is independent of Chess.com and Lichess.
+**Version 1.2.1.** Review games, retry mistakes without hints, explore legal variations, and follow concrete engine continuations. Completed reviews and bookmarked positions stay in your local library. A bundled opening reference, selective deeper searches, and a quieter board help you focus on the game. MeowlChess uses its own cat/owl logo and is independent of Chess.com and Lichess.
 
 ## Install or update
 

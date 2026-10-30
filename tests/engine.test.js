@@ -5,16 +5,24 @@ import { StockfishEngine } from '../extension/lib/engine.js';
 const WHITE = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const BLACK = 'rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
 
-function fixture(lines = ['info depth 10 score cp 42 pv e2e4 e7e5', 'bestmove e2e4']) {
+function fixture(lines = ['info depth 10 score cp 42 pv e2e4 e7e5', 'bestmove e2e4'], { searches, onSearch = () => {} } = {}) {
   const commands = [];
+  let searchIndex = 0;
   const worker = {
     stopped: false,
     postMessage(command) {
       commands.push(command);
       queueMicrotask(() => {
         if (this.stopped) return;
-        const output = command === 'uci' ? ['option name Hash type spin default 16', 'option name Threads type spin default 1', 'option name MultiPV type spin default 1 min 1 max 256', 'uciok'] : command === 'isready' ? ['readyok'] : command.startsWith('go ') ? lines : [];
-        for (const data of output) this.onmessage({ data });
+        let output = command === 'uci' ? ['option name Hash type spin default 16', 'option name Threads type spin default 1', 'option name MultiPV type spin default 1 min 1 max 256', 'uciok'] : command === 'isready' ? ['readyok'] : [];
+        if (command.startsWith('go ')) {
+          const index = searchIndex++;
+          output = searches ? searches[index] : lines;
+          // Unexpected extra searches fail promptly rather than hanging a test.
+          if (!Array.isArray(output)) { this.onerror({ preventDefault() {} }); return; }
+          onSearch(index, command);
+        }
+        for (const data of output) { if (this.stopped) return; this.onmessage({ data }); }
       });
     },
     terminate() { this.stopped = true; },
@@ -186,5 +194,161 @@ test('mate-zero score keeps the winning side when the engine returns no legal mo
     assert.equal(result.bestMove, null);
     assert.deepEqual(result.candidates, []);
     engine.dispose();
+  }
+});
+
+test('captured Stockfish cutoff promotes its exact secondary move without stale alternatives', async () => {
+  const fen = 'r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R b KQkq - 0 4';
+  const { engine, commands } = fixture([
+    'info depth 11 multipv 1 score cp -18 pv b7b6 a2a4',
+    'info depth 11 multipv 2 score cp -23 pv f6e4 d3e4',
+    'info depth 11 multipv 3 score cp -35 pv a7a6 a2a4',
+    'info depth 12 multipv 1 score cp -22 upperbound pv f6e4 d3e4',
+    'info depth 11 multipv 2 score cp -18 pv b7b6 a2a4',
+    'info depth 11 multipv 3 score cp -35 pv a7a6 a2a4',
+    'bestmove f6e4',
+  ]);
+  try {
+    const result = await engine.evaluate(fen, { multiPV: 3, moveTimeMs: 50 });
+    assert.equal(result.bestMove, 'f6e4');
+    assert.equal(result.cp, 23);
+    assert.equal(result.depth, 11);
+    assert.deepEqual(result.pv, ['f6e4', 'd3e4']);
+    assert.deepEqual(result.candidates.map(({ rank, bestMove, cp }) => ({ rank, bestMove, cp })), [{ rank: 1, bestMove: 'f6e4', cp: 23 }]);
+    assert.equal(commands.filter(command => command.startsWith('go ')).length, 1);
+  } finally { engine.dispose(); }
+});
+
+test('a restored best move retains its complete earlier report when rank one updates at the same depth', async () => {
+  const { engine } = fixture([
+    'info depth 10 multipv 1 score cp 42 pv e2e4 e7e5',
+    'info depth 10 multipv 2 score cp 30 pv d2d4 d7d5',
+    'info depth 10 multipv 3 score cp 20 pv g1f3 g8f6',
+    'info depth 10 multipv 1 score cp 55 pv d2d4 g8f6',
+    'bestmove e2e4',
+  ]);
+  try {
+    const result = await engine.evaluate(WHITE, { multiPV: 3 });
+    assert.equal(result.cp, 42);
+    assert.deepEqual(result.pv, ['e2e4', 'e7e5']);
+    assert.deepEqual(result.candidates.map(candidate => candidate.bestMove), ['e2e4', 'd2d4', 'g1f3']);
+    assert.deepEqual(result.candidates.map(candidate => candidate.cp), [42, 30, 20]);
+  } finally { engine.dispose(); }
+});
+
+test('ignored rank-one reports still separate later alternatives from a preceding report', async () => {
+  for (const boundary of [
+    'info depth 10 multipv 1 score cp 55 lowerbound pv d2d4 d7d5',
+    'info depth 10 multipv 1 score cp 55 pv d2d4 invalid',
+    'info depth 10 multipv 1 score cp 55',
+  ]) {
+    const { engine } = fixture([
+      'info depth 10 multipv 1 score cp 40 pv e2e4 e7e5',
+      boundary,
+      'info depth 10 multipv 2 score cp 30 pv g1f3 g8f6',
+      'info depth 10 multipv 3 score cp 20 pv c2c4 e7e5',
+      'bestmove e2e4',
+    ]);
+    try {
+      const result = await engine.evaluate(WHITE, { multiPV: 3 });
+      assert.equal(result.cp, 40, boundary);
+      assert.deepEqual(result.pv, ['e2e4', 'e7e5'], boundary);
+      assert.deepEqual(result.candidates.map(candidate => candidate.bestMove), ['e2e4'], boundary);
+    } finally { engine.dispose(); }
+  }
+});
+
+test('an unseen final move triggers one coherent retry with full history and restores MultiPV next time', async () => {
+  const fen = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
+  const moves = ['e2e4', 'e7e5'];
+  const { engine, commands } = fixture([], { searches: [
+    ['info depth 10 multipv 1 score cp 90 pv g1f3 b8c6', 'bestmove f1c4'],
+    ['info depth 12 score cp 24 pv b1c3 b8c6', 'bestmove b1c3'],
+    ['info depth 10 multipv 1 score cp 31 pv g1f3 b8c6', 'info depth 10 multipv 2 score cp 25 pv f1c4 g8f6', 'info depth 10 multipv 3 score cp 20 pv b1c3 b8c6', 'bestmove g1f3'],
+  ] });
+  try {
+    const result = await engine.evaluate(fen, { initialFen: WHITE, moves, multiPV: 3, moveTimeMs: 50 });
+    assert.equal(result.bestMove, 'b1c3');
+    assert.equal(result.cp, 24);
+    assert.equal(result.depth, 12);
+    assert.deepEqual(result.pv, ['b1c3', 'b8c6']);
+    assert.equal(result.candidates.length, 1);
+    assert.equal(result.candidates[0].bestMove, result.bestMove);
+    assert.equal(engine.disposed, false);
+    const next = await engine.evaluate(fen, { initialFen: WHITE, moves, multiPV: 3, moveTimeMs: 50 });
+    assert.equal(next.candidates.length, 3);
+    assert.equal(next.cp, 31);
+    assert.deepEqual(commands.filter(command => command.startsWith('position ')), Array(3).fill(`position fen ${WHITE} moves e2e4 e7e5`));
+    const searches = commands.filter(command => command.startsWith('go '));
+    assert.equal(searches.length, 3);
+    assert.equal(searches[0], 'go movetime 50');
+    assert.match(searches[1], /^go movetime \d+$/);
+    assert(Number(searches[1].split(' ').at(-1)) >= 500 && Number(searches[1].split(' ').at(-1)) <= 5000);
+    assert.equal(searches[2], 'go movetime 50');
+    assert.deepEqual(commands.filter(command => command.startsWith('setoption name MultiPV ')), [
+      'setoption name MultiPV value 1', 'setoption name MultiPV value 3', 'setoption name MultiPV value 1', 'setoption name MultiPV value 3',
+    ]);
+  } finally { engine.dispose(); }
+});
+
+test('missing or malformed exact PV evidence is replaced by a real retry score', async () => {
+  for (const incomplete of [
+    ['bestmove e2e4'],
+    ['info depth 10 score cp 777', 'bestmove e2e4'],
+    ['info depth 10 score cp 777 pv e2e4 invalid', 'bestmove e2e4'],
+    ['info depth 10 score cp 777 lowerbound pv e2e4 e7e5', 'bestmove e2e4'],
+  ]) {
+    const { engine, commands } = fixture([], { searches: [incomplete, ['info depth 12 score cp 15 pv e2e4 e7e5', 'bestmove e2e4']] });
+    try {
+      const result = await engine.evaluate(WHITE, { moveTimeMs: 50 });
+      assert.equal(result.cp, 15, incomplete.join('\n'));
+      assert.equal(result.depth, 12);
+      assert.deepEqual(result.pv, ['e2e4', 'e7e5']);
+      assert.equal(commands.filter(command => command.startsWith('go ')).length, 2);
+    } finally { engine.dispose(); }
+  }
+});
+
+test('a malformed later PV cannot erase earlier exact evidence for the final move', async () => {
+  const { engine, commands } = fixture([
+    'info depth 10 score cp 40 pv e2e4 e7e5',
+    'info depth 10 score cp 777 pv e2e4 invalid',
+    'info depth 11 score cp 999',
+    'bestmove e2e4',
+  ]);
+  try {
+    const result = await engine.evaluate(WHITE, { moveTimeMs: 50 });
+    assert.equal(result.cp, 40);
+    assert.equal(result.depth, 10);
+    assert.deepEqual(result.pv, ['e2e4', 'e7e5']);
+    assert.equal(commands.filter(command => command.startsWith('go ')).length, 1);
+  } finally { engine.dispose(); }
+});
+
+test('aborting during the fallback search rejects and terminates the worker', async () => {
+  const controller = new AbortController();
+  const { engine, worker, commands } = fixture([], {
+    searches: [['info depth 10 score cp 40 pv d2d4 d7d5', 'bestmove e2e4'], []],
+    onSearch(index) { if (index === 1) controller.abort(); },
+  });
+  await assert.rejects(engine.evaluate(WHITE, { multiPV: 3, moveTimeMs: 50, signal: controller.signal }), { name: 'AbortError' });
+  assert.equal(commands.filter(command => command.startsWith('go ')).length, 2);
+  assert.equal(worker.stopped, true);
+  assert.equal(engine.worker, null);
+  assert.equal(engine.disposed, true);
+});
+
+test('repeated incomplete output retries only once and disposes instead of inventing a score', async () => {
+  for (const incomplete of [
+    ['info depth 10 score cp 40 pv d2d4 d7d5', 'bestmove e2e4'],
+    ['info depth 10 score cp 777', 'bestmove e2e4'],
+    ['bestmove (none)'],
+  ]) {
+    const { engine, worker, commands } = fixture([], { searches: [incomplete, incomplete] });
+    await assert.rejects(engine.evaluate(WHITE, { multiPV: 3, moveTimeMs: 50 }));
+    assert.equal(commands.filter(command => command.startsWith('go ')).length, 2);
+    assert.equal(worker.stopped, true);
+    assert.equal(engine.disposed, true);
+    assert.equal(engine.worker, null);
   }
 });
