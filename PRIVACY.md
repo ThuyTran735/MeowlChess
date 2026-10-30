@@ -1,12 +1,12 @@
 # MeowlChess privacy notice
 
-MeowlChess is an independent browser extension for local analysis of completed chess games. It is not affiliated with Chess.com or Lichess. This notice describes version 1.2.1.
+MeowlChess is an independent browser extension for local analysis of completed chess games. It is not affiliated with Chess.com or Lichess. This notice describes version 1.3.0.
 
 ## Game data
 
 For Chess.com or Lichess retrieval, you enter a public username; Lichess also accepts a completed-game link. The selected site's public API receives that username or game ID directly. Returned data can include player names, ratings, results, dates, game URLs, and moves.
 
-You can also choose or paste a PGN exported from another website. Imported files are read locally and are not uploaded. MeowlChess does not contact an arbitrary website named in a PGN. A completed review retains the game's PGN locally, including its headers and comments; only line endings, a leading byte-order mark, and surrounding whitespace are normalized.
+You can also choose, drag and drop, or paste PGNs exported from other websites, including files containing several games. The import picker remains in tab memory; a game is saved only after its full review completes. Imported files are read locally and are not uploaded. MeowlChess does not contact an arbitrary website named in a PGN. A completed review retains the game's PGN locally, including its headers and comments; only line endings, a leading byte-order mark, and surrounding whitespace are normalized.
 
 ## Local storage and processing
 

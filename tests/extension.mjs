@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { openLibrary, closeLibrary, openImport, openMoves, openEngine, openSummary, closeTestContext } from './ui-helpers.mjs';
 import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
 import { join, resolve, dirname, basename } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -28,9 +29,11 @@ try {
   const page = await context.newPage();
 
   async function ensureSettingsOpen() {
+    await closeLibrary(page);
     if (!await page.locator('#review-settings').evaluate(details => details.open)) await page.locator('#review-settings > summary').click();
   }
   async function ensureSettingsClosed() {
+    await closeLibrary(page);
     if (await page.locator('#review-settings').evaluate(details => details.open)) await page.locator('#review-settings > summary').click();
   }
   async function selectReviewOption(id, value) {
@@ -48,13 +51,17 @@ try {
   assert.equal(await page.evaluate(() => chrome.runtime.getManifest().version), expectedVersion);
   await page.waitForFunction(() => [...document.querySelectorAll('#board .piece')].every(piece => piece.complete && piece.naturalWidth > 0));
   assert.equal(await page.locator('#review-settings').evaluate(details => details.open), false);
+  await openLibrary(page);
   await page.locator('#demo-button').click();
   await page.locator('#analyze-button').click();
   await page.waitForFunction(() => !document.querySelector('#summary').hidden && !document.querySelector('#analyze-button').disabled);
   assert.equal(await page.locator('#move-list .move-badge').count(), 4);
-  assert.equal(await page.locator('.board-move-badge').count(), 1);
+  assert.equal(await page.locator('.board-move-badge').count(), 0);
+  assert.equal(await page.locator('#summary-tab').getAttribute('aria-selected'), 'true');
+  assert.match(await page.locator('#position-label').innerText(), /starting/i);
   assert.match(await page.locator('#review-status').innerText(), /complete/i);
-  await page.locator('#first-button').click();
+  if (!await page.locator('#first-button').isDisabled()) await page.locator('#first-button').click();
+  await openEngine(page);
   assert.equal(await page.locator('#engine-lines .engine-line').count(), 3);
   assert.equal(await page.locator('#arrow-mode').inputValue(), 'best');
   assert.equal(await page.locator('#smart-analysis').isChecked(), true);
@@ -90,21 +97,26 @@ try {
   // Engine, source, and the new Fast preference survive real extension storage.
   await selectReviewOption('engine', 'lozza');
   await selectReviewOption('depth', '50');
+  await openLibrary(page);
   await page.locator('#game-source').selectOption('lichess');
   await page.reload();
   await page.waitForFunction(() => document.querySelector('#engine').value === 'lozza' && document.querySelector('#depth').value === '50' && document.querySelector('#game-source').value === 'lichess');
   assert.equal(await page.locator('#multipv').inputValue(), '1');
   assert.equal(await page.locator('#multipv').isDisabled(), true);
+  await openLibrary(page);
   await page.locator('#demo-button').click();
   await page.locator('#analyze-button').click();
   await page.waitForFunction(() => !document.querySelector('#summary').hidden && !document.querySelector('#analyze-button').disabled);
-  await page.locator('#first-button').click();
+  if (!await page.locator('#first-button').isDisabled()) await page.locator('#first-button').click();
+  await openEngine(page);
   assert.equal(await page.locator('#engine-lines .engine-line').count(), 1);
   assert.match(await page.locator('#engine-status').innerText(), /Lozza/);
+  await openEngine(page);
   await page.locator('#quick-position').click();
   await page.waitForFunction(() => !document.querySelector('#quick-position').disabled);
   assert.match(await page.locator('#engine-status').innerText(), /Lozza.*Position search/);
   await selectReviewOption('engine', 'stockfish');
+  await openLibrary(page);
   await page.locator('#game-source').selectOption('chesscom');
   await ensureSettingsOpen();
   await selectReviewOption('depth', '150');
@@ -112,15 +124,17 @@ try {
   await setReviewToggle('show-arrows', true);
   await setReviewToggle('show-badges', true);
   await setReviewToggle('show-coordinates', true);
+  await openLibrary(page);
   await page.locator('#demo-button').click();
   await page.locator('#analyze-button').click();
   await page.waitForFunction(() => !document.querySelector('#summary').hidden && !document.querySelector('#analyze-button').disabled);
-  await page.locator('#first-button').click();
+  if (!await page.locator('#first-button').isDisabled()) await page.locator('#first-button').click();
+  await openEngine(page);
   assert.equal(await page.locator('#board .engine-arrow').count(), 3);
   await ensureSettingsClosed();
   await page.locator('#summary-tab').click();
   assert.equal(await page.locator('#summary').isVisible(), true);
-  assert.equal(await page.locator('.engine-panel').isVisible(), true);
+  assert.equal(await page.locator('.engine-panel').isVisible(), false);
   await page.locator('#moves-tab').focus();
   await page.keyboard.press('Enter');
   assert.equal(await page.locator('#moves-panel').isVisible(), true);
@@ -133,6 +147,7 @@ try {
 
   if (process.env.LIVE_API_USERNAME) {
     const username = process.env.LIVE_API_USERNAME;
+    await openLibrary(page);
     await page.locator('#username').fill(username);
     await page.locator('#load-button').click();
     await page.waitForFunction(() => !document.querySelector('#load-button').disabled);
@@ -146,7 +161,9 @@ try {
     console.log('Live API lookup skipped. Set LIVE_API_USERNAME to exercise unmocked retrieval.');
   }
   if (process.env.LIVE_LICHESS_USERNAME) {
+    await openLibrary(page);
     await page.locator('#game-source').selectOption('lichess');
+    await openLibrary(page);
     await page.locator('#username').fill(process.env.LIVE_LICHESS_USERNAME);
     await page.locator('#load-button').click();
     await page.waitForFunction(() => !document.querySelector('#load-button').disabled);
@@ -156,6 +173,7 @@ try {
     assert(await page.locator('.move-button').count() > 0, 'The Lichess archive game did not open.');
     const originalUrl = await page.locator('#game-subtitle a').getAttribute('href');
     assert.match(originalUrl, /^https:\/\/lichess\.org\/[a-zA-Z0-9]{8}$/);
+    await openLibrary(page);
     await page.locator('#username').fill(originalUrl);
     await page.locator('#load-button').click();
     await page.waitForFunction(() => !document.querySelector('#load-button').disabled);
@@ -169,10 +187,5 @@ try {
   }
   assert.deepEqual(errors, []);
 } finally {
-  await Promise.all((context?.pages() || []).map(page => page.close({ runBeforeUnload: false })));
-  await context?.close();
-  // Delete only the exact disposable profile generated above, never a user profile.
-  if (dirname(profile) === temporaryRoot && basename(profile).startsWith('meowlchess-extension-test-')) {
-    await rm(profile, { recursive: true, force: true, maxRetries: 3 }).catch(() => {});
-  }
+  await closeTestContext(context, profile, 'meowlchess-extension-test-');
 }

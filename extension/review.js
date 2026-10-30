@@ -1,5 +1,5 @@
 import { Chess } from './vendor/chess.js';
-import { fetchGames, importPgn, safeOriginalGameUrl } from './lib/games.js';
+import { fetchGames, safeOriginalGameUrl } from './lib/games.js';
 import { parseGame, analyzeGame, MOVE_LABELS, ANALYSIS_VERSION } from './lib/review.js';
 import { createEngine, ENGINE_OPTIONS } from './lib/engine.js';
 import { moveArrowPath } from './lib/board.js';
@@ -7,11 +7,12 @@ import { recognizeOpening } from './lib/openings.js';
 import { createStudyLine } from './lib/study.js';
 import { gradeRetry } from './lib/practice.js';
 import { explainConsequence } from './lib/tactics.js';
+import { importPgnCollection, importPgnFiles, PGN_IMPORT_MAX_BYTES } from './lib/pgn-import.js';
 import { createReviewLibrary } from './lib/library.js';
 const reviewLibrary = createReviewLibrary({ analysisVersion: ANALYSIS_VERSION });
 
 const $ = (id) => document.getElementById(id);
-const state = { games: [], selected: null, parsed: null, result: null, ply: 0, flipped: false, busy: false, loading: false, controller: null, positionController: null, positionAnalysis: new Map(), selectedLine: null, playTimer: null, study: null, retry: null, selectedSquare: null, focusSquare: 'a8', pendingPromotion: null, hoverLine: null, reviewId: null, bookmarks: [], savedReviews: [], practiceItems: [], bookmarkItems: [], libraryBusy: false, branchAnalysis: new Map(), opening: null, recordMeta: null };
+const state = { reviewTab: 'moves', importGames: [], importing: false, games: [], selected: null, parsed: null, result: null, ply: 0, flipped: false, busy: false, loading: false, controller: null, positionController: null, positionAnalysis: new Map(), selectedLine: null, playTimer: null, study: null, retry: null, selectedSquare: null, focusSquare: 'a8', pendingPromotion: null, hoverLine: null, reviewId: null, bookmarks: [], savedReviews: [], practiceItems: [], bookmarkItems: [], libraryBusy: false, branchAnalysis: new Map(), opening: null, recordMeta: null };
 const lineColors = ['#96bc4b', '#55a7d7', '#efa64a'];
 const badgeDescriptions = { Book: 'A recorded opening move without a detected tactical error', Brilliant: 'Sound sacrifice in the engine line', Great: 'Best reply after an opponent’s error', Best: 'The engine’s first choice', Excellent: 'Almost no estimated loss', Good: 'A reasonable move', Inaccuracy: 'A small missed opportunity', Mistake: 'A significant loss of chances', Blunder: 'A large loss of chances' };
 function makeBadge(label, extraClass = '') {
@@ -38,12 +39,11 @@ function syncSource() {
   $('username').placeholder = lichess ? 'Username or finished game URL' : 'Username';
 }
 function setLibraryOpen(open) {
-  document.querySelector('.library-panel').dataset.collapsed = String(!open);
-  $('library-toggle').setAttribute('aria-expanded', String(open));
-  $('library-toggle').textContent = open ? 'Hide' : 'Show games';
+  const dialog = $('library-dialog');
+  if (open && !dialog.open) { stopPlayback(); updateControls(); dialog.showModal(); }
+  else if (!open && dialog.open) dialog.close();
+  $('library-toggle').setAttribute('aria-expanded', String(dialog.open));
 }
-const phoneLayout = matchMedia('(max-width: 650px)');
-phoneLayout.addEventListener('change', event => setLibraryOpen(!event.matches || !state.parsed));
 function keyPlies() { return state.result?.moves.filter(move => ['Brilliant', 'Great', 'Mistake', 'Blunder'].includes(move.label)).map(move => move.ply) || []; }
 const sample = {
   pgn: '[Event "MeowlChess sample"]\n[Site "Local sample"]\n[Date "2026.01.01"]\n[White "White"]\n[Black "Black"]\n[Result "0-1"]\n\n1. f3 e5 2. g4 Qh4# 0-1',
@@ -56,12 +56,15 @@ function showError(message = '') {
 }
 function setReviewTab(name, focus = false) {
   if (name === 'summary' && !state.result) return;
+  state.reviewTab = name;
   for (const view of ['moves', 'summary', 'practice']) {
     const active = view === name;
     $(`${view}-panel`).hidden = !active;
     $(`${view}-tab`).setAttribute('aria-selected', String(active));
     $(`${view}-tab`).tabIndex = active ? 0 : -1;
   }
+  state.hoverLine = null;
+  renderEngineArrows(currentCandidates());
   if (name === 'moves') keepSelectedMoveVisible();
   if (focus) $(`${name}-tab`).focus();
 }
@@ -72,7 +75,8 @@ function displayEvaluation(evaluation) {
   return `${evaluation.cp > 0 ? '+' : ''}${(evaluation.cp / 100).toFixed(1)}`;
 }
 function updateControls() {
-  const unavailable = state.busy || state.loading || !!state.positionController || !!state.retry?.controller || state.libraryBusy;
+  const unavailable = state.busy || state.loading || !!state.positionController || !!state.retry?.controller || state.libraryBusy || state.importing;
+  $('library-toggle').disabled = unavailable;
   $('summary-tab').disabled = !state.result || !!state.retry;
   $('practice-tab').disabled = !!state.retry;
   $('smart-analysis').disabled = unavailable;
@@ -114,7 +118,7 @@ function updateControls() {
   $('key-moments').hidden = !keys.length;
   $('previous-key').disabled = !keys.some(ply => ply < state.ply);
   $('next-key').disabled = !keys.some(ply => ply > state.ply);
-  for (const button of document.querySelectorAll('.game-card, .notebook-item, .saved-open, .saved-delete')) button.disabled = unavailable || button.dataset.invalid === 'true';
+  for (const button of document.querySelectorAll('.game-card, .notebook-item, .saved-open, .saved-delete, .import-game')) button.disabled = unavailable || button.dataset.invalid === 'true';
   const seconds = (state.parsed?.positions.length || 0) * ($('smart-analysis').checked ? Math.min(150, Number($('depth').value)) : Number($('depth').value)) / 1000;
   $('time-estimate').textContent = seconds ? `About ${seconds < 60 ? `${Math.ceil(seconds)} sec` : `${Math.ceil(seconds / 60)} min`} for the first pass.${$('smart-analysis').checked ? ' Key mistakes get extra thinking time.' : ' More lines split the search time.'}` : 'Choose a game to see the estimated review time.';
 }
@@ -382,7 +386,7 @@ function renderEngineLines() {
 }
 function renderEngineArrows(candidates) {
   $('board').querySelector('.engine-overlay')?.remove();
-  if (answersHidden() || !$('show-arrows').checked || !candidates.length) return;
+  if (state.reviewTab !== 'moves' || answersHidden() || !$('show-arrows').checked || !candidates.length) return;
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg'); svg.classList.add('engine-overlay'); svg.setAttribute('viewBox', '0 0 800 800'); svg.setAttribute('aria-hidden', 'true');
   const defs = document.createElementNS(ns, 'defs'); svg.append(defs);
@@ -461,7 +465,7 @@ function goTo(ply, { playback = false } = {}) {
   if (!state.parsed) return;
   if (!playback) stopPlayback();
   cancelPositionSearch(); resetExploration(); state.selectedLine = null;
-  state.ply = Math.max(0, Math.min(state.parsed.moves.length, ply)); renderBoard();
+  state.ply = Math.max(0, Math.min(state.parsed.moves.length, ply)); setReviewTab('moves'); renderBoard();
 }
 function selectGame(game) {
   if (state.busy || state.loading) return;
@@ -483,11 +487,12 @@ function selectGame(game) {
     $('progress-area').hidden = true;
     $('analyze-button').textContent = 'Review game';
     for (const button of document.querySelectorAll('.game-card')) {
-      const selected = state.games[Number(button.dataset.index)] === game;
+      const selected = (button.classList.contains('import-game') ? state.importGames : state.games)[Number(button.dataset.index)] === game;
       button.classList.toggle('selected', selected); button.setAttribute('aria-pressed', String(selected));
     }
     renderMoves(); renderSummary(); renderBoard();
-    if (phoneLayout.matches) setLibraryOpen(false);
+    $('engine-panel').open = false;
+    setLibraryOpen(false);
   } catch (error) { showError(error.message || 'This game could not be opened.'); }
 }
 function renderGames() {
@@ -524,7 +529,7 @@ async function loadGames() {
     if (state.games.length) selectGame(state.games[0]);
     else { $('game-title').textContent = 'No games found'; $('game-subtitle').textContent = 'Try another username or the sample game.'; $('game-kind').textContent = 'NO GAMES FOUND'; }
   } catch (error) {
-    $('library-status').textContent = 'Could not load games. Please try again.';
+    $('library-status').textContent = error.message || 'Could not load games. Please try again.';
     $('game-title').textContent = 'Could not load games'; $('game-subtitle').textContent = 'Check the username and your connection.'; $('game-kind').textContent = 'ARCHIVE UNAVAILABLE';
     showError(error.message || 'The public game archive is unavailable. Please try again.');
   } finally { state.loading = false; updateControls(); }
@@ -553,15 +558,16 @@ async function review() {
     $('review-status').textContent = 'Review complete.';
     $('analyze-button').textContent = 'Review again';
     renderMoves(); renderSummary();
-    const turningPoint = result.moves.find(move => move.label === 'Blunder') || result.moves.find(move => move.label === 'Mistake');
-    state.ply = turningPoint?.ply || Math.min(1, state.parsed.moves.length);
+    state.ply = 0;
+    $('engine-panel').open = false;
+    setReviewTab('summary');
     renderBoard();
     await persistReview(selected, result, analysis);
   } catch (error) {
     $('progress-area').hidden = true;
     if (error.name === 'AbortError' || state.controller.signal.aborted) $('review-status').textContent = 'Review canceled.';
     else { $('review-status').textContent = 'Review could not finish.'; showError(error.message || 'The local engine could not start. Please reload and try again.'); }
-  } finally { state.busy = false; state.controller = null; updateControls(); }
+  } finally { state.busy = false; state.controller = null; renderBoard(); }
 }
 function currentFen() { return state.study?.line.fen || state.parsed?.positions[state.ply] || new Chess().fen(); }
 function currentMove() { return state.study ? state.study.line.moves[state.study.line.cursor - 1] : state.parsed?.moves[state.ply - 1]; }
@@ -569,12 +575,12 @@ function positionIndex() { return state.study ? state.study.line.cursor : state.
 function positionCount() { return state.study ? state.study.line.moves.length : state.parsed?.moves.length || 0; }
 function answersHidden() { return !!state.retry && !state.retry.revealed; }
 function positionKey() { return state.study ? `${state.study.line.initialFen}|${state.study.line.history.join(' ')}` : state.ply; }
-function canMovePieces() { return !!state.parsed && !state.busy && !state.loading && !state.libraryBusy && !state.positionController && !state.pendingPromotion && (!state.retry || state.retry.status === 'solve'); }
+function canMovePieces() { return !!state.parsed && !state.busy && !state.loading && !state.libraryBusy && !state.importing && !state.positionController && !state.pendingPromotion && (!state.retry || state.retry.status === 'solve'); }
 function cancelRetry() { state.retry?.controller?.abort(); state.retry = null; }
 function resetExploration() {
   if (state.retry?.oldFlipped !== undefined) state.flipped = state.retry.oldFlipped;
   cancelRetry(); state.study = null; state.selectedSquare = null; state.pendingPromotion = null; state.hoverLine = null;
-  $('promotion-picker').hidden = true;
+  $('promotion-picker').close();
 }
 function orientToPlayer(game) {
   if (!$('auto-orient').checked) return;
@@ -594,7 +600,7 @@ function renderOpening() {
 function renderStudyControls() {
   const study = state.study;
   $('study-controls').hidden = !study;
-  $('promotion-picker').hidden = !state.pendingPromotion;
+  if (!state.pendingPromotion && $('promotion-picker').open) $('promotion-picker').close();
   if (study) {
     $('study-title').textContent = state.retry ? state.retry.revealed ? 'Puzzle answer' : 'Retry this move' : study.kind === 'consequence' ? 'What happens next' : 'Analysis variation';
     $('study-message').textContent = study.message || (answersHidden() ? 'Choose a piece, then its destination. You can also drag it.' : 'Step through the line, or move a piece to try an alternative.');
@@ -609,10 +615,10 @@ function renderStudyControls() {
     $('undo-variation').hidden = !!state.retry;
     $('undo-variation').disabled = !study.line.canBack || !!state.positionController;
   }
-  document.querySelector('.insight-actions').hidden = !!study;
+  document.querySelector('.insight-actions').hidden = !!study || !state.result || !state.ply;
   const hide = answersHidden();
   document.querySelector('.board-column').classList.toggle('retry-hidden', hide);
-  for (const selector of ['.chart-panel', '.keyboard-hint', '.review-tabs', '#moves-panel', '#summary-panel', '#practice-panel', '.engine-panel', '.player-score']) {
+  for (const selector of ['.chart-panel', '.keyboard-hint', '.review-tabs', '.move-section', '#summary-panel', '#practice-panel', '.engine-panel', '.player-score']) {
     for (const element of document.querySelectorAll(selector)) element.classList.toggle('review-hidden', hide);
   }
   $('retry-panel').hidden = !state.retry;
@@ -626,10 +632,25 @@ function renderStudyControls() {
   renderOpening();
 }
 function showPromotion(from, to, choices) {
-  state.pendingPromotion = { from, to };
-  $('promotion-picker').hidden = false;
-  for (const button of $('promotion-picker').querySelectorAll('[data-promotion]')) button.hidden = !choices.includes(button.dataset.promotion);
-  $('promotion-picker').querySelector('[data-promotion]:not([hidden])')?.focus();
+  stopPlayback();
+  const fen = currentFen(), color = new Chess(fen).turn();
+  state.pendingPromotion = { from, to, fen };
+  const picker = $('promotion-picker');
+  picker.hidden = false;
+  for (const button of picker.querySelectorAll('[data-promotion]')) {
+    button.hidden = !choices.includes(button.dataset.promotion);
+    button.querySelector('img').src = `pieces/${color}${button.dataset.promotion}.png`;
+  }
+  picker.showModal();
+  picker.querySelector('[data-promotion]:not([hidden])')?.focus();
+}
+function cancelPromotion() {
+  const from = state.pendingPromotion?.from;
+  state.pendingPromotion = null;
+  $('promotion-picker').close();
+  if (from) { state.selectedSquare = from; state.focusSquare = from; }
+  renderBoard();
+  if (from) $('board').querySelector(`[data-square="${from}"]`)?.focus({ preventScroll: true });
 }
 function chooseSquare(square) {
   if (!canMovePieces()) return;
@@ -646,12 +667,16 @@ async function playBoardMove(from, to, promotion) {
   if (!/^[a-h][1-8]$/.test(from) || !/^[a-h][1-8]$/.test(to)) return;
   if (!state.parsed || state.busy || state.loading || state.positionController || state.retry?.controller || (state.pendingPromotion && !promotion)) return;
   if (state.retry && state.retry.status !== 'solve') return;
+  if (state.pendingPromotion && (state.pendingPromotion.fen !== currentFen() || state.pendingPromotion.from !== from || state.pendingPromotion.to !== to)) { cancelPromotion(); return; }
   const choices = new Chess(currentFen()).moves({ square: from, verbose: true }).filter(move => move.to === to);
   if (!choices.length) return;
   const promotions = choices.map(move => move.promotion).filter(Boolean);
   if (promotions.length && !promotion) { showPromotion(from, to, promotions); return; }
+  if (promotion && !promotions.includes(promotion)) return;
   try {
-    stopPlayback(); state.pendingPromotion = null; state.hoverLine = null; state.selectedSquare = null; state.focusSquare = to;
+    setReviewTab('moves');
+    stopPlayback(); state.pendingPromotion = null;
+    $('promotion-picker').close(); state.hoverLine = null; state.selectedSquare = null; state.focusSquare = to;
     if (!state.study) state.study = { line: createStudyLine(state.selected.pgn, state.ply), returnPly: state.ply, kind: 'variation' };
     const move = state.study.line.play({ from, to, ...(promotion ? { promotion } : {}) });
     state.study.message = '';
@@ -662,6 +687,7 @@ async function playBoardMove(from, to, promotion) {
 function startVariation(candidate) {
   if (!state.parsed || state.busy || state.loading || state.retry) return;
   stopPlayback(); cancelPositionSearch(); state.selectedSquare = null; state.hoverLine = null; state.pendingPromotion = null;
+  setReviewTab('moves');
   const existing = state.study;
   const prefix = existing ? existing.line.moves.slice(0, existing.line.cursor).map(move => move.uci) : [];
   const line = candidate.pv?.[0] === candidate.bestMove ? candidate.pv : [candidate.bestMove];
@@ -687,6 +713,7 @@ function navigatePosition(ply, { playback = false } = {}) {
 function nextMistakePly(after) { return state.result?.moves.find(move => move.ply > after && ['Inaccuracy', 'Mistake', 'Blunder'].includes(move.label))?.ply; }
 function startRetry(ply = state.ply) {
   if (!state.result || state.busy || state.loading || !state.parsed.moves[ply - 1]) return;
+  setReviewTab('moves');
   const originalFlip = state.retry?.oldFlipped ?? state.flipped;
   stopPlayback(); cancelPositionSearch(); resetExploration();
   state.retry = { targetPly: ply, status: 'solve', revealed: false, result: null, controller: null, oldFlipped: originalFlip };
@@ -723,6 +750,7 @@ function revealRetry() {
 }
 function showConsequence() {
   if (!state.result || state.study || state.retry || !state.ply) return;
+  setReviewTab('moves');
   const move = state.result.moves[state.ply - 1];
   const evaluation = state.positionAnalysis.get(state.ply) || state.result.positions[state.ply];
   stopPlayback(); cancelPositionSearch();
@@ -770,7 +798,8 @@ async function persistReview(game, result, analysis) {
     await refreshLibrary();
   } catch (error) { if (state.selected === game) $('save-status').textContent = `Review kept open, but not saved: ${error.message}`; }
 }
-async function openSavedReview(id, { ply = 0, practice = false } = {}) {
+async function openSavedReview(id, options = {}) {
+  const { ply = 0, practice = false } = options;
   if (state.busy || state.loading || state.libraryBusy || state.retry?.controller) return;
   state.libraryBusy = true; updateControls();
   try {
@@ -781,10 +810,10 @@ async function openSavedReview(id, { ply = 0, practice = false } = {}) {
     state.result = record.result; state.opening = Object.hasOwn(record.result, 'opening') ? record.result.opening : state.opening; state.reviewEngine = record.analysis.engineName || record.analysis.engineId; state.reviewId = record.id; state.bookmarks = record.bookmarks || []; state.recordMeta = record.analysis;
     state.ply = Math.max(0, Math.min(state.parsed.moves.length, ply));
     $('analyze-button').textContent = 'Review again'; $('review-status').textContent = record.stale ? 'Saved review from an older analysis version. Review again to update it.' : 'Saved review loaded.'; $('save-status').textContent = 'Stored on this device.';
-    renderMoves(); renderSummary(); renderBoard();
+    renderMoves(); renderSummary(); setReviewTab(Object.hasOwn(options, 'ply') ? 'moves' : 'summary'); renderBoard();
     if (practice) startRetry(ply);
   } catch (error) { showError(error.message || 'The saved review could not be opened.'); }
-  finally { state.libraryBusy = false; updateControls(); }
+  finally { state.libraryBusy = false; renderBoard(); }
 }
 async function toggleBookmark() {
   if (!state.reviewId || state.study || state.retry || state.busy) return;
@@ -815,16 +844,19 @@ function renderNotebook() {
   }
 }
 
-for (const view of ['moves', 'summary', 'practice']) $(`${view}-tab`).addEventListener('click', () => setReviewTab(view));
+for (const view of ['moves', 'summary', 'practice']) $(`${view}-tab`).addEventListener('click', () => { if (state.study && view !== 'moves') returnToGame(); setReviewTab(view); });
 document.querySelector('.review-tabs').addEventListener('keydown', event => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
   event.preventDefault(); event.stopPropagation();
-  const names = state.result ? ['moves', 'summary', 'practice'] : ['moves', 'practice'];
+  const names = state.result ? ['summary', 'moves', 'practice'] : ['moves', 'practice'];
   const current = names.indexOf(event.target.id.replace('-tab', ''));
   const next = event.key === 'Home' ? 0 : event.key === 'End' ? names.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + names.length) % names.length;
+  if (state.study && names[next] !== 'moves') returnToGame();
   setReviewTab(names[next], true);
 });
 $('library-toggle').addEventListener('click', () => setLibraryOpen($('library-toggle').getAttribute('aria-expanded') !== 'true'));
+$('close-library').addEventListener('click', () => setLibraryOpen(false));
+$('library-dialog').addEventListener('close', () => $('library-toggle').setAttribute('aria-expanded', 'false'));
 $('username-form').addEventListener('submit', event => { event.preventDefault(); loadGames(); });
 $('demo-button').addEventListener('click', () => selectGame(sample));
 $('analyze-button').addEventListener('click', review);
@@ -839,18 +871,65 @@ $('next-key').addEventListener('click', () => { const ply = keyPlies().find(p =>
 $('deepen-button').addEventListener('click', () => deepenPosition(false));
 $('quick-position').addEventListener('click', () => deepenPosition(true));
 $('game-source').addEventListener('change', () => { syncSource(); $('username').value = savedUsernames[$('game-source').value] || ''; savePreferences(); $('library-status').textContent = 'Enter a username to find completed games.'; });
-function openImportedGame(pgn) {
-  if (state.busy || state.loading || state.positionController) return;
-  try { const game = importPgn(pgn); selectGame(game); $('import-status').textContent = 'Game opened. The PGN stays on your device.'; }
-  catch (error) { $('import-status').textContent = ''; showError(error.message); }
+function importUnavailable() { return state.busy || state.loading || state.importing || state.libraryBusy || state.positionController || state.retry?.controller; }
+function renderImportedGames(collection) {
+  state.importGames = collection.games;
+  $('import-games').replaceChildren(); $('import-error-list').replaceChildren();
+  $('import-results').hidden = !collection.games.length && !collection.rejected.length;
+  $('import-errors').hidden = !collection.rejected.length;
+  $('import-errors').open = !collection.games.length;
+  for (const [index, game] of collection.games.entries()) {
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'game-card import-game'; button.dataset.index = index;
+    const name = document.createElement('strong'); name.textContent = savedTitle(game);
+    const detail = document.createElement('span'); detail.className = 'game-meta'; detail.textContent = game.white.result === 'win' ? '1–0' : game.black.result === 'win' ? '0–1' : '½–½';
+    button.append(name, detail); button.addEventListener('click', () => { if (!importUnavailable()) { selectGame(game); $('import-status').textContent = 'Game opened. Choose Review game when ready.'; } });
+    $('import-games').append(button);
+  }
+  for (const rejected of collection.rejected) {
+    const item = document.createElement('li'); item.textContent = `Game ${rejected.index}: ${rejected.message}`; $('import-error-list').append(item);
+  }
+  $('import-status').textContent = `${collection.games.length} ${collection.games.length === 1 ? 'game' : 'games'} ready${collection.rejected.length ? ` · ${collection.rejected.length} skipped` : ''}. Choose a game to open.`;
+  if (!collection.games.length) $('import-status').textContent = 'No completed games could be opened. See the skipped games below.';
 }
-$('import-button').addEventListener('click', () => openImportedGame($('pgn-text').value));
-$('pgn-file').addEventListener('change', async () => {
-  const file = $('pgn-file').files[0]; if (!file) return;
-  if (file.size > 250000) { showError('This PGN is too large. Choose a single game under 250 KB.'); return; }
-  try { openImportedGame(await file.text()); } catch { showError('Could not read this file. Try pasting its PGN instead.'); }
-  $('pgn-file').value = '';
+function openImportedGames(pgn, files = false) {
+  if (importUnavailable()) return;
+  showError();
+  try {
+    const collection = files ? importPgnFiles(pgn) : importPgnCollection(pgn);
+    renderImportedGames(collection);
+    if (collection.games.length === 1 && !collection.rejected.length) {
+      selectGame(collection.games[0]); $('import-status').textContent = 'Game opened. The PGN stays on your device.';
+    }
+  } catch (error) {
+    renderImportedGames({ games: [], rejected: [] });
+    $('import-status').textContent = error.message || 'Could not read this PGN.';
+  }
+}
+async function readPgnFiles(files) {
+  if (importUnavailable() || !files.length) return;
+  showError();
+  if (files.some(file => !/\.(pgn|txt)$/i.test(file.name))) { $('import-status').textContent = 'Choose PGN or plain text files.'; return; }
+  if (files.reduce((total, file) => total + file.size, 0) > PGN_IMPORT_MAX_BYTES) { $('import-status').textContent = 'These files are too large. Import up to 5 MiB at a time.'; return; }
+  state.importing = true; updateControls(); $('import-status').textContent = 'Reading games…';
+  try {
+    const texts = await Promise.all(files.map(file => file.text()));
+    state.importing = false;
+    openImportedGames(texts, true);
+  } catch { $('import-status').textContent = 'Could not read this file. Try pasting its PGN instead.'; }
+  finally { state.importing = false; $('pgn-file').value = ''; updateControls(); }
+}
+$('import-button').addEventListener('click', () => openImportedGames($('pgn-text').value));
+$('pgn-file').addEventListener('change', () => { const files = [...$('pgn-file').files]; $('pgn-file').value = ''; readPgnFiles(files); });
+$('pgn-dropzone').addEventListener('dragover', event => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; $('pgn-dropzone').classList.add('drag-over'); });
+$('pgn-dropzone').addEventListener('dragleave', event => { if (!$('pgn-dropzone').contains(event.relatedTarget)) $('pgn-dropzone').classList.remove('drag-over'); });
+$('pgn-dropzone').addEventListener('drop', event => {
+  event.preventDefault(); $('pgn-dropzone').classList.remove('drag-over');
+  if (event.dataTransfer.files.length) readPgnFiles([...event.dataTransfer.files]);
+  else openImportedGames(event.dataTransfer.getData('text/plain'));
 });
+$('pgn-dropzone').addEventListener('keydown', event => { if (event.target === $('pgn-dropzone') && ['Enter', ' '].includes(event.key)) { event.preventDefault(); $('pgn-file').click(); } });
+// Prevent a misplaced file drop from navigating away from the review.
+for (const type of ['dragover', 'drop']) document.addEventListener(type, event => { if ([...event.dataTransfer.types].includes('Files')) event.preventDefault(); });
 $('stop-position').addEventListener('click', () => { cancelPositionSearch(); renderBoard(); });
 $('play-button').addEventListener('click', startPlayback);
 for (const id of ['engine', 'depth', 'multipv', 'arrow-mode', 'smart-analysis', 'auto-orient', 'show-arrows', 'show-badges', 'show-coordinates', 'play-speed']) {
@@ -873,8 +952,9 @@ $('retry-exit').addEventListener('click', returnToGame);
 $('show-why').addEventListener('click', showConsequence);
 $('bookmark-position').addEventListener('click', toggleBookmark);
 $('saved-search').addEventListener('input', renderSavedReviews);
-$('open-notebook').addEventListener('click', () => { if (!state.retry) { setReviewTab('practice'); if (phoneLayout.matches) setLibraryOpen(false); $('practice-panel').scrollIntoView({ block: 'nearest' }); } });
-$('cancel-promotion').addEventListener('click', () => { state.pendingPromotion = null; renderBoard(); });
+$('open-notebook').addEventListener('click', () => { if (!state.retry) { setReviewTab('practice'); setLibraryOpen(false); $('practice-panel').scrollIntoView({ block: 'nearest' }); } });
+$('cancel-promotion').addEventListener('click', cancelPromotion);
+$('promotion-picker').addEventListener('cancel', event => { event.preventDefault(); cancelPromotion(); });
 for (const button of $('promotion-picker').querySelectorAll('[data-promotion]')) button.addEventListener('click', () => { const pending = state.pendingPromotion; if (pending) playBoardMove(pending.from, pending.to, button.dataset.promotion); });
 $('board').addEventListener('keydown', event => {
   const directions = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -8, ArrowDown: 8 };
@@ -894,7 +974,7 @@ for (const label of MOVE_LABELS) {
   row.append(makeBadge(label), name, description); $('classification-legend').append(row);
 }
 document.addEventListener('keydown', event => {
-  if (answersHidden() || event.target.closest('#board') || ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName) || event.ctrlKey || event.metaKey || event.altKey) return;
+  if ($('library-dialog').open || $('promotion-picker').open || answersHidden() || event.target.closest('#board') || ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName) || event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.key === 'ArrowLeft') { event.preventDefault(); navigatePosition(positionIndex() - 1); }
   if (event.key === 'ArrowRight') { event.preventDefault(); navigatePosition(positionIndex() + 1); }
   if (event.key === 'Home') { event.preventDefault(); navigatePosition(0); }
@@ -909,6 +989,7 @@ if (globalThis.chrome?.storage?.local) {
     if (username && !savedUsernames.chesscom && !usernames) savedUsernames.chesscom = username;
     restorePreferences(reviewSettings); syncEngine(); syncSource(); renderMoves(); renderBoard();
     const remembered = savedUsernames[$('game-source').value];
-    if (remembered && !$('username').value && !state.selected && !state.loading) { $('username').value = remembered; loadGames(); }
-  }).catch(() => {});
-}
+    if (remembered && !$('username').value && !state.selected && !state.loading) { $('username').value = remembered; setLibraryOpen(true); loadGames(); }
+    else if (!state.selected) setLibraryOpen(true);
+  }).catch(() => { if (!state.selected) setLibraryOpen(true); });
+} else setLibraryOpen(true);

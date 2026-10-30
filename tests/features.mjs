@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { openLibrary, closeLibrary, openImport, openMoves, openEngine, openSummary } from './ui-helpers.mjs';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { execFile } from 'node:child_process';
@@ -66,11 +67,11 @@ try {
   const sq = name => page.locator(`#board [data-square="${name}"]`);
   const clickMove = async (from, to) => { await sq(from).click(); await sq(to).click(); };
   const waitIdle = async () => page.waitForFunction(() => !document.querySelector('#analyze-button').disabled && !document.querySelector('#analyze-button').hidden, null, { timeout: 30000 });
-  const settings = async () => { if (!await page.locator('#review-settings').evaluate(item => item.open)) await page.locator('#review-settings > summary').click(); };
-  const closeSettings = async () => { if (await page.locator('#review-settings').evaluate(item => item.open)) await page.locator('#review-settings > summary').click(); };
-  const importGame = async pgn => { if (!await page.locator('#import-panel').evaluate(item => item.open)) await page.locator('#import-panel > summary').click(); await page.locator('#pgn-text').fill(pgn); await page.locator('#import-button').click(); assert.equal(await page.locator('#error').isVisible(), false, await page.locator('#error').innerText()); };
+  const settings = async () => { await closeLibrary(page); if (!await page.locator('#review-settings').evaluate(item => item.open)) await page.locator('#review-settings > summary').click(); };
+  const closeSettings = async () => { await closeLibrary(page); if (await page.locator('#review-settings').evaluate(item => item.open)) await page.locator('#review-settings > summary').click(); };
+  const importGame = async pgn => { await openImport(page); await page.locator('#pgn-text').fill(pgn); await page.locator('#import-button').click(); assert.equal(await page.locator('#error').isVisible(), false, await page.locator('#error').innerText()); };
   const review = async () => { await closeSettings(); await page.locator('#analyze-button').click(); await waitIdle(); assert.match(await page.locator('#review-status').innerText(), /Review complete/); assert.match(await page.locator('#save-status').innerText(), /Saved on this device/); };
-  const choosePly = async ply => { if (!await page.locator('#moves-panel').isVisible()) await page.locator('#moves-tab').click(); await page.locator(`#move-list .move-button[data-ply="${ply}"]`).click(); };
+  const choosePly = async ply => { await openMoves(page); await page.locator(`#move-list .move-button[data-ply="${ply}"]`).click(); };
   await page.goto(`chrome-extension://${id}/review.html`);
   await page.waitForFunction(() => document.querySelectorAll('#board .square').length === 64);
 
@@ -89,9 +90,11 @@ try {
   console.log('PASS: archive orientation, real smart scan/recheck, automatic save');
 
   stage = 'default arrows and engine variation';
-  await page.locator('#first-button').click();
+  if (!await page.locator('#first-button').isDisabled()) await page.locator('#first-button').click();
+  await openEngine(page);
   if (await page.locator('.engine-line').count() < 2) {
-    await page.locator('#deepen-button').click();
+    await openEngine(page);
+  await page.locator('#deepen-button').click();
     await page.waitForFunction(() => document.querySelector('#stop-position').hidden, null, { timeout: 15000 });
   }
   assert(await page.locator('.engine-line').count() >= 2, 'A completed deeper search should supply at least two candidate lines for hover preview.');
@@ -132,11 +135,13 @@ try {
   await page.waitForFunction(() => document.querySelector('#bookmark-position').getAttribute('aria-pressed') === 'true');
   await page.reload();
   await page.waitForFunction(() => document.querySelector('#saved-count').textContent === '1' && !document.querySelector('#load-button').disabled);
+  await openLibrary(page);
   await page.locator('#saved-panel > summary').click();
   const beforeOpen = await page.evaluate(() => window.engineCommands.length);
   await page.locator('.saved-open').click(); await waitIdle();
   assert.equal(await page.evaluate(() => window.engineCommands.length), beforeOpen, 'Opening a saved review must not run the engine.');
   assert.match(await page.locator('#review-status').innerText(), /Saved review loaded/);
+  await openLibrary(page);
   await page.locator('#open-notebook').click();
   await capture('features-notebook-laptop.png');
   await page.waitForFunction(() => document.querySelectorAll('#bookmark-items .notebook-item').length === 1);
@@ -148,7 +153,7 @@ try {
   stage = 'retry hides answers and grades a legal attempt';
   await choosePly(3); await page.locator('#retry-move').click();
   assert.equal(await page.locator('#retry-panel').isVisible(), true);
-  for (const selector of ['.engine-panel', '.chart-panel', '#moves-panel', '#summary-panel', '.player-score', '#eval-text', '#opening-info']) assert.equal(await page.locator(selector).first().isVisible(), false, `${selector} leaks an answer during retry`);
+  for (const selector of ['.engine-panel', '.chart-panel', '.move-section', '#summary-panel', '.player-score', '#eval-text', '#opening-info']) assert.equal(await page.locator(selector).first().isVisible(), false, `${selector} leaks an answer during retry`);
   assert.equal(await page.locator('.board-move-badge').count(), 0); assert.equal(await page.locator('.engine-arrow').count(), 0);
   await capture('features-retry-laptop.png');
   const retryBase = await fen();
@@ -170,6 +175,7 @@ try {
   await page.locator('#retry-exit').click();
   assert.equal(await page.locator('#retry-panel').isVisible(), false); assert.equal(await fen(), bookmarkedFen);
   await page.waitForTimeout(100); assert.equal(await page.locator('#retry-panel').isVisible(), false);
+  await openLibrary(page);
   await page.locator('#open-notebook').click();
   await capture('features-notebook-laptop.png');
   assert(await page.locator('#practice-items .notebook-item').count() > 0, 'A real blunder should be in the notebook.');
@@ -182,6 +188,7 @@ try {
   stage = 'Show why legal continuation and highlights';
   await choosePly(3); const whyBase = await fen();
   const searchesBeforeDeeper = await page.evaluate(() => window.engineCommands.filter(command => command === 'go movetime 1500').length);
+  await openEngine(page);
   await page.locator('#deepen-button').click();
   await page.waitForFunction(() => document.querySelector('#stop-position').hidden, null, { timeout: 15000 });
   assert.match(await page.locator('#engine-status').innerText(), /Position search/);
@@ -211,6 +218,7 @@ try {
   await importGame(REPETITION);
   await settings(); await page.locator('#smart-analysis').uncheck(); await page.locator('#depth').selectOption('150'); await review();
   await page.locator('#last-button').click();
+  await openMoves(page);
   assert.equal(await page.locator('.engine-arrow').count(), 0);
   await page.locator('#show-why').click();
   assert.match(await page.locator('#study-message').innerText(), /drawn?: threefold repetition/i);
@@ -221,8 +229,9 @@ try {
   console.log('PASS: full-history threefold repetition has a draw explanation and no continuation');
 
   stage = 'opening names and Book ratings';
-  await importGame(OPENING); assert.equal(await page.locator('#opening-info').isVisible(), true); assert.match(await page.locator('#opening-name').innerText(), /Italian|Giuoco/i);
+  await importGame(OPENING);
   await settings(); await page.locator('#smart-analysis').uncheck(); await page.locator('#depth').selectOption('150'); await review();
+  assert.equal(await page.locator('#opening-info').isVisible(), true); assert.match(await page.locator('#opening-name').innerText(), /Italian|Giuoco/i);
   assert(await page.locator('#move-list .move-badge.book').count() > 0, 'Recognized sound opening moves should receive Book badges.');
   assert.equal(await page.locator('#saved-count').innerText(), '3');
   await mkdir(join(root, 'test-results'), { recursive: true });

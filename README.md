@@ -2,9 +2,9 @@
 
 <img src="extension/icons/logo.png" alt="MeowlChess crowned cat and owl mascot on a green-and-cream chessboard" width="180">
 
-Free local reviews of completed chess games, in Brave, Chrome, and Edge. Load games from **Chess.com or Lichess**, or import a finished game's PGN from another website. Stockfish and Lozza run on your device; no subscription, paid analysis service, or chess-site login is required.
+Free local reviews of completed chess games, in Brave, Chrome, and Edge. Load games from **Chess.com or Lichess**, or import completed games from PGN files exported by other websites. Stockfish and Lozza run on your device; no subscription, paid analysis service, or chess-site login is required.
 
-**Version 1.2.1.** Review games, retry mistakes without hints, explore legal variations, and follow concrete engine continuations. Completed reviews and bookmarked positions stay in your local library. A bundled opening reference, selective deeper searches, and a quieter board help you focus on the game. MeowlChess uses its own cat/owl logo and is independent of Chess.com and Lichess.
+**Version 1.3.0.** A simpler review screen, multi-game PGN imports, and a visual promotion chooser. Completed and saved reviews open at move 0 on Summary. Retry mistakes without hints, explore legal variations, and keep reviews and bookmarks in your local library. MeowlChess uses its own cat/owl logo and is independent of Chess.com and Lichess.
 
 ## Install or update
 
@@ -17,13 +17,16 @@ For this working copy, load `C:\Users\thuyv\Downloads\meowlchess\extension`. Aft
 
 ## Choose a game
 
+Open **Games** to find, import, or reopen a game. This window closes when you choose one, leaving the board and review in view.
+
 - **Chess.com:** select Chess.com and enter a username. MeowlChess reads its public completed-game archives. Very recent games may take time to appear because of API caching.
 - **Lichess:** select Lichess and enter a username or a finished game's URL. The latest 20 completed standard games are requested; unfinished games and variants are excluded.
-- **Other websites:** open **Import a PGN**, then choose a `.pgn` file or paste one game's PGN. Export it from the original site's game page first. The file is read locally. Finished games with a custom standard-chess starting position are supported.
+- **Other websites:** open **Import PGN**, then choose or drop `.pgn` / `.txt` files, drop PGN text, or paste it. A file can contain multiple games. Choose a completed game from the resulting list, then start its review when ready. Finished games with a custom standard-chess starting position are supported.
+- **ChessTempo, ICC / Chessclub.com, and Tornelo:** import their PGN exports. The import window includes export guidance; these sites do not have automatic account retrieval in MeowlChess.
 - **Sample:** use the four-move demo to try the controls without a network request.
 - **Saved reviews:** reopen a previously analyzed game without fetching or analyzing it again. Search by player or recognized opening.
 
-Only standard chess and completed games are supported. A PGN must have a final `1-0`, `0-1`, or `1/2-1/2` result. Multi-game files should be split into individual games. Importing a PGN does not independently verify its result against its original website; import only finished games. The extension does not read live boards or make moves.
+Only standard chess and completed games are supported. A PGN must have a final `1-0`, `0-1`, or `1/2-1/2` result. An import can contain up to **100 games** and **5 MiB** of text in total, with each game limited to 250 KB and 1,000 plies. Invalid or unfinished games are listed as skipped while valid games remain available. Importing does not start engine analysis or save every game automatically. Importing a PGN does not independently verify its result against its original website; import only finished games. The extension does not read live boards or make moves.
 
 ## Review engines and speeds
 
@@ -48,21 +51,21 @@ Turn **Recheck key mistakes** off to spend the full selected time on every nonte
 
 Fast selects one line automatically. For 100 nonterminal positions, its first pass has about five seconds of engine time, plus startup and processing; enabled rechecks add time. Selective rechecks cannot catch every mistake, and short searches can miss tactics. More lines divide the available search time among alternatives and can reduce depth.
 
-Open **Settings** to choose the engine, speed, and display options. Click **Review game**, then navigate with the move list, arrow keys, evaluation graph, key-moment buttons, or **Play**. **Summary** shows both players' study scores and move counts. **Quick look** searches the displayed position for 0.15 seconds; **Analyze deeper** spends at least 1.5 seconds on it. Position searches update the displayed evaluation and engine lines. Use **Review again** to recalculate the full game's labels and scores.
+Open **Settings** to choose the engine, speed, and display options. Click **Review game**. When it finishes, the board returns to **move 0** and **Summary** opens. Use **Moves** to explore the game, then navigate with the move list, arrow keys, evaluation graph, key-moment buttons, or **Play**. **Summary** shows both players' study scores, move counts, opening, and evaluation graph. **Engine lines** stays collapsed under Moves until you open it. **Quick look** searches the displayed position for 0.15 seconds; **Analyze deeper** spends at least 1.5 seconds on it. Position searches update the displayed evaluation and engine lines. Use **Review again** to recalculate the full game's labels and scores.
 
 ## Study a move
 
 - **Try again:** return to the position before a reviewed move and play your own attempt. Engine lines, arrows, move ratings, and the evaluation are hidden while you solve. The engine checks your move; a sound alternative can count even when it differs from its first choice. You can retry, reveal the suggested continuation, move to the next mistake, or return to the review. Inconclusive searches are reported as uncertain.
-- **Explore a variation:** click an engine line, click a piece and its destination, or drag a piece. Only legal moves are accepted, and promotions offer queen, rook, bishop, and knight choices. Step through the line, go back, and try another continuation. **Return to game** restores the original review position; variations do not change the completed game's moves.
+- **Explore a variation:** click an engine line, click a piece and its destination, or drag a piece. Only legal moves are accepted, and promotions open a piece chooser for queen, rook, bishop, or knight. This includes captures and either color; Cancel or Escape leaves the position unchanged. Step through the line, go back, and try another continuation. **Return to game** restores the original review position; variations do not change the completed game's moves.
 - **Show why:** follow a legal continuation associated with the displayed move. MeowlChess checks for concrete evidence such as checkmate, a verified fork, or a lasting material loss. If it cannot verify a simple consequence, it shows the continuation without inventing a tactical explanation. These are observations from a limited engine search, not a human coach's assessment.
 
-The board shows the best engine arrow by default. Hover over or keyboard-focus another engine line to preview its arrow, or select **All engine moves** in Settings. Green is the best move, blue the second, and orange the third. Knight arrows turn at a right angle. Arrows always describe the **displayed position and side to move**; terminal positions have no continuation.
+In the Moves tab, the board shows the best engine arrow by default. Summary keeps the board free of engine arrows. Hover over or keyboard-focus another engine line to preview its arrow, or select **All engine moves** in Settings. Green is the best move, blue the second, and orange the third. Knight arrows turn at a right angle. Arrows always describe the **displayed position and side to move**; terminal positions have no continuation.
 
-**Face my side** uses the entered or remembered website username to put your pieces at the bottom when it recognizes your side. You can turn it off or flip the board manually. Retry mode faces the player whose move is being retried. Display choices and playback speed are remembered locally. Motion respects the browser's reduced-motion preference, and the game library folds away on phones after you choose a game.
+**Face my side** uses the entered or remembered website username to put your pieces at the bottom when it recognizes your side. You can turn it off or flip the board manually. Retry mode faces the player whose move is being retried. Display choices and playback speed are remembered locally. Motion respects the browser's reduced-motion preference, and the game picker closes after you choose a game.
 
 ## Saved reviews and practice
 
-Successful full reviews are saved automatically in the extension's local IndexedDB library. A saved record contains the game's PGN, player/source information, evaluations and lines, move ratings, scores, opening information, and the engine settings used. It survives closing the tab. Re-reviewing the same game replaces its analysis while keeping its bookmarks. Older analysis is marked so you can choose to review it again.
+Saved reviews reopen at move 0 on Summary; opening a bookmark or practice item goes straight to its position. Successful full reviews are saved automatically in the extension's local IndexedDB library. A saved record contains the game's PGN, player/source information, evaluations and lines, move ratings, scores, opening information, and the engine settings used. It survives closing the tab. Re-reviewing the same game replaces its analysis while keeping its bookmarks. Older analysis is marked so you can choose to review it again.
 
 Use **Bookmark** to save the displayed position. The **Practice** view collects mistakes to retry and bookmarked positions from saved games. Opening a saved mistake starts a fresh attempt with hints hidden. Individual practice attempts, temporary variations, and extra position searches are not saved as part of the full review.
 
@@ -109,12 +112,13 @@ npm test
 npm run test:browser
 npm run test:extension
 npm run test:features
+npm run test:imports
 npm run package
 ```
 
 The build refreshes the pinned chess.js and Stockfish assets. Lozza, artwork, and the generated opening data are checked in. To regenerate opening data from its bundled, pinned TSV sources, run `node scripts/build-openings.mjs`. Packaging creates `dist/meowlchess.zip`, containing the ready-to-load extension, project source, tests, notices, opening sources, and Stockfish's corresponding source and evaluation network. It excludes dependencies, generated test results, and Git data.
 
-Browser checks use Playwright. Set `CHROMIUM_PATH` to a compatible Brave/Chromium executable, or install Playwright's Chromium with `npx playwright-core install chromium`. `test:features` exercises the study and saved-library flows in a disposable extension profile. `BROWSER_OFFLINE_ASSETS=1` makes the page tests serve local assets directly. Extension tests do not change your usual browser installation. `LIVE_API_USERNAME` optionally enables a real Chess.com lookup. `LIVE_LICHESS_USERNAME` checks a live Lichess archive and game URL; pair it with `HEADED_EXT_TEST=1` to use a normal minimized browser, since Lichess rejects headless browser user-agents. Chrome compatibility has not been checked directly.
+Browser checks use Playwright. Set `CHROMIUM_PATH` to a compatible Brave/Chromium executable, or install Playwright's Chromium with `npx playwright-core install chromium`. `test:imports` covers multi-game imports, file/text drops, promotion choices, and the review landing view. `test:features` exercises the study and saved-library flows in a disposable extension profile. `BROWSER_OFFLINE_ASSETS=1` makes the page tests serve local assets directly. Extension tests do not change your usual browser installation. `LIVE_API_USERNAME` optionally enables a real Chess.com lookup. `LIVE_LICHESS_USERNAME` checks a live Lichess archive and game URL; pair it with `HEADED_EXT_TEST=1` to use a normal minimized browser, since Lichess rejects headless browser user-agents. Chrome compatibility has not been checked directly.
 
 Source repository: [ThuyTran735/MeowlChess](https://github.com/ThuyTran735/MeowlChess).
 

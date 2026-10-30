@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { openLibrary, closeLibrary, openImport, openMoves, openEngine, openSummary, closeTestContext } from './ui-helpers.mjs';
 import { createServer } from 'node:http';
-import { readFile, mkdir } from 'node:fs/promises';
-import { resolve, extname, sep } from 'node:path';
+import { readFile, mkdir, mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { resolve, extname, sep, join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { Chess } from '../extension/vendor/chess.js';
 
@@ -20,15 +22,18 @@ const server = createServer(async (req, res) => {
   catch { res.writeHead(404); res.end('Not found'); }
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-let browser;
+const profile = await mkdtemp(join(tmpdir(), 'meowlchess-browser-test-'));
+let context;
 try {
-  browser = await chromium.launch({ ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : { channel: 'chromium' }), headless: true });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
+  context = await chromium.launchPersistentContext(profile, { ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : { channel: 'chromium' }), headless: true, viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
+  const page = await context.newPage();
 
   async function ensureSettingsOpen() {
+    await closeLibrary(page);
     if (!await page.locator('#review-settings').evaluate(details => details.open)) await page.locator('#review-settings > summary').click();
   }
   async function ensureSettingsClosed() {
+    await closeLibrary(page);
     if (await page.locator('#review-settings').evaluate(details => details.open)) await page.locator('#review-settings > summary').click();
   }
   async function selectReviewOption(id, value) {
@@ -109,8 +114,10 @@ try {
   assert.equal(await page.locator('#deepen-button').isDisabled(), true);
 
   // A selected position can be analyzed before a whole-game review.
+  await openLibrary(page);
   await page.locator('#demo-button').click();
   assert.equal(await page.locator('.move-button').count(), 4);
+  await openEngine(page);
   await page.locator('#quick-position').click();
   await page.waitForFunction(() => !document.querySelector('#quick-position').disabled);
   assert.equal(await page.locator('#engine-lines .engine-line').count(), 3);
@@ -127,11 +134,13 @@ try {
   await page.locator('#next-button').focus();
   assert.equal(await page.locator('#board .engine-arrow').getAttribute('data-rank'), '1');
   await selectReviewOption('arrow-mode', 'all');
+  await openEngine(page);
   await page.locator('#deepen-button').click();
   await page.waitForFunction(() => !document.querySelector('#deepen-button').disabled);
   assert.equal(await page.locator('#engine-lines .engine-line').count(), 3);
   assert.equal(await page.locator('#board .engine-arrow').count(), 3);
   assert.equal(await page.locator('#summary').isVisible(), false);
+  await openLibrary(page);
   await page.locator('#demo-button').click();
   assert.equal(await page.locator('#board .engine-arrow').count(), 0);
   assert.equal(await page.locator('#engine-lines .engine-line').count(), 0);
@@ -140,14 +149,17 @@ try {
   await page.locator('#analyze-button').click();
   await page.waitForFunction(() => !document.querySelector('#summary').hidden && !document.querySelector('#analyze-button').disabled);
   assert.equal(await page.locator('#move-list .move-badge').count(), 4);
-  assert.equal(await page.locator('.board-move-badge').count(), 1);
-  assert.equal(await page.locator('#insight-badge').isVisible(), true);
+  assert.equal(await page.locator('.board-move-badge').count(), 0);
+  assert.match(await page.locator('#position-label').innerText(), /starting/i);
+  assert.equal(await page.locator('#summary-tab').getAttribute('aria-selected'), 'true');
+  assert.equal(await page.locator('#insight-badge').isVisible(), false);
   assert.equal(await page.locator('#eval-chart button').count(), 5);
   assert.equal(await page.locator('#move-list .move-badge img').count(), 4);
   await page.waitForFunction(() => [...document.querySelectorAll('.move-badge img')].every(image => image.complete && image.naturalWidth > 0));
 
-  // Review tabs keep the move list close to the board; summary remains one action away.
+  // A finished review starts at the initial position in Summary. Moves remain one action away.
   await ensureSettingsClosed();
+  await openMoves(page);
   assert.equal(await page.locator('#moves-panel').isVisible(), true);
   assert.equal(await page.locator('#summary-panel').isVisible(), false);
   assert.equal(await page.locator('#moves-tab').getAttribute('aria-selected'), 'true');
@@ -157,7 +169,7 @@ try {
   assert.equal(await page.locator('#summary-panel').isVisible(), true);
   assert.equal(await page.locator('#summary').isVisible(), true);
   assert.equal(await page.locator('#moves-panel').isVisible(), false);
-  assert.equal(await page.locator('.engine-panel').isVisible(), true);
+  assert.equal(await page.locator('.engine-panel').isVisible(), false);
   await page.locator('#moves-tab').click();
   assert.equal(await page.locator('#moves-panel').isVisible(), true);
   assert.equal(await page.locator('#summary-panel').isVisible(), false);
@@ -165,10 +177,10 @@ try {
   const tabPosition = await page.locator('#position-label').innerText();
   await page.locator('#moves-tab').focus();
   await page.keyboard.press('ArrowRight');
-  assert.equal(await page.locator('#summary-tab').getAttribute('aria-selected'), 'true');
-  assert.equal(await page.locator('#summary-tab').evaluate(tab => tab === document.activeElement), true);
+  assert.equal(await page.locator('#practice-tab').getAttribute('aria-selected'), 'true');
+  assert.equal(await page.locator('#practice-tab').evaluate(tab => tab === document.activeElement), true);
   await page.keyboard.press('Home');
-  assert.equal(await page.locator('#moves-tab').getAttribute('aria-selected'), 'true');
+  assert.equal(await page.locator('#summary-tab').getAttribute('aria-selected'), 'true');
   await page.keyboard.press('End');
   assert.equal(await page.locator('#practice-tab').getAttribute('aria-selected'), 'true');
   assert.equal(await page.locator('#practice-panel').isVisible(), true);
@@ -180,7 +192,9 @@ try {
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: root + '/test-results/review-first-pass.png', fullPage: true });
 
+  await openSummary(page);
   await page.locator('#eval-chart button').first().click();
+  await openEngine(page);
   assert.match(await page.locator('#position-label').innerText(), /starting/i);
   assert.equal(await page.locator('#engine-lines .engine-line').count(), 3);
   assert.equal(await page.locator('#board .engine-arrow').count(), 3);
@@ -221,14 +235,16 @@ try {
   assert.equal(await page.locator('#board .board-move-badge').count(), 1);
 
   // Selected-position searches must not paint their results on a different ply.
-  await page.locator('#first-button').click();
+  if (!await page.locator('#first-button').isDisabled()) await page.locator('#first-button').click();
+  await openEngine(page);
   await page.locator('#deepen-button').click();
   await page.locator('#last-button').click();
   await page.waitForFunction(() => document.querySelector('#stop-position').hidden);
   assert.equal(await page.locator('#board .engine-arrow').count(), 0);
   assert.equal(await page.locator('#engine-lines .engine-line').count(), 0);
   assert.match(await page.locator('#insight-text').innerText(), /checkmate/i);
-  await page.locator('#first-button').click();
+  if (!await page.locator('#first-button').isDisabled()) await page.locator('#first-button').click();
+  await openEngine(page);
   await page.locator('#deepen-button').click();
   await page.locator('#stop-position').click();
   await page.waitForFunction(() => !document.querySelector('#deepen-button').disabled);
@@ -249,7 +265,8 @@ try {
   await page.locator('#analyze-button').click();
   assert.equal(await page.locator('#board .engine-arrow').count(), 0);
   await page.waitForFunction(() => !document.querySelector('#summary').hidden && !document.querySelector('#analyze-button').disabled);
-  await page.locator('#first-button').click();
+  if (!await page.locator('#first-button').isDisabled()) await page.locator('#first-button').click();
+  await openEngine(page);
   assert.equal(await page.locator('#engine-lines .engine-line').count(), 1);
   assert.equal(await page.locator('#board .engine-arrow').count(), 1);
   await selectReviewOption('multipv', '3');
@@ -259,7 +276,8 @@ try {
   assert.equal(await page.locator('#multipv').inputValue(), '1');
   await page.locator('#analyze-button').click();
   await page.waitForFunction(() => !document.querySelector('#summary').hidden && !document.querySelector('#analyze-button').disabled);
-  await page.locator('#first-button').click();
+  if (!await page.locator('#first-button').isDisabled()) await page.locator('#first-button').click();
+  await openEngine(page);
   assert.equal(await page.locator('#engine-lines .engine-line').count(), 1);
   await assertLegalCandidates('w');
   assert.equal(await page.evaluate(() => window.engineCommands.includes('go movetime 50')), true);
@@ -269,11 +287,13 @@ try {
   assert.equal(await page.locator('#multipv').inputValue(), '1');
   await page.locator('#analyze-button').click();
   await page.waitForFunction(() => !document.querySelector('#summary').hidden && !document.querySelector('#analyze-button').disabled);
-  await page.locator('#first-button').click();
+  if (!await page.locator('#first-button').isDisabled()) await page.locator('#first-button').click();
+  await openEngine(page);
   assert.equal(await page.locator('#engine-lines .engine-line').count(), 1);
   assert.match(await page.locator('#engine-status').innerText(), /Lozza/);
   assert.match(await page.locator('#review-engine').innerText(), /Lozza/);
   await assertLegalCandidates('w');
+  await openEngine(page);
   await page.locator('#quick-position').click();
   await page.waitForFunction(() => !document.querySelector('#quick-position').disabled);
   await assertLegalCandidates('w');
@@ -292,18 +312,22 @@ try {
   assert.equal(reduced, 0, 'Reduced motion must move pieces immediately.');
 
   // Public Lichess exports exclude started games, including a pasted live-game URL.
+  await openLibrary(page);
   await page.locator('#game-source').selectOption('lichess');
   assert.match(await page.locator('#username-label').innerText(), /Lichess.*URL/);
+  await openLibrary(page);
   await page.locator('#username').fill('alice');
   await page.locator('#load-button').click();
   await page.waitForFunction(() => !document.querySelector('#load-button').disabled);
   assert.equal(await page.locator('.game-card').count(), 1);
   assert.match(await page.locator('#game-subtitle').innerText(), /Lichess/);
+  await openLibrary(page);
   await page.locator('#username').fill('https://lichess.org/abcdefgh/black#2');
   await page.locator('#load-button').click();
   await page.waitForFunction(() => !document.querySelector('#load-button').disabled);
   assert.equal(await page.locator('.game-card').count(), 1);
   assert.equal(await page.locator('#game-subtitle a').getAttribute('href'), 'https://lichess.org/abcdefgh');
+  await openLibrary(page);
   await page.locator('#username').fill('https://lichess.org/live0001');
   await page.locator('#load-button').click();
   await page.waitForFunction(() => !document.querySelector('#load-button').disabled);
@@ -313,17 +337,19 @@ try {
   assert(lichessRequests.some(value => value.includes('/game/export/abcdefgh?')));
 
   // Both paste and file imports use real PGN parsing and preserve completion guards.
-  await page.locator('#import-panel > summary').click();
+  await openImport(page);
   await page.locator('#pgn-text').fill('[Result "*"]\n\n1. e4 *');
   await page.locator('#import-button').click();
-  assert.match(await page.locator('#error').innerText(), /completed/);
+  assert.match(await page.locator('#import-status').innerText(), /completed/);
   const networkBeforeImport = requests.length + lichessRequests.length;
+  await openImport(page);
   await page.locator('#pgn-text').fill(pgn);
   await page.locator('#import-button').click();
   assert.equal(await page.locator('.move-button').count(), 4);
   assert.match(await page.locator('#game-subtitle').innerText(), /Imported PGN/);
   assert.equal(await page.locator('#error').isVisible(), false);
   const drawPgn = '[Event "Agreed draw"]\n[White "File White"]\n[Black "File Black"]\n[Result "1/2-1/2"]\n\n1. Nf3 Nf6 1/2-1/2';
+  await openImport(page);
   await page.locator('#pgn-file').setInputFiles({ name: 'finished-game.pgn', mimeType: 'application/x-chess-pgn', buffer: Buffer.from(drawPgn) });
   await page.waitForFunction(() => document.querySelector('#game-title').textContent === 'File White vs File Black');
   assert.equal(await page.locator('.move-button').count(), 2);
@@ -331,17 +357,21 @@ try {
   assert.equal(await page.locator('#board .board-move-badge.draw').count(), 2);
   assert.equal(requests.length + lichessRequests.length, networkBeforeImport, 'Importing a PGN must remain local.');
   const fenPgn = '[SetUp "1"]\n[FEN "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 23"]\n[White "Setup White"]\n[Black "Setup Black"]\n[Result "1/2-1/2"]\n\n23... e5 24. Nf3 1/2-1/2';
+  await openImport(page);
   await page.locator('#pgn-text').fill(fenPgn);
   await page.locator('#import-button').click();
   assert.equal(await page.locator('.move-button').count(), 2);
   await page.locator('#next-button').click();
   assert.match(await page.locator('#position-label').innerText(), /23.*e5/);
-  await page.locator('#first-button').click();
+  if (!await page.locator('#first-button').isDisabled()) await page.locator('#first-button').click();
+  await openEngine(page);
   await page.locator('#quick-position').click();
   await page.waitForFunction(() => !document.querySelector('#quick-position').disabled);
   await assertLegalCandidates('b');
-  await page.locator('#import-panel > summary').click();
+  await openImport(page);
+  await openLibrary(page);
   await page.locator('#game-source').selectOption('chesscom');
+  await openLibrary(page);
   await page.locator('#username').fill('alice');
   await page.locator('#load-button').click();
   await page.waitForFunction(() => document.querySelectorAll('.game-card').length === 1);
@@ -355,7 +385,8 @@ try {
   await selectReviewOption('depth', '150');
   await page.locator('#analyze-button').click();
   await page.waitForFunction(() => !document.querySelector('#summary').hidden && !document.querySelector('#analyze-button').disabled);
-  await page.locator('#first-button').click();
+  if (!await page.locator('#first-button').isDisabled()) await page.locator('#first-button').click();
+  await openEngine(page);
   await ensureSettingsClosed();
   assert.equal(await page.locator('#review-settings').evaluate(details => details.open), false);
   await page.locator('#moves-tab').click();
@@ -380,7 +411,7 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForFunction(() => document.querySelector('#library-toggle').getAttribute('aria-expanded') === 'false');
-  assert.equal(await page.locator('#library-content').isVisible(), false);
+  assert.equal(await page.locator('#library-dialog').isVisible(), false);
   const phoneBoardTop = await page.locator('#board').evaluate(board => board.getBoundingClientRect().top);
   assert(phoneBoardTop < 300, 'The selected game board must appear near the top on phones: ' + phoneBoardTop);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -388,7 +419,7 @@ try {
   await page.locator('#last-button').click();
   assert.match(await page.locator('#eval-text').innerText(), /[−-]M0/);
   assert.equal(await page.locator('#board .engine-arrow').count(), 0);
-  if (await page.locator('#library-toggle').getAttribute('aria-expanded') === 'false') await page.locator('#library-toggle').click();
+  await openLibrary(page);
   await page.locator('#username').fill('missing');
   await page.locator('#load-button').click();
   await page.waitForFunction(() => !document.querySelector('#error').hidden);
@@ -398,12 +429,11 @@ try {
   console.log('Browser checks passed: local Stockfish/Lozza, exact artwork, Fast/Quick searches, PGN/Lichess completion guards, motion preferences, settings, three review tabs, hover arrows and variations, compact board layout, review options, MultiPV, arrow geometry/flip/toggles/terminal reset, selected-position review/cancel, autoplay, archive guards, and responsive layouts.');
 } catch (error) {
   console.error(error);
-  for (const context of browser?.contexts() || []) for (const page of context.pages()) {
+  for (const page of context?.pages() || []) {
     console.error('Browser failure state:', await page.evaluate(() => ({ error: document.querySelector('#error')?.textContent, review: document.querySelector('#review-status')?.textContent, engine: document.querySelector('#engine-status')?.textContent, progress: document.querySelector('#progress-text')?.textContent, summary: document.querySelector('#summary')?.hidden, commands: window.engineCommands?.slice(-12) })).catch(() => ({})));
   }
   throw error;
 } finally {
-  for (const context of browser?.contexts() || []) await Promise.all(context.pages().map(page => page.close({ runBeforeUnload: false })));
-  await browser?.close();
+  await closeTestContext(context, profile, 'meowlchess-browser-test-');
   server.close();
 }
