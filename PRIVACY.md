@@ -1,32 +1,46 @@
 # MeowlChess privacy notice
 
-MeowlChess is an independent browser extension for local analysis of completed chess games. It is not affiliated with or endorsed by Chess.com.
+MeowlChess is an independent browser extension for local analysis of completed chess games. It is not affiliated with Chess.com or Lichess. This notice describes version 1.2.0.
 
-## Information used
+## Game data
 
-You enter a Chess.com username to request that player's publicly available completed games. Those records can include player usernames, ratings, results, timestamps, and the moves of each game. The username is part of the request URL sent directly to `api.chess.com`.
+For Chess.com or Lichess retrieval, you enter a public username; Lichess also accepts a completed-game link. The selected site's public API receives that username or game ID directly. Returned data can include player names, ratings, results, dates, game URLs, and moves.
 
-The extension remembers your entered username and review settings in `chrome.storage.local`, the browser's local extension storage. Saved settings include review speed, number of engine lines, arrow/badge/coordinate visibility, and playback speed. These preferences are not synced to a MeowlChess account or sent to an analysis service. Game data and computed analysis are processed in your browser and remain in memory while the review tab is open.
+You can also choose or paste a PGN exported from another website. Imported files are read locally and are not uploaded. MeowlChess does not contact an arbitrary website named in a PGN. A completed review retains the game's PGN locally, including its headers and comments; only line endings, a leading byte-order mark, and surrounding whitespace are normalized.
+
+## Local storage and processing
+
+The extension saves website selection, remembered website inputs, engine choice, thinking time, line count, selective recheck setting, board orientation preference, arrow mode, badge/coordinate visibility, and playback speed in `chrome.storage.local`. These preferences are not synced to a MeowlChess account or sent to an analysis service.
+
+Successful full reviews are automatically saved in the extension's **local IndexedDB**. Each record includes the PGN, player/source information, evaluations and engine continuations, move classifications, summary scores, opening metadata, engine settings and analysis version, saved timestamps, and bookmarked positions. Re-reviewing the same game replaces its saved analysis and retains its bookmarks. The Practice list is derived from mistakes and bookmarks in these saved records.
+
+Saved reviews persist after the tab closes. The library is separate for each browser profile; MeowlChess does not sync it between browsers, devices, or accounts. It is capped at **100 reviews**, **40 MiB** of serialized review data in total, and **4 MiB** per record. MeowlChess does not automatically evict old reviews or bookmarks. If its limits or the browser's available storage prevent a save, it reports the failure and keeps the current review open.
+
+Fetched games that have not been reviewed, temporary analysis variations, retry attempts and feedback, and extra position searches remain in the open tab's memory. They are not added to saved records. Returning to the review closes the current variation or retry. Closing the tab discards its remaining in-memory data and stops its active engines. This does not delete an already saved full review.
+
+Stockfish, Lozza, chess.js, opening data, piece images, and icons are bundled. There are no runtime code, model, opening-data, font, or artwork downloads. Game review, selective rechecks, opening recognition, practice grading, and continuation explanations all run on your device.
 
 ## Network requests
 
-The installed extension contacts Chess.com's published API to retrieve public archive data. Chess.com receives the requested username and normal connection information, such as your IP address and browser request headers. Its handling of those requests is governed by [Chess.com's privacy policy](https://www.chess.com/legal/privacy).
+The installed extension requests public archive data from `api.chess.com` and finished-game exports from `lichess.org/api/games/user/` or `lichess.org/game/export/`. These services receive normal connection information, including your IP address and request headers. Their handling is governed by [Chess.com's privacy policy](https://www.chess.com/legal/privacy) and [Lichess's privacy policy](https://lichess.org/privacy).
 
-Stockfish and the other runtime code are bundled with the extension. Engine calculations happen locally; no runtime CDN, paid API, or remote engine is used. Opening an external help or policy link makes an ordinary browser navigation to that website, subject to that website's policies.
+Opening an original game, documentation, or policy link makes a normal browser navigation to that site. MeowlChess itself has no developer-operated servers, analytics, advertising, telemetry, or paid analysis APIs. Saved PGNs, reviews, bookmarks, variations, and practice answers are not uploaded by MeowlChess.
 
-## What MeowlChess does not collect
+## Permissions
 
-MeowlChess does not request Chess.com passwords, authentication tokens, payment details, or private messages. It does not read Chess.com page content or your browsing history. It has no developer-operated data collection service, analytics, advertising, or telemetry.
+- `storage`: local preferences. Saved reviews also use the browser's built-in IndexedDB storage for the extension.
+- `https://api.chess.com/*`: public Chess.com game archives.
+- `https://lichess.org/api/games/user/*` and `https://lichess.org/game/export/*`: Lichess public game exports.
 
-## Browser permissions
-
-- `storage` is used for local preferences.
-- Access to `https://api.chess.com/*` is used to request public game archive data.
-
-The extension does not use content scripts or request permission to read live game pages.
+There are no content scripts or requests for account credentials, private messages, browsing history, or live game-page access. Use only finished games; imported PGN results cannot be independently verified against their original site.
 
 ## Control and deletion
 
-You can replace the saved username by entering another one and loading its games. Changes to review and display settings update the locally saved preferences. Uninstalling the extension removes its local extension storage. Public games remain on Chess.com; removing MeowlChess does not change or delete those records. Close the review tab to end its active analysis and discard its in-memory review state.
+- **Delete a saved game:** use its **×** button under Saved reviews. This removes the stored PGN, analysis, and associated bookmarks. If that game is still open, it remains in memory until you close or replace it; reviewing it again will save it again.
+- **Remove one bookmark:** open its position and click **Bookmarked** to toggle it off.
+- **Update preferences:** change Settings or enter a replacement website username or game link and load games.
+- **Remove all local extension data:** uninstall MeowlChess from that browser profile. This removes its local preferences and saved library. Closing or reloading a review tab does not delete saved reviews; reloading the unpacked extension is an update step, not a deletion step.
 
-This notice describes the source supplied with this local build. If you modify the extension or install a modified version, review that version's behavior and privacy notice separately.
+Deleting local data does not delete public games from Chess.com or Lichess, or remove the original PGN files from your computer. MeowlChess has no server copy from which to restore deleted reviews. Browser profile removal or browser-managed storage loss can also remove local data; MeowlChess's no-eviction rule applies to its own library management. See Chrome's documentation on [extension storage](https://developer.chrome.com/docs/extensions/reference/api/storage) and [web storage in extensions](https://developer.chrome.com/docs/extensions/develop/concepts/storage-and-cookies).
+
+Modified versions may behave differently.

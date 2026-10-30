@@ -1,8 +1,12 @@
 import { Chess } from '../vendor/chess.js';
 import { StockfishEngine } from './engine.js';
+import { recognizeOpening, OPENING_DATA_VERSION } from './openings.js';
+
+export const REVIEW_SCHEMA_VERSION = 2;
+export const ANALYSIS_VERSION = `meowlchess-analysis-2-${OPENING_DATA_VERSION.slice(0, 12)}`;
 
 const RESULTS = new Set(['1-0', '0-1', '1/2-1/2']);
-export const MOVE_LABELS = ['Brilliant', 'Great', 'Best', 'Excellent', 'Good', 'Inaccuracy', 'Mistake', 'Blunder'];
+export const MOVE_LABELS = ['Brilliant', 'Great', 'Best', 'Excellent', 'Good', 'Book', 'Inaccuracy', 'Mistake', 'Blunder'];
 const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 const abortCheck = (signal) => { if (signal?.aborted) throw new DOMException('Review cancelled.', 'AbortError'); };
 
@@ -74,6 +78,7 @@ function sanFor(fen, uci) {
 }
 
 function explain(move, verdict, bestSan, after) {
+  if (verdict.label === 'Book') return `${move.san} follows a known line in the local opening reference. Book moves are excluded from study scores.`;
   if (verdict.label === 'Brilliant') return `${move.san} offers a piece while keeping enough compensation in the engine line. This is a MeowlChess estimate.`;
   if (verdict.label === 'Great') return `${move.san} finds the engine’s best reply after the opponent’s error. This is a MeowlChess estimate.`;
   if (move.san.endsWith('#')) return `${move.san} delivers checkmate.`;
@@ -85,13 +90,22 @@ function explain(move, verdict, bestSan, after) {
   return `${move.san} reduces your estimated winning chances by ${Math.round(verdict.probabilityLoss * 100)} percentage points.${bestSan ? ` Consider ${bestSan} instead.` : ''}`;
 }
 
-export async function analyzeGame(pgn, { moveTimeMs = 150, multiPV = 1, onProgress = () => {}, signal, engineFactory = () => new StockfishEngine() } = {}) {
+export async function analyzeGame(pgn, { moveTimeMs = 150, multiPV = 1, smartAnalysis = false, recognizeOpenings = true, onProgress = () => {}, signal, engineFactory = () => new StockfishEngine() } = {}) {
   abortCheck(signal);
   const game = parseGame(pgn);
+  const opening = recognizeOpenings ? recognizeOpening(game) : null;
+  const selectedTime = Math.max(50, Math.min(5000, Math.round(Number(moveTimeMs) || 150)));
+  const scanTimeMs = smartAnalysis ? Math.min(selectedTime, 150) : selectedTime;
+  const recheckTimeMs = smartAnalysis ? Math.max(500, Math.min(selectedTime, 3000)) : 0;
+  const pairLimit = Math.min(8, Math.max(1, Math.ceil(game.moves.length * 0.15)));
+  const scanProgressTotal = game.positions.length + (smartAnalysis ? Math.min(game.positions.length, pairLimit * 2) : 0);
   const engine = engineFactory();
   const positions = [];
+  const terminals = [];
+  const histories = [[]];
+  const rechecked = new Map();
+  let recheckedMoves = [];
   const replay = new Chess(game.positions[0]);
-  const uciMoves = [];
   try {
     await engine.init(signal);
     for (let i = 0; i < game.positions.length; i++) {
@@ -99,36 +113,84 @@ export async function analyzeGame(pgn, { moveTimeMs = 150, multiPV = 1, onProgre
       if (i > 0) {
         const move = game.moves[i - 1];
         replay.move({ from: move.from, to: move.to, promotion: move.promotion });
-        uciMoves.push(`${move.from}${move.to}${move.promotion || ''}`);
+        histories.push([...histories[i - 1], `${move.from}${move.to}${move.promotion || ''}`]);
       }
-      let evaluation;
+      let terminal = null;
       if (replay.isCheckmate()) {
-        evaluation = { cp: replay.turn() === 'w' ? -100000 : 100000, mate: 0, bestMove: null, pv: [], depth: 0, candidates: [] };
+        terminal = { cp: replay.turn() === 'w' ? -100000 : 100000, mate: 0, bestMove: null, pv: [], depth: 0, candidates: [] };
       } else if (replay.isDraw()) {
-        evaluation = { cp: 0, mate: null, bestMove: null, pv: [], depth: 0, candidates: [] };
-      } else {
-        evaluation = await engine.evaluate(game.positions[i], { moveTimeMs, multiPV, signal, initialFen: game.positions[0], moves: [...uciMoves] });
+        terminal = { cp: 0, mate: null, bestMove: null, pv: [], depth: 0, candidates: [] };
       }
+      terminals.push(terminal);
+      const evaluation = terminal || await engine.evaluate(game.positions[i], { moveTimeMs: scanTimeMs, multiPV, signal, initialFen: game.positions[0], moves: histories[i] });
       abortCheck(signal);
       positions.push(evaluation);
-      onProgress({ completed: i + 1, total: game.positions.length });
+      onProgress(smartAnalysis
+        ? { completed: i + 1, total: scanProgressTotal, phase: 'scan', phaseCompleted: i + 1, phaseTotal: game.positions.length }
+        : { completed: i + 1, total: game.positions.length });
     }
     abortCheck(signal);
+    if (smartAnalysis) {
+      const important = game.moves.flatMap((move, index) => {
+        const before = positions[index];
+        const after = positions[index + 1];
+        const sign = move.color === 'w' ? 1 : -1;
+        const loss = expectedScore(before, move.color) - expectedScore(after, move.color);
+        const lostMate = before.mate != null && before.cp * sign > 0 && (after.mate == null || after.cp * sign <= 0);
+        const allowsMate = after.mate != null && after.cp * sign < 0 && (before.mate == null || before.cp * sign >= 0);
+        return loss >= 0.04 || lostMate || allowsMate ? [{ index, priority: loss + (lostMate || allowsMate ? 1 : 0) }] : [];
+      }).sort((a, b) => b.priority - a.priority || a.index - b.index).slice(0, pairLimit);
+      recheckedMoves = important.map(({ index }) => index + 1).sort((a, b) => a - b);
+      const pending = [...new Set(important.flatMap(({ index }) => [index, index + 1]))]
+        .filter(index => !terminals[index]).sort((a, b) => a - b);
+      const total = game.positions.length + pending.length;
+      if (pending.length) onProgress({ completed: game.positions.length, total, phase: 'recheck', phaseCompleted: 0, phaseTotal: pending.length });
+      for (let count = 0; count < pending.length; count++) {
+        abortCheck(signal);
+        const index = pending[count];
+        const evaluation = await engine.evaluate(game.positions[index], { moveTimeMs: recheckTimeMs, multiPV, signal, initialFen: game.positions[0], moves: histories[index] });
+        abortCheck(signal);
+        rechecked.set(index, evaluation);
+        onProgress({ completed: game.positions.length + count + 1, total, phase: 'recheck', phaseCompleted: count + 1, phaseTotal: pending.length });
+      }
+      abortCheck(signal);
+      // Apply the completed pass together: a selected move never receives only
+      // one side of its deeper comparison, and cancellation returns no half-result.
+      for (const [index, evaluation] of rechecked) positions[index] = evaluation;
+      if (!pending.length) onProgress({ completed: total, total, phase: 'complete', phaseCompleted: 0, phaseTotal: 0 });
+      abortCheck(signal);
+    }
   } finally { engine.dispose(); }
-  const summary = Object.fromEntries(['w', 'b'].map(color => [color, { accuracy: null, counts: Object.fromEntries(MOVE_LABELS.map(label => [label, 0])), total: 0 }]));
+  const summary = Object.fromEntries(['w', 'b'].map(color => [color, { accuracy: null, counts: Object.fromEntries(MOVE_LABELS.map(label => [label, 0])), total: 0, scoredTotal: 0, bookTotal: 0 }]));
   const totals = { w: 0, b: 0 };
   const moves = game.moves.map((move, i) => {
     const uci = `${move.from}${move.to}${move.promotion || ''}`;
     const bestSan = sanFor(move.before, positions[i].bestMove);
     const verdict = classifyMove(positions[i], positions[i + 1], move.color, positions[i].bestMove === uci, { move, previousEvaluation: positions[i - 1], previousMove: game.moves[i - 1] });
-    summary[move.color].counts[verdict.label]++;
-    summary[move.color].total++;
-    totals[move.color] += verdict.accuracy;
-    return { ...move, ply: i + 1, ...verdict, bestSan, evalAfter: positions[i + 1], explanation: explain(move, verdict, bestSan, positions[i + 1]) };
+    // Opening names also cover traps and unsound lines. Preserve tactical errors,
+    // special engine classifications, and mate rather than endorsing every name.
+    const isBook = i < (opening?.lastBookPly || 0) && !move.san.endsWith('#') && ['Best', 'Excellent', 'Good'].includes(verdict.label);
+    if (isBook) { verdict.label = 'Book'; verdict.accuracy = null; }
+    const side = summary[move.color];
+    side.counts[verdict.label]++;
+    side.total++;
+    if (isBook) side.bookTotal++;
+    else { side.scoredTotal++; totals[move.color] += verdict.accuracy; }
+    const confirmed = smartAnalysis && [i, i + 1].every(index => !!terminals[index] || rechecked.has(index));
+    return { ...move, ply: i + 1, ...verdict, bestSan, evalAfter: positions[i + 1], isBook, confirmed, opening: isBook ? opening.byPly[i] : null, explanation: explain(move, verdict, bestSan, positions[i + 1]) };
   });
   for (const color of ['w', 'b']) {
     const side = summary[color];
-    if (side.total) side.accuracy = Math.round(totals[color] / side.total * 10) / 10;
+    if (side.scoredTotal) side.accuracy = Math.round(totals[color] / side.scoredTotal * 10) / 10;
   }
-  return { game, positions, moves, summary };
+  return {
+    game, positions, moves, summary, opening,
+    analysis: {
+      version: ANALYSIS_VERSION, schemaVersion: REVIEW_SCHEMA_VERSION,
+      smartAnalysis: !!smartAnalysis, scanTimeMs, recheckTimeMs,
+      recheckedPlies: [...rechecked.keys()].sort((a, b) => a - b), recheckedMoves,
+      recheckedPositionCount: rechecked.size, positionCount: positions.length,
+      openingDataVersion: recognizeOpenings ? OPENING_DATA_VERSION : null,
+    },
+  };
 }

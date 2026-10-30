@@ -1,4 +1,10 @@
-const ENGINE_URL = new URL('../vendor/stockfish-18-lite-single.js', import.meta.url);
+const STOCKFISH_URL = new URL('../vendor/stockfish-18-lite-single.js', import.meta.url);
+const LOZZA_URL = new URL('../vendor/lozza-9.js', import.meta.url);
+
+export const ENGINE_OPTIONS = Object.freeze([
+  Object.freeze({ id: 'stockfish', label: 'Stockfish 18', description: 'Stronger analysis · up to 3 lines', maxLines: 3 }),
+  Object.freeze({ id: 'lozza', label: 'Lozza 9', description: 'Small JavaScript engine · best move only', maxLines: 1 }),
+]);
 
 function abortError() {
   return new DOMException('Review cancelled.', 'AbortError');
@@ -11,8 +17,10 @@ function validateFen(fen) {
 }
 
 /** Local, single-threaded UCI engine. A separate instance belongs to each review. */
-export class StockfishEngine {
-  constructor({ workerFactory = (url) => new Worker(url), bootTimeoutMs = 15000 } = {}) {
+class LocalUciEngine {
+  constructor({ workerFactory = (url) => new Worker(url), bootTimeoutMs = 15000 } = {}, { url, maxLines }) {
+    this.engineUrl = url;
+    this.maxLines = maxLines;
     this.workerFactory = workerFactory;
     this.bootTimeoutMs = bootTimeoutMs;
     this.worker = null;
@@ -36,7 +44,7 @@ export class StockfishEngine {
 
   async _initialize(signal) {
     try {
-      this.worker = this.workerFactory(ENGINE_URL);
+      this.worker = this.workerFactory(this.engineUrl);
       this.worker.onmessage = ({ data }) => {
         if (typeof data !== 'string') return;
         for (const line of data.split(/\r?\n/)) {
@@ -114,6 +122,8 @@ export class StockfishEngine {
     if (!Number.isInteger(multiPV) || multiPV < 1 || multiPV > 3) {
       throw new Error('Choose between one and three engine lines.');
     }
+    // Lozza is offered as a one-line engine. Do not invent extra alternatives.
+    multiPV = Math.min(multiPV, this.maxLines);
     if (!Array.isArray(moves) || moves.some((move) => typeof move !== 'string' || !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move))) {
       throw new Error('The engine received an invalid move history.');
     }
@@ -144,7 +154,7 @@ export class StockfishEngine {
             const pv = rawPv.every((move) => /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move)) ? rawPv : [];
             const evaluation = {
               rank,
-              cp: mate === null ? raw * perspective : raw === 0 ? -100000 * perspective : Math.sign(mate) * Math.max(10000, 100000 - Math.abs(mate) * 100),
+              cp: mate === null ? (raw * perspective || 0) : raw === 0 ? -100000 * perspective : Math.sign(mate) * Math.max(10000, 100000 - Math.abs(mate) * 100),
               mate,
               pv,
               depth: Number(line.match(/\bdepth (\d+)\b/)?.[1] || 0),
@@ -197,4 +207,22 @@ export class StockfishEngine {
   dispose() {
     this._fail(abortError());
   }
+}
+
+export class StockfishEngine extends LocalUciEngine {
+  constructor(options = {}) {
+    super(options, { url: STOCKFISH_URL, maxLines: 3 });
+  }
+}
+
+export class LozzaEngine extends LocalUciEngine {
+  constructor(options = {}) {
+    super(options, { url: LOZZA_URL, maxLines: 1 });
+  }
+}
+
+export function createEngine(engineId = 'stockfish', options = {}) {
+  if (engineId === 'stockfish') return new StockfishEngine(options);
+  if (engineId === 'lozza') return new LozzaEngine(options);
+  throw new Error('Choose an available local chess engine.');
 }

@@ -27,3 +27,9 @@ test('malformed squares, moves, and zero-length arrows do not render', () => {
   for (const square of [null, '', 'a0', 'i4', 'e9', 'e44']) assert.equal(squareCenter(square), null);
   for (const move of [null, '', 'e2e2', 'a0a1', 'a7a8x', 'e2e4\ngo infinite']) assert.equal(moveArrowPath(move), null);
 });
+
+test('arrow shafts stop at the triangle base so the tip reaches the square center', () => {
+  assert.equal(moveArrowPath('e2e4', false, 42), 'M 450 650 L 450 492');
+  assert.equal(moveArrowPath('b1d2', false, 42), 'M 150 750 L 350 750 L 350 692');
+  assert.equal(moveArrowPath('b1d2', true, 42), 'M 650 50 L 450 50 L 450 108');
+});

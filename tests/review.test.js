@@ -132,7 +132,7 @@ test('review includes special classifications in summaries with explicit explana
     { ...evaluation(0), depth: 16 }, { ...evaluation(0), depth: 16 },
     { ...evaluation(200, null, 'g1f3'), depth: 16 }, { ...evaluation(200), depth: 16 },
   ]);
-  const second = await analyzeGame(SHORT, { engineFactory: great.engineFactory });
+  const second = await analyzeGame(SHORT, { engineFactory: great.engineFactory, recognizeOpenings: false });
   assert.equal(second.moves[2].label, 'Great');
   assert.equal(second.summary.w.counts.Great, 1);
   assert.match(second.moves[2].explanation, /best reply.*opponent’s error/);
@@ -152,7 +152,7 @@ test('review passes complete replay history and calculates player summaries', as
   const fixture = fakeEngine([evaluation(0, null, 'e2e4'), evaluation(10, null, 'c7c5'), evaluation(400, null, 'g1f3'), evaluation(400)]);
   const progress = [];
   const controller = new AbortController();
-  const result = await analyzeGame(SHORT, { engineFactory: fixture.engineFactory, moveTimeMs: 500, signal: controller.signal, onProgress: value => progress.push(value) });
+  const result = await analyzeGame(SHORT, { engineFactory: fixture.engineFactory, recognizeOpenings: false, moveTimeMs: 500, signal: controller.signal, onProgress: value => progress.push(value) });
   assert.equal(fixture.engine.initialized, true);
   assert.equal(fixture.engine.disposed, true);
   assert.equal(fixture.calls.length, 4);

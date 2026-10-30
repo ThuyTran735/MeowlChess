@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Book">
+<!-- Symbol contours derived from Chess.com Chess V3 glyphs; see THIRD_PARTY_NOTICES.md. -->
+<circle cx="50" cy="50" r="50" fill="#d5a47d"/>
+<g fill="#000" opacity=".19" transform="translate(0 2.5)"><path transform="matrix(0.08028169 0 0 -0.07681366 6.260563 73.618777)" d="M180 672Q296 672 369 654Q442 636 495 594V-31Q440 9 368 28Q296 47 180 47H140V672H180Z"/><path transform="matrix(0.08096591 0 0 -0.07681366 10.926136 73.618777)" d="M532 594Q586 636 657 654Q728 672 844 672H884V47H844Q730 47 658 29Q587 11 532 -31V594Z"/></g>
+<g fill="#fff"><path transform="matrix(0.08028169 0 0 -0.07681366 6.260563 73.618777)" d="M180 672Q296 672 369 654Q442 636 495 594V-31Q440 9 368 28Q296 47 180 47H140V672H180Z"/><path transform="matrix(0.08096591 0 0 -0.07681366 10.926136 73.618777)" d="M532 594Q586 636 657 654Q728 672 844 672H884V47H844Q730 47 658 29Q587 11 532 -31V594Z"/></g>
+</svg>

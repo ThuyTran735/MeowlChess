@@ -1,40 +1,120 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MeowlChess — Game Review</title><link rel="icon" type="image/png" href="icons/icon32.png"><link rel="stylesheet" href="review.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MeowlChess — Game Review</title>
+  <link rel="icon" type="image/png" href="icons/icon32.png">
+  <link rel="stylesheet" href="review.css">
 </head>
 <body>
-<header class="topbar"><a class="brand" href="review.html"><img src="icons/icon128.png" width="44" height="44" alt="">Meowl<span>Chess</span></a><span class="header-title">Game Review</span><span class="local-pill"><i></i> Local analysis</span><a class="rules-link" href="https://www.chess.com/legal/fair-play" target="_blank" rel="noopener noreferrer">Fair play ↗</a></header>
+<header class="topbar">
+  <a class="brand" href="review.html"><img src="icons/icon128.png" width="36" height="36" alt="">Meowl<span>Chess</span></a>
+  <span class="header-title">Game review</span>
+  <span class="local-pill"><i></i> On your device</span>
+  <a class="rules-link" href="https://www.chess.com/legal/fair-play" target="_blank" rel="noopener noreferrer">Fair play ↗</a>
+</header>
 <main>
-<section class="intro"><h1>Game review</h1><span class="engine-chip">Stockfish 18 <span>Completed games only</span></span></section>
 <section class="workspace" aria-label="Game review">
-<aside class="library-panel">
-<div class="panel-heading"><span aria-hidden="true">▦</span><h2>Your games</h2></div><p class="muted">Recent Chess.com games</p>
-<form id="username-form"><label for="username">Chess.com username</label><div class="input-group"><input id="username" name="username" placeholder="Enter your username" autocomplete="username" maxlength="50" required><button id="load-button" type="submit" aria-label="Find completed games" title="Find completed games">→</button></div></form>
-<p class="helper">No login needed. Completed games only.</p><div class="library-heading"><h3>RECENT GAMES</h3><span id="game-count">—</span></div>
-<p id="library-status" class="muted" role="status">Enter a username to load completed games.</p><div id="games" class="game-list" aria-label="Completed games"></div>
-<button id="demo-button" class="demo-button" type="button"><span>Try a sample game</span><span>↗</span></button>
-<div class="privacy-note"><p>Analysis runs on your device.<br>No subscription or account access.</p></div>
-</aside>
-<section class="study-panel">
-<div class="study-title"><div><span id="game-kind" class="eyebrow">GAME</span><h2 id="game-title">No game selected</h2><p id="game-subtitle" class="muted">Choose a finished game, or try the sample.</p></div><button id="flip-button" class="icon-button" type="button" aria-label="Flip board" title="Flip board">⇅</button></div>
-<div class="board-layout"><div class="board-column">
-<div class="player-line"><span class="player-avatar" aria-hidden="true">♚</span><strong id="top-player">Black</strong><span id="top-rating"></span><span id="top-score" class="player-score"></span></div>
-<div class="board-with-eval"><div class="eval-bar" aria-label="Position evaluation"><div id="eval-white"></div><span id="eval-text">—</span></div><div id="board" class="board" role="img" aria-label="Chess board in starting position"></div></div>
-<div class="player-line bottom-player"><span class="player-avatar white-avatar" aria-hidden="true">♔</span><strong id="bottom-player">White</strong><span id="bottom-rating"></span><span id="bottom-score" class="player-score"></span></div>
-<div class="board-controls"><span id="position-label" aria-live="polite" aria-atomic="true">Starting position</span><div><button id="first-button" class="nav-button" type="button" aria-label="First position" title="First position (Home)">⇤</button><button id="previous-button" class="nav-button" type="button" aria-label="Previous move" title="Previous move (←)">‹</button><button id="next-button" class="nav-button" type="button" aria-label="Next move" title="Next move (→)">›</button><button id="last-button" class="nav-button" type="button" aria-label="Last position" title="Last position (End)">⇥</button></div></div>
-<div class="playback-controls"><button id="play-button" type="button" aria-label="Play through the game" aria-pressed="false" disabled>Play</button><label for="play-speed">Playback</label><select id="play-speed"><option value="700">Fast · 0.7s</option><option value="1200" selected>Normal · 1.2s</option><option value="2000">Slow · 2s</option></select></div><div class="chart-panel"><div class="library-heading"><h3>EVALUATION</h3><span>White’s advantage ↑</span></div><div id="eval-chart" class="eval-chart" aria-label="Evaluation history"><p>Evaluation graph appears after review.</p></div></div><p class="keyboard-hint">← → Step through moves <span>•</span> Click the graph to explore</p>
-</div><div class="insights-column">
-<div class="analysis-box"><div class="review-heading"><img src="icons/icon48.png" width="34" height="34" alt=""><div><span class="eyebrow">ANALYSIS</span><span class="review-engine">Stockfish 18 · local</span></div><span id="insight-badge" class="move-badge insight-badge" hidden></span></div>
-<h3 id="insight-title">No game selected</h3><p id="insight-text">Select a game to review its moves.</p><div id="best-move" class="best-move" hidden></div>
-<div class="review-options"><label for="depth">Review speed</label><select id="depth"><option value="150">Quick · 0.15s / position</option><option value="500" selected>Standard · 0.5s / position</option><option value="1500">Deep · 1.5s / position</option><option value="3000">Thorough · 3s / position</option></select></div>
-<details id="review-settings" class="review-settings"><summary>Review settings</summary><div class="review-options"><label for="multipv">Engine lines</label><select id="multipv"><option value="1">Best move only</option><option value="2">Top 2 moves</option><option value="3" selected>Top 3 moves</option></select></div><div class="display-options"><label><input id="show-arrows" type="checkbox" checked> Engine arrows</label><label><input id="show-badges" type="checkbox" checked> Move badges</label><label><input id="show-coordinates" type="checkbox" checked> Coordinates</label></div><p id="time-estimate" class="settings-note"></p></details><button id="analyze-button" class="primary-button" type="button" disabled>Review game <span>↗</span></button><button id="cancel-button" class="cancel-button" type="button" hidden>Cancel review</button><div id="progress-area" hidden><progress id="progress" max="100" value="0"></progress><p id="progress-text" role="status">Starting local engine…</p></div><p id="review-status" class="review-status" role="status"></p></div>
-<section class="engine-panel" aria-label="Top engine moves"><div class="library-heading"><h3>TOP ENGINE MOVES</h3><span id="engine-turn"></span></div><div id="engine-lines" class="engine-lines"></div><p id="engine-status" role="status"></p><button id="deepen-button" type="button" class="secondary-button" disabled>Analyze this position</button><button id="stop-position" type="button" class="secondary-button" hidden>Stop position search</button></section>
-<div id="summary" class="summary" hidden></div><div id="key-moments" class="key-moments" hidden><span>Key moments</span><button id="previous-key" type="button" aria-label="Previous key moment">‹</button><button id="next-key" type="button" aria-label="Next key moment">›</button></div>
-<div class="move-section"><div class="library-heading"><h3>MOVES</h3><span id="move-count">0 moves</span></div><div id="move-list" class="move-list"><p class="muted move-empty">Your game’s moves will appear here.</p></div></div>
-<details class="legend"><summary>What do the move badges mean?</summary><div id="classification-legend"></div><p>MeowlChess estimates, not Chess.com ratings. Brilliant and Great use conservative local heuristics; deeper analysis can change a label.</p></details>
-</div></div><div id="error" class="error-message" role="alert" hidden></div>
-</section></section>
-<footer><span><strong>MeowlChess</strong> v1.1.0 · Local game analysis</span><span>Independent of Chess.com. For completed games only.</span></footer>
-</main><script type="module" src="review.js"></script></body></html>
+  <aside class="library-panel">
+    <div class="panel-heading"><h2>Games</h2><span class="small-label">Completed only</span><button id="library-toggle" type="button" aria-expanded="true" aria-controls="library-content">Hide</button></div>
+    <div id="library-content">
+    <form id="username-form">
+      <label for="game-source">Website</label>
+      <select id="game-source"><option value="chesscom">Chess.com</option><option value="lichess">Lichess</option></select>
+      <label id="username-label" for="username">Chess.com username</label>
+      <div class="input-group"><input id="username" name="username" placeholder="Username" autocomplete="username" maxlength="160" required><button id="load-button" type="submit" aria-label="Find completed games" title="Find completed games">→</button></div>
+    </form>
+    <div class="library-heading recent-heading"><h3>Recent games</h3><span id="game-count">—</span></div>
+    <p id="library-status" class="muted" role="status">Enter a username to find your games.</p>
+    <div id="games" class="game-list" aria-label="Completed games"></div>
+    <details id="saved-panel" class="import-panel saved-panel"><summary>Saved reviews <span id="saved-count">0</span></summary><label for="saved-search" class="visually-hidden">Search saved games</label><input id="saved-search" type="search" placeholder="Search players or opening"><p id="saved-status" class="helper" role="status"></p><div id="saved-games" class="saved-games"></div></details>
+    <button id="open-notebook" type="button" class="demo-button">Practice notebook <span id="notebook-count">0</span></button>
+    <button id="demo-button" class="demo-button" type="button">Try a sample game <span aria-hidden="true">↗</span></button>
+    <details id="import-panel" class="import-panel">
+      <summary>Import a PGN</summary>
+      <p class="helper">Open a finished game exported from any chess website.</p>
+      <label class="file-label" for="pgn-file">Choose a PGN file<input id="pgn-file" type="file" accept=".pgn,.txt,application/x-chess-pgn,text/plain"></label>
+      <label for="pgn-text">Or paste a game</label>
+      <textarea id="pgn-text" rows="5" placeholder="[White &quot;Player&quot;]&#10;[Result &quot;1-0&quot;]&#10;&#10;1. e4 e5 … 1-0" maxlength="250000" spellcheck="false"></textarea>
+      <button id="import-button" type="button" class="secondary-button">Open game</button>
+      <p id="import-status" role="status" class="helper"></p>
+    </details>
+    <p class="privacy-note">No login needed.<br>Your analysis stays here.</p>
+    </div>
+  </aside>
+
+  <section class="study-panel">
+    <div id="error" class="error-message" role="alert" hidden></div>
+    <div class="study-title">
+      <div><span id="game-kind" class="eyebrow">GAME REVIEW</span><h1 id="game-title">Choose a game</h1><p id="game-subtitle" class="muted">Load your games, import a PGN, or try the sample.</p></div>
+    </div>
+    <div class="board-layout">
+      <div class="board-column">
+        <div class="player-line"><span class="player-avatar" aria-hidden="true"></span><strong id="top-player">Black</strong><span id="top-rating"></span><span id="top-score" class="player-score"></span></div>
+        <div class="board-with-eval"><div class="eval-bar" aria-label="Position evaluation"><div id="eval-white"></div><span id="eval-text">—</span></div><div id="board" class="board" role="grid" aria-label="Chess board in starting position"></div></div>
+        <div class="player-line bottom-player"><span class="player-avatar white-avatar" aria-hidden="true"></span><strong id="bottom-player">White</strong><span id="bottom-rating"></span><span id="bottom-score" class="player-score"></span></div>
+        <div class="board-controls">
+          <button id="flip-button" class="nav-button flip-button" type="button" aria-label="Flip board" title="Flip board">⇅</button>
+          <span id="position-label" aria-live="polite" aria-atomic="true">Starting position</span>
+          <div class="move-navigation"><button id="first-button" class="nav-button" type="button" aria-label="First position" title="First position (Home)">⇤</button><button id="previous-button" class="nav-button" type="button" aria-label="Previous move" title="Previous move (←)">‹</button><button id="play-button" class="nav-button" type="button" aria-label="Play through the game" aria-pressed="false" disabled>Play</button><button id="next-button" class="nav-button" type="button" aria-label="Next move" title="Next move (→)">›</button><button id="last-button" class="nav-button" type="button" aria-label="Last position" title="Last position (End)">⇥</button></div>
+        </div>
+        <section id="study-controls" class="study-controls" aria-label="Variation controls" hidden><div class="study-context"><strong id="study-title"></strong><button id="return-game" type="button">Return to game</button></div><p id="study-message" role="status"></p><div id="study-moves" class="study-moves"></div><button id="undo-variation" class="secondary-button" type="button">Undo move</button></section>
+        <div id="promotion-picker" class="promotion-picker" role="group" aria-label="Choose a promotion piece" hidden><span>Promote to</span><button type="button" data-promotion="q">Queen</button><button type="button" data-promotion="r">Rook</button><button type="button" data-promotion="b">Bishop</button><button type="button" data-promotion="n">Knight</button><button id="cancel-promotion" type="button">Cancel</button></div>
+        <div class="chart-panel"><div class="library-heading"><h3>Evaluation</h3><span>White’s advantage ↑</span></div><div id="eval-chart" class="eval-chart" aria-label="Evaluation history"><p>Review the game to see its turning points.</p></div></div>
+        <p class="keyboard-hint">← → Step through moves <span>·</span> Click the graph to jump</p>
+      </div>
+
+      <div class="insights-column">
+        <section class="review-setup" aria-label="Review controls">
+          <div class="review-action-row"><button id="analyze-button" class="primary-button" type="button" disabled>Review game</button><button id="cancel-button" class="cancel-button" type="button" hidden>Cancel review</button></div>
+          <details id="review-settings" class="review-settings">
+            <summary>Settings</summary>
+            <div class="settings-body">
+              <div class="review-options"><label for="engine">Engine</label><select id="engine"><option value="stockfish">Stockfish 18 · stronger</option><option value="lozza">Lozza 9 · lightweight</option></select></div>
+              <p id="engine-help" class="settings-note"></p>
+              <div class="review-options"><label for="depth">Review speed</label><select id="depth"><option value="50">Fast · 0.05s / position</option><option value="150">Quick · 0.15s / position</option><option value="500" selected>Standard · 0.5s / position</option><option value="1500">Deep · 1.5s / position</option><option value="3000">Thorough · 3s / position</option></select></div>
+              <div class="review-options"><label for="multipv">Engine lines</label><select id="multipv"><option value="1">Best move only</option><option value="2">Top 2 moves</option><option value="3" selected>Top 3 moves</option></select></div>
+              <div class="review-options"><label for="arrow-mode">Board arrows</label><select id="arrow-mode"><option value="best" selected>Best move · hover for others</option><option value="all">All engine moves</option></select></div>
+              <div class="display-options"><label><input id="smart-analysis" type="checkbox" checked> Recheck key mistakes</label><label><input id="auto-orient" type="checkbox" checked> Face my side</label></div>
+              <div class="display-options"><label><input id="show-arrows" type="checkbox" checked> Engine arrows</label><label><input id="show-badges" type="checkbox" checked> Move badges</label><label><input id="show-coordinates" type="checkbox" checked> Coordinates</label></div>
+              <div class="review-options"><label for="play-speed">Playback</label><select id="play-speed"><option value="700">Fast · 0.7s</option><option value="1200" selected>Normal · 1.2s</option><option value="2000">Slow · 2s</option></select></div>
+              <p id="time-estimate" class="settings-note"></p>
+            </div>
+          </details>
+          <p id="review-config" class="review-config">Stockfish 18 · Standard · 3 lines</p>
+          <div id="progress-area" hidden><progress id="progress" max="100" value="0"></progress><p id="progress-text" role="status">Starting local engine…</p></div>
+          <p id="review-status" class="review-status" role="status"></p><p id="save-status" class="review-status" role="status"></p>
+        </section>
+
+        <div id="opening-info" class="opening-info" hidden><strong id="opening-name"></strong><span id="opening-detail"></span></div>
+        <section class="analysis-box" aria-label="Selected move">
+          <div class="review-heading"><span id="review-engine" class="review-engine">Stockfish 18 · local</span><span id="insight-badge" class="move-badge insight-badge" hidden></span></div>
+          <h2 id="insight-title">Ready when you are</h2><p id="insight-text">Choose a completed game to begin.</p><div id="best-move" class="best-move" hidden></div><div class="insight-actions"><button id="retry-move" type="button" disabled>Try again</button><button id="show-why" type="button" disabled>Show why</button><button id="bookmark-position" type="button" aria-pressed="false" disabled>Bookmark</button></div>
+          <section id="retry-panel" class="retry-panel" hidden><p id="retry-feedback" role="status"></p><div class="retry-actions"><button id="retry-reset" type="button">Try another move</button><button id="retry-reveal" type="button">Reveal answer</button><button id="retry-next" type="button">Next mistake</button><button id="retry-exit" type="button">Back to review</button></div></section>
+        </section>
+
+        <div class="review-tabs" role="tablist" aria-label="Review view"><button id="moves-tab" type="button" role="tab" aria-selected="true" aria-controls="moves-panel">Moves</button><button id="summary-tab" type="button" role="tab" aria-selected="false" aria-controls="summary-panel" tabindex="-1" disabled>Summary</button><button id="practice-tab" type="button" role="tab" aria-selected="false" aria-controls="practice-panel" tabindex="-1">Practice</button></div>
+        <section id="moves-panel" role="tabpanel" aria-labelledby="moves-tab">
+          <div class="move-section"><div class="library-heading"><h3>Move list</h3><span id="move-count">0 moves</span></div><div id="key-moments" class="key-moments" hidden><span>Key moments</span><button id="previous-key" type="button" aria-label="Previous key moment">‹</button><button id="next-key" type="button" aria-label="Next key moment">›</button></div><div id="move-list" class="move-list"><p class="muted move-empty">Your game’s moves will appear here.</p></div></div>
+        </section>
+        <section id="summary-panel" role="tabpanel" aria-labelledby="summary-tab" hidden>
+          <div id="summary" class="summary" hidden></div>
+          <details class="legend"><summary>About the move ratings</summary><div id="classification-legend"></div><p>MeowlChess estimates. Deeper analysis can change a rating.</p></details>
+        </section>
+
+        <section id="practice-panel" role="tabpanel" aria-labelledby="practice-tab" hidden><div class="notebook-heading"><h3>Your notebook</h3><p>Revisit saved mistakes or open a bookmarked position.</p></div><div id="practice-items"></div><div id="bookmark-items"></div></section>
+        <section class="engine-panel" aria-label="Top engine moves">
+          <div class="library-heading"><h3>Top engine moves</h3></div><p id="engine-turn"></p>
+          <div id="engine-lines" class="engine-lines"></div><p id="engine-status" role="status"></p>
+          <p class="line-help">Hover to preview an arrow. Click a line to play it.</p><div class="position-actions"><button id="quick-position" type="button" class="secondary-button" disabled>Quick look</button><button id="deepen-button" type="button" class="secondary-button" disabled>Analyze deeper</button><button id="stop-position" type="button" class="secondary-button" hidden>Stop search</button></div>
+        </section>
+      </div>
+    </div>
+  </section>
+</section>
+<footer><span>MeowlChess v1.2.0</span><span>Independent of Chess.com and Lichess. Completed games only.</span></footer>
+</main>
+<script type="module" src="review.js"></script>
+</body>
+</html>

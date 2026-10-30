@@ -2,135 +2,124 @@
 
 <img src="extension/icons/logo.png" alt="MeowlChess cat and owl mascot on a chessboard" width="180">
 
-A free Brave, Chrome, and Edge extension for reviewing completed Chess.com games. MeowlChess opens a separate review tab and runs Stockfish locally on your computer. No subscription, paid analysis API, or Chess.com login is required.
+Free local reviews of completed chess games, in Brave, Chrome, and Edge. Load games from **Chess.com or Lichess**, or import a finished game's PGN from another website. Stockfish and Lozza run on your device; no subscription, paid analysis service, or chess-site login is required.
 
-**Version 1.1.0.** A focused dark interface, green-and-cream board, original vector pieces and move badges, up to three engine lines with board arrows, estimated study scores, an interactive evaluation graph, and key-moment navigation. The cat/owl logo is MeowlChess's own branding.
+**Version 1.2.0.** Review games, retry mistakes without hints, explore legal variations, and follow concrete engine continuations. Completed reviews and bookmarked positions stay in your local library. A bundled opening reference, selective deeper searches, and a quieter board help you focus on the game. MeowlChess uses its own cat/owl logo and is independent of Chess.com and Lichess.
 
-**Independent project. Not affiliated with, endorsed by, or approved by Chess.com.** This is a locally installable extension, not a Chrome Web Store or Edge Add-ons release.
+## Install or update
 
-## Install
+1. Extract the project ZIP and keep the folder on your computer.
+2. Open `brave://extensions`, `chrome://extensions`, or `edge://extensions`.
+3. Enable **Developer mode**, choose **Load unpacked**, and select the project's `extension/` folder. It contains `manifest.json`.
+4. Pin MeowlChess, then click its toolbar icon to open the review page.
 
-1. Extract the packaged extension ZIP into a folder. Keep that folder on your computer.
-2. Open `brave://extensions` in Brave, `chrome://extensions` in Chrome, or `edge://extensions` in Edge.
-3. Turn on **Developer mode**, choose **Load unpacked**, and select the `extension/` folder inside the extracted download (it contains `manifest.json`).
-4. Pin MeowlChess from your browser's extensions menu if you want easy access.
+For this working copy, load `C:\Users\thuyv\Downloads\meowlchess\extension`. After updates, click **Reload** on its extension card and reopen the review tab. Make sure the installed extension points to the same folder you edited. This is an unpacked extension, not a Chrome Web Store or Edge Add-ons listing.
 
-The download is ready to load; no build step is needed. If you edit a local copy, load the `extension/` folder from that same copy, then click **Reload** on its browser extension card and reopen the review tab. Loading a different extracted copy will not show your edits. To change the source, use the commands below.
+## Choose a game
 
-## Review a finished game
+- **Chess.com:** select Chess.com and enter a username. MeowlChess reads its public completed-game archives. Very recent games may take time to appear because of API caching.
+- **Lichess:** select Lichess and enter a username or a finished game's URL. The latest 20 completed standard games are requested; unfinished games and variants are excluded.
+- **Other websites:** open **Import a PGN**, then choose a `.pgn` file or paste one game's PGN. Export it from the original site's game page first. The file is read locally. Finished games with a custom standard-chess starting position are supported.
+- **Sample:** use the four-move demo to try the controls without a network request.
+- **Saved reviews:** reopen a previously analyzed game without fetching or analyzing it again. Search by player or recognized opening.
 
-1. Finish your game on Chess.com, then click the MeowlChess toolbar icon.
-2. Enter your Chess.com username and fetch your recent games.
-3. Choose a completed game, select a review speed and the number of engine lines, then click **Review game**.
-4. Step through the board and move list to inspect evaluations and suggested alternatives. Use the left/right arrow keys, click the evaluation graph, jump between key moments, or press **Play** to step through automatically. You can flip the board or cancel an analysis in progress.
+Only standard chess and completed games are supported. A PGN must have a final `1-0`, `0-1`, or `1/2-1/2` result. Multi-game files should be split into individual games. Importing a PGN does not independently verify its result against its original website; import only finished games. The extension does not read live boards or make moves.
 
-Use the demo to try the review without fetching a username's games. Only standard chess is supported. The extension does not accept arbitrary FEN positions or pasted PGNs, read Chess.com pages, or automatically detect the end of a game.
+## Review engines and speeds
 
-Newly completed games may take time to appear. Chess.com's API documentation describes cache refresh windows of up to 12 or 24 hours, depending on the endpoint and guidance; this extension cannot force a fresh archive. Try again later if your latest game is missing.
-
-### Review options
-
-| Review speed | Engine time per position |
-| --- | --- |
-| Quick | 0.15 seconds |
-| Standard | 0.5 seconds |
-| Deep | 1.5 seconds |
-| Thorough | 3 seconds |
-
-Longer searches take more time and CPU. The total review time also depends on the game's length and your computer. In **Review settings**, choose the best move only, the top two moves, or the top three moves. More lines divide the search time among alternatives and can reduce the depth reached for each line.
-
-**Top engine moves** and the arrows always describe the **currently displayed position and the side to move**. They are continuations from that board, not alternatives to the move that was just played. The best line is green, the second blue, and the third orange. Click a line to focus its arrow. At a terminal position such as checkmate, no engine continuation is shown.
-
-Use **Analyze this position** to search the displayed position for at least 1.5 seconds, or for the selected review time if it is longer. This works only on positions from the selected completed game. It updates that position's engine lines and displayed evaluation; it does not recalculate the whole game's move labels, study scores, or evaluation graph. Click **Review again** to recalculate the complete review with your current settings.
-
-You can hide engine arrows, move badges, or board coordinates in **Review settings**. Playback offers Fast (0.7 seconds per move), Normal (1.2 seconds), and Slow (2 seconds). Review speed, engine-line count, display choices, and playback speed are remembered locally in your browser.
-
-## What the review means
-
-Stockfish 18's lite, single-threaded build evaluates positions inside a browser worker. Its code and WebAssembly are bundled with the extension; the installed extension does not download executable code from a CDN. Game retrieval needs an internet connection; the analysis itself runs locally.
-
-Evaluations, move classifications, and any summary scores are estimates based on limited engine searches. They are not Chess.com's proprietary accuracy scores or classifications. Short searches and the lite engine can miss tactics, change their assessment with more thinking time, or recommend a move that is difficult for a human to understand. Deeper analysis takes longer and uses more CPU and battery. This is an engine review, not an automated human coach.
-
-The piece silhouettes and annotation symbols are original, reference-inspired SVG artwork. Chess.com's proprietary piece and icon image files are not bundled.
-
-### Move labels
-
-| Badge | Label | MeowlChess meaning |
+| Engine | Use it for | Engine lines |
 | --- | --- | --- |
-| Teal `!!` | Brilliant | The engine's preferred piece sacrifice, with compensation and a material investment that remains at the end of its continuation. |
-| Blue `!` | Great | The engine's preferred response preserving a substantial opportunity created by the opponent's previous move. |
-| Green star | Best | The engine's preferred move. |
-| Green thumbs-up | Excellent | Almost no estimated loss compared with the previous position. |
-| Green check | Good | Little estimated loss compared with the previous position. |
-| Yellow `?!` | Inaccuracy | A small reduction in estimated chances. |
-| Orange `?` | Mistake | A significant reduction in estimated chances. |
-| Red `??` | Blunder | A large reduction in estimated chances. |
+| Stockfish 18 lite | Stronger analysis and comparisons between alternatives | Up to 3 |
+| Lozza 9 | A smaller JavaScript engine with no WebAssembly startup | Best move only |
 
-Brilliant and Great require engine depth of at least 12 in the relevant positions. Brilliant checks a legal continuation of at least four plies, an accepted non-pawn sacrifice, at least two pawn-equivalents of lasting material investment, near-equal or better prospects, and no meaningful loss. It rejects ordinary exchanges and already decisive winning positions. Great requires an opportunity of at least 12 expected-score percentage points, at most one point lost, a nonlosing position, and a legal alternative; automatic same-square recaptures are excluded. These intentionally narrow heuristics can miss good sacrifices or critical moves. They do not reproduce Chess.com's classification algorithm or claim a move was the only good choice.
+Both engines are bundled and work offline after a game is loaded. Switching engines does not download a model. Lozza is a different, weaker engine; it is not a faster version of Stockfish. Actual startup and search time depend on your computer.
 
-The study score averages `100 × exp(-5 × expected-score loss)` across a player's moves, with engine-preferred moves scoring 100. It is a local study aid, not a Chess.com accuracy score. The evaluation graph is from White's perspective and compresses large advantages for readability.
+**Recheck key mistakes is enabled by default.** The first pass uses the selected time, capped at 0.15 seconds per position. The engine then revisits the most important estimated losses or mate changes, searching both sides of each selected move before assigning its final label. Rechecks use the selected time with a minimum of 0.5 seconds and a maximum of 3 seconds per position. The pass is bounded to at most eight moves, and fewer in short games; shared positions are searched once. Progress separates the first pass from these rechecks. You can cancel either stage.
 
-## Fair play and Chess.com terms
+Turn **Recheck key mistakes** off to spend the full selected time on every nonterminal position:
 
-Use MeowlChess only for studying finished games. Engine assistance for a game still in progress is prohibited, including analysis of earlier positions from that game. This also applies to ongoing Daily games, not just live games.
+| Speed | Time per position with rechecks off | First-pass time with rechecks on |
+| --- | --- | --- |
+| Fast | 0.05 seconds | 0.05 seconds |
+| Quick | 0.15 seconds | 0.15 seconds |
+| Standard | 0.5 seconds | 0.15 seconds |
+| Deep | 1.5 seconds | 0.15 seconds |
+| Thorough | 3 seconds | 0.15 seconds |
 
-MeowlChess retrieves finished games through Chess.com's documented public monthly archives. It does not inject content scripts, access live boards, submit moves, scrape website pages, call undocumented endpoints, or unlock paid Chess.com review features. Its interface and engine are independent of Chess.com's products.
+Fast selects one line automatically. For 100 nonterminal positions, its first pass has about five seconds of engine time, plus startup and processing; enabled rechecks add time. Selective rechecks cannot catch every mistake, and short searches can miss tactics. More lines divide the available search time among alternatives and can reduce depth.
 
-Relevant official sources, checked October 2026:
+Open **Settings** to choose the engine, speed, and display options. Click **Review game**, then navigate with the move list, arrow keys, evaluation graph, key-moment buttons, or **Play**. **Summary** shows both players' study scores and move counts. **Quick look** searches the displayed position for 0.15 seconds; **Analyze deeper** spends at least 1.5 seconds on it. Position searches update the displayed evaluation and engine lines. Use **Review again** to recalculate the full game's labels and scores.
 
-- [Fair Play Policy](https://www.chess.com/legal/fair-play): prohibits engine or extension assistance during play and automated analysis of games in progress.
-- [PubAPI and third-party extension guidance](https://support.chess.com/en/articles/9650547-what-is-the-pubapi-and-how-do-i-use-it): explains permitted public API access, original branding/design, independence from Chess.com, and fair-play requirements. It also distinguishes standalone API clients from extensions operating on Chess.com pages.
-- [Published-Data API documentation](https://www.chess.com/news/view/published-data-api): documents completed-game archives, caching, and request limits.
-- [User Agreement](https://www.chess.com/legal/user-agreement): contains broader restrictions on unauthorized automation, modifications, and competing products or uses of service content.
+## Study a move
 
-The design follows the published guidance, but these documents do not amount to approval of this specific extension. Policies may change, and MeowlChess cannot guarantee Chess.com's interpretation or account decisions. Ask Chess.com for clarification before a public or commercial release if the intended use is uncertain.
+- **Try again:** return to the position before a reviewed move and play your own attempt. Engine lines, arrows, move ratings, and the evaluation are hidden while you solve. The engine checks your move; a sound alternative can count even when it differs from its first choice. You can retry, reveal the suggested continuation, move to the next mistake, or return to the review. Inconclusive searches are reported as uncertain.
+- **Explore a variation:** click an engine line, click a piece and its destination, or drag a piece. Only legal moves are accepted, and promotions offer queen, rook, bishop, and knight choices. Step through the line, go back, and try another continuation. **Return to game** restores the original review position; variations do not change the completed game's moves.
+- **Show why:** follow a legal continuation associated with the displayed move. MeowlChess checks for concrete evidence such as checkmate, a verified fork, or a lasting material loss. If it cannot verify a simple consequence, it shows the continuation without inventing a tactical explanation. These are observations from a limited engine search, not a human coach's assessment.
 
-## Permissions and privacy
+The board shows the best engine arrow by default. Hover over or keyboard-focus another engine line to preview its arrow, or select **All engine moves** in Settings. Green is the best move, blue the second, and orange the third. Knight arrows turn at a right angle. Arrows always describe the **displayed position and side to move**; terminal positions have no continuation.
 
-- `storage`: remembers your username, review speed, engine-line count, display options, and playback speed locally.
-- `https://api.chess.com/*`: fetches public game archive data directly from Chess.com.
+**Face my side** uses the entered or remembered website username to put your pieces at the bottom when it recognizes your side. You can turn it off or flip the board manually. Retry mode faces the player whose move is being retried. Display choices and playback speed are remembered locally. Motion respects the browser's reduced-motion preference, and the game library folds away on phones after you choose a game.
 
-There are no content scripts, account credentials, analytics, advertising, or developer-operated analysis servers. See [PRIVACY.md](PRIVACY.md) for details.
+## Saved reviews and practice
 
-## Build and test from source
+Successful full reviews are saved automatically in the extension's local IndexedDB library. A saved record contains the game's PGN, player/source information, evaluations and lines, move ratings, scores, opening information, and the engine settings used. It survives closing the tab. Re-reviewing the same game replaces its analysis while keeping its bookmarks. Older analysis is marked so you can choose to review it again.
 
-Use a current Node.js LTS release with npm:
+Use **Bookmark** to save the displayed position. The **Practice** view collects mistakes to retry and bookmarked positions from saved games. Opening a saved mistake starts a fresh attempt with hints hidden. Individual practice attempts, temporary variations, and extra position searches are not saved as part of the full review.
+
+The library holds at most **100 reviews**, **40 MiB** of serialized review data in total, and **4 MiB** per review. MeowlChess never removes old or bookmarked games automatically to make room. If a limit or browser storage error prevents saving, the current review stays open and an error explains what happened. Delete a saved review with its **×** button to remove that game's stored PGN, analysis, and bookmarks. Deletion does not close the current in-memory game; reviewing it again saves another copy. Uninstalling the extension removes its local extension data. Libraries are separate for each browser profile and are not synced between browsers or devices.
+
+## Openings and move ratings
+
+Opening recognition runs locally using **3,865 lines** from the pinned [Lichess opening-name dataset](https://github.com/lichess-org/chess-openings/tree/712a58be746c143f4ab935b68acc50f4bac813eb), released under CC0. It matches the actual move sequence from the standard starting position and reports the deepest named opening and the first departure from a recorded line. Custom starting positions are not matched. The reference is finite: unrecognized continuations and different move orders are not necessarily mistakes.
+
+The dataset also names traps and unsound lines. A move receives **Book** only if it matches a recorded line and the engine otherwise rates it Best, Excellent, or Good. Tactical errors, Brilliant/Great classifications, and checkmate keep their own labels. Recognizing an opening name does not establish that every move in it is sound.
+
+Evaluations, labels, and study scores are MeowlChess estimates. They do not reproduce Chess.com's proprietary accuracy or classification algorithms. Results can change with another engine or longer search.
+
+| Label | MeowlChess meaning |
+| --- | --- |
+| Brilliant | The preferred piece sacrifice, with compensation and lasting material investment in the engine continuation. |
+| Great | The preferred response preserving a substantial opportunity after an opponent's error. |
+| Best | The engine's preferred move. |
+| Excellent | Almost no estimated loss. |
+| Good | Little estimated loss. |
+| Book | A recorded opening move without a detected error at the chosen search time. |
+| Inaccuracy | A small reduction in estimated chances. |
+| Mistake | A significant reduction in estimated chances. |
+| Blunder | A large reduction in estimated chances. |
+
+Brilliant and Great require depth 12 or greater in relevant positions. Brilliant also requires at least four legal continuation plies, an accepted non-pawn sacrifice with two pawn-equivalents of lasting investment, near-equal or better prospects, and no meaningful loss. Ordinary exchanges and already decisive wins are excluded. Great requires an opportunity of at least 12 expected-score percentage points, at most one point lost, a nonlosing position, and a legal alternative; automatic same-square recaptures are excluded. These conservative heuristics can miss good moves. Miss artwork is included, but there is no separate missed-win classification.
+
+Study scores average `100 × exp(-5 × expected-score loss)` across a player's **non-Book moves**, with engine-preferred moves scoring 100. Book moves still count in the move totals but are excluded from this average. A player with no scored moves shows **—**. The graph and displayed evaluations use White's perspective; move counts are separated by player.
+
+## Privacy and fair play
+
+Use MeowlChess only after a game is finished, including correspondence and Daily games. The extension uses public completed-game exports; it has no content scripts, live-board access, account credentials, analytics, advertising, or remote analysis server.
+
+Preferences use `chrome.storage.local`; saved PGNs, reviews, and bookmarks use the extension's local IndexedDB. Host access is limited to Chess.com's API and Lichess's game-export endpoints. Nothing from the saved library is uploaded by MeowlChess. See [PRIVACY.md](PRIVACY.md) for retention and deletion details.
+
+Official API documentation: [Chess.com Published-Data API](https://www.chess.com/news/view/published-data-api), [Lichess user games](https://lichess.org/api#tag/Games/operation/apiGamesUser), [Lichess game export](https://lichess.org/api#tag/Games/operation/gamePgn). Follow the original site's fair-play rules, including [Chess.com Fair Play](https://www.chess.com/legal/fair-play) and [Lichess fair play](https://lichess.org/page/fair-play).
+
+## Development and packaging
 
 ```sh
 npm ci --ignore-scripts
 npm run build
 npm test
 npm run test:browser
+npm run test:extension
+npm run test:features
 npm run package
 ```
 
-The build copies the pinned chess library and Stockfish assets into `extension/`. Load that directory as an unpacked extension. The package command creates `dist/meowlchess.zip` with the ready-to-load `extension/` folder, project source, tests, and corresponding engine source materials. Extract it and select its `extension/` folder with **Load unpacked**.
+The build refreshes the pinned chess.js and Stockfish assets. Lozza, artwork, and the generated opening data are checked in. To regenerate opening data from its bundled, pinned TSV sources, run `node scripts/build-openings.mjs`. Packaging creates `dist/meowlchess.zip`, containing the ready-to-load extension, project source, tests, notices, opening sources, and Stockfish's corresponding source and evaluation network. It excludes dependencies, generated test results, and Git data.
 
-Browser checks use Playwright. Install its Chromium with `npx playwright-core install chromium`, then run `npm run test:browser`. An optional `CHROMIUM_PATH` selects a compatible Chromium executable. Tests exercise the implementation; they do not certify Chess.com approval, Chrome Web Store review, or compatibility with every browser version.
+Browser checks use Playwright. Set `CHROMIUM_PATH` to a compatible Brave/Chromium executable, or install Playwright's Chromium with `npx playwright-core install chromium`. `test:features` exercises the study and saved-library flows in a disposable extension profile. `BROWSER_OFFLINE_ASSETS=1` makes the page tests serve local assets directly. Extension tests do not change your usual browser installation. `LIVE_API_USERNAME` optionally enables a real Chess.com lookup. `LIVE_LICHESS_USERNAME` checks a live Lichess archive and game URL; pair it with `HEADED_EXT_TEST=1` to use a normal minimized browser, since Lichess rejects headless browser user-agents. Chrome compatibility has not been checked directly.
 
-Validation: 42 unit tests cover completed-game filtering, API URL validation, UCI engine behavior, coherent MultiPV candidate results, arrow geometry, scoring, conservative Brilliant/Great labels, terminal positions, and cancellation. Brave and Edge browser checks exercised bundled WASM, SVG pieces and move icons, graph navigation, MultiPV line selection, arrows and flipping, display toggles, position searches and cancellation, playback, responsive layout, and sample archive responses. The actual Brave extension also verified that review settings persist after reload. An isolated Brave profile loaded the real unpacked extension, completed a demo review, retrieved 20 completed games from Chess.com's live API, opened the first game, and saved the username preference locally. The user also confirmed successful installation in their usual Brave profile. Chrome has not been tested directly. Tests used Node 24 and the environment's available Playwright 1.62.1; the project lockfile retains Playwright 1.56.1.
+Source repository: [ThuyTran735/MeowlChess](https://github.com/ThuyTran735/MeowlChess).
 
-To test the actual extension in a disposable profile, run `npm run test:extension`. Set `CHROMIUM_PATH` to Brave or a Chromium build that supports unpacked-extension flags. Set `LIVE_API_USERNAME` to a public Chess.com username to include real archive retrieval; this optional check needs network access. The test does not install anything into your usual browser profile. For environments blocking loopback connections, `BROWSER_OFFLINE_ASSETS=1 npm run test:browser` fulfills local test-page assets directly while preserving the extension's content security policy.
+## Licenses and artwork
 
-After rebuilding, click **Reload** on the extension's card in the browser's extensions page and reopen the review tab.
+MeowlChess code is GPL-3.0-or-later. Stockfish is GPL-licensed; chess.js is BSD-2-Clause; Lozza has its own permissive license; the Lichess opening dataset is CC0. Keep the included notices and engine source materials with redistributions.
 
-## Upload to GitHub without a terminal
-
-Installing the extension and uploading its source are separate steps. GitHub stores the project; it does not install the extension in your browser. The download already includes everything needed for installation.
-
-1. Extract `meowlchess.zip` on your computer. Open the extracted project folder: it contains `README.md`, `package.json`, and the `extension/` folder.
-2. Sign in at [github.com/new](https://github.com/new). Name your repository `meowlchess`. Choose **Private** to keep it to yourself, or **Public** if you want to share it.
-3. Leave the options to add a README, `.gitignore`, or license unchecked; the project already includes them. Click **Create repository**.
-4. On the empty repository page, click **uploading an existing file**. For an existing repository, use **Add file → Upload files**.
-5. Drag the **contents of the extracted project folder** into the upload area, including `extension/`, `scripts/`, `tests/`, `third-party-source/`, and the root files. Upload the extracted files, not just the ZIP. `README.md` and `package.json` should be at the repository's top level.
-6. Enter a commit message such as `Add MeowlChess extension` and click **Commit changes**.
-
-Keep `LICENSE`, both third-party notices, and `third-party-source/` with the project. The provided files are all below GitHub's 25 MB per-file browser-upload limit. Do not upload `node_modules/`, `dist/`, or `test-results/` if you have built or tested the project locally; those generated folders are already excluded from the download and ignored by Git.
-
-The `.gitignore` file may be hidden by your file manager. On macOS, press Command–Shift–period to show hidden files. If it was omitted from your upload, use **Add file → Create new file**, name it `.gitignore`, and copy the provided file's contents.
-
-To offer an easy download, open your repository's **Releases**, choose **Create a new release**, use tag `v1.1.0`, and attach the complete `meowlchess.zip` file. The ZIP includes both the ready-to-load extension and its corresponding source materials. This does not publish it to the Chrome Web Store or Edge Add-ons.
-
-## License
-
-MeowlChess is provided under GPL-3.0-or-later. Stockfish is GPL-licensed, and chess.js uses the BSD 2-Clause license. Keep the bundled license notices and corresponding source materials with redistributions; see the included license and third-party notices for details.
+The Neo piece images and move-icon outlines are sourced from Chess.com to match the supplied visual references. They are not original MeowlChess artwork and are not covered by MeowlChess's code license. Their inclusion does not imply affiliation or a license grant from Chess.com. The cat/owl project logo is separate MeowlChess branding. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for sources and license details.
