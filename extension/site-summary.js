@@ -3,6 +3,7 @@ import { createEngine, ENGINE_OPTIONS } from './lib/engine.js';
 import { reviewIdForGame } from './lib/library.js';
 import { parseCompletedPgn, safeOriginalGameUrl } from './lib/pgn.js';
 import { isCompletedGame } from './lib/archive.js';
+import { installFrameDrag } from './site-frame-drag.js';
 
 const $ = id => document.getElementById(id);
 const ORIGINS = { chesscom: ['https://www.chess.com', 'https://chess.com'], lichess: ['https://lichess.org'] };
@@ -16,6 +17,13 @@ try { const origin = new URL(document.referrer).origin; if (Object.values(ORIGIN
 function sendParent(type, extra = {}) {
   if (parentOrigin && parent !== window && TOKEN.test(token)) parent.postMessage({ type, token, ...extra }, parentOrigin);
 }
+const panelDrag = installFrameDrag({ send: data => sendParent('meowl:site-frame-drag', data) });
+window.addEventListener('message', event => {
+  if (event.isTrusted && event.source === parent && event.origin === parentOrigin && event.data?.token === token && event.data.type === 'meowl:site-frame-drag-finished') {
+    panelDrag.endFromParent(event.data.pointerId);
+  }
+});
+window.addEventListener('unload', () => panelDrag.destroy());
 function reportSize() {
   cancelAnimationFrame(frame);
   frame = requestAnimationFrame(() => {
@@ -62,10 +70,15 @@ async function checkEnabled() {
 function validatePayload(value) {
   if (value?.status !== 'ready' || value.token !== token || !ORIGINS[value.source]) throw new Error(value?.status === 'expired' ? 'This panel has expired. Reload this page to try again.' : value?.message || 'This panel could not start. Reload this page to try again.');
   const game = value.game;
-  if (!game || game.source !== value.source || game.rules !== 'chess' || !Number.isFinite(game.end_time) || game.end_time <= 0 || game.end_time > Date.now() / 1000) throw new Error('A confirmed finished game is not available yet.');
-  const url = safeOriginalGameUrl(game.url);
-  if (!url || !ORIGINS[value.source].includes(new URL(url).origin)) throw new Error('This game is not from the selected site.');
-  if (value.source === 'chesscom' && !isCompletedGame(game)) throw new Error('Only confirmed finished games can be reviewed.');
+  const bot = value.kind === 'bot';
+  if (!game || game.rules !== 'chess' || !Number.isFinite(game.end_time) || game.end_time <= 0 || game.end_time > Date.now() / 1000) throw new Error('A finished game is not available yet.');
+  if (bot) {
+    if (value.source !== 'chesscom' || game.source !== 'pgn' || game.imported !== true || game.url !== null || !/^pgn:game-[a-f0-9]{64}$/.test(value.gameKey || '')) throw new Error('This bot game export is invalid.');
+  } else {
+    const url = safeOriginalGameUrl(game.url);
+    if (value.kind !== undefined || game.source !== value.source || !url || !ORIGINS[value.source].includes(new URL(url).origin)) throw new Error('This game is not from the selected site.');
+    if (value.source === 'chesscom' && !isCompletedGame(game)) throw new Error('Only confirmed finished games can be reviewed.');
+  }
   const parsed = parseCompletedPgn(game.pgn);
   if (!game.white?.username || !game.black?.username || typeof game.white.username !== 'string' || typeof game.black.username !== 'string') throw new Error('This game is missing its players.');
   const analysis = value.analysis;
@@ -74,7 +87,7 @@ function validatePayload(value) {
   return { ...value, parsed, analysis: { ...analysis, engineName: engine.label } };
 }
 function showGame(game, parsed) {
-  $('summary-source').textContent = source === 'chesscom' ? 'Chess.com' : 'Lichess';
+  $('summary-source').textContent = payload.kind === 'bot' ? 'Chess.com · bot game' : source === 'chesscom' ? 'Chess.com' : 'Lichess';
   $('summary-players').textContent = `${game.white.username} vs ${game.black.username}`;
   const result = parsed.result === '1/2-1/2' ? '½–½' : parsed.result.replace('-', '–');
   const date = new Date(game.end_time * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -165,9 +178,10 @@ async function start() {
     if (!ORIGINS[source].includes(parentOrigin)) throw new Error('This summary is not connected to the selected game site.');
     const settings = (await chrome.storage.local.get('siteReviewSettings')).siteReviewSettings?.[source];
     username = typeof settings?.username === 'string' ? settings.username.trim().toLowerCase() : '';
-    if (!username || ![payload.game.white.username, payload.game.black.username].some(name => name.toLowerCase() === username)) throw new Error('This completed game does not belong to the configured player.');
+    if (!username || (payload.kind !== 'bot' && ![payload.game.white.username, payload.game.black.username].some(name => name.toLowerCase() === username))) throw new Error('This completed game does not belong to the configured player.');
     await checkEnabled(); showGame(payload.game, payload.parsed); reportSize();
     const id = await reviewIdForGame(payload.game);
+    if (payload.kind === 'bot' && payload.gameKey !== `pgn:${id}`) throw new Error('This bot export does not match the selected game.');
     assertActive();
     if (navigator.locks?.request) {
       $('summary-progress-label').textContent = 'Preparing your summary…';

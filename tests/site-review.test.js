@@ -66,6 +66,8 @@ test('only trusted HTTPS origins are eligible and page URLs remove player secret
   assert.equal(providerForUrl('https://lichess.org/'), 'lichess');
   for (const url of ['http://lichess.org/abcdefgh', 'https://lichess.org.evil.test/', 'https://www.chess.com:444/', 'https://person@lichess.org/', 'javascript:alert(1)', null]) assert.equal(providerForUrl(url), null);
   assert.equal(gameUrlForPage('https://chess.com/analysis/game/live/123?move=20#review'), 'https://www.chess.com/game/live/123');
+  assert.equal(gameUrlForPage('https://www.chess.com/game/186247007610'), 'https://www.chess.com/game/live/186247007610');
+  assert.equal(gameUrlForPage('https://chess.com/analysis/game/186247007610/?move=20#review'), 'https://www.chess.com/game/live/186247007610');
   assert.equal(gameUrlForPage('https://www.chess.com/game/daily/456/'), 'https://www.chess.com/game/daily/456');
   assert.equal(gameUrlForPage('https://lichess.org/Abcdef12wXyZ/black?token=secret#18'), 'https://lichess.org/Abcdef12');
   for (const path of ['analysis', 'training', 'practice', 'features', 'settings', 'registration', 'abcdefgh/anything', 'abc', 'abcdefghijk', 'abcdefghijklm', 'study/abcdefgh']) assert.equal(gameUrlForPage(`https://lichess.org/${path}`), null);
@@ -101,6 +103,114 @@ test('current game must be in the finished archive; never fall back to an older 
   const { check } = setup();
   assert.equal((await check(content('https://www.chess.com/game/live/999'))).status, 'waiting');
   assert.equal((await check(content('https://www.chess.com/analysis/game/live/123?move=8'))).status, 'ready');
+});
+
+test('older game pages request the exact game independently of the recent-game cache', async () => {
+  const older = game('186131404952', { end_time: 1699999999 });
+  const calls = [];
+  const { check } = setup({ fetchGames: async (source, username, options) => {
+    calls.push({ source, username, options });
+    return options?.gameUrl === older.url ? [older] : [game()];
+  } });
+  assert.equal((await check()).gameUrl, game().url);
+  const first = await check(content('https://chess.com/game/186131404952?username=alice'));
+  assert.equal(first.gameUrl, older.url);
+  assert.deepEqual(calls, [
+    { source: 'chesscom', username: 'alice', options: undefined },
+    { source: 'chesscom', username: 'alice', options: { gameUrl: older.url } },
+  ]);
+  assert.equal((await check(content(`${older.url}?move=0`))).gameUrl, older.url);
+  assert.equal(calls.length, 2, 'Aliases and move navigation reuse the exact-game cache.');
+  assert.equal((await check(content(game().url, 7))).gameUrl, game().url);
+  assert.equal(calls.length, 3, 'Different game pages have separate exact lookups.');
+});
+
+test('parallel exact-game checks share one lookup and discard other returned games', async () => {
+  let resolve, calls = 0;
+  const { check } = setup({ fetchGames: (source, username, options) => {
+    assert.deepEqual(options, { gameUrl: game().url }); calls++;
+    return new Promise(done => { resolve = done; });
+  } });
+  const one = check(content(game().url)), two = check(content(game().url, 6));
+  await new Promise(done => setImmediate(done));
+  assert.equal(calls, 1);
+  resolve([game('999')]);
+  assert.deepEqual((await Promise.all([one, two])).map(reply => reply.status), ['waiting', 'waiting']);
+  assert.equal((await check(content(game().url))).status, 'waiting');
+  assert.equal(calls, 1);
+});
+
+test('exact Lichess lookup strips private player suffixes before fetching', async () => {
+  const url = 'https://lichess.org/Abcdef12';
+  const { check } = setup({ fetchGames: async (source, username, options) => {
+    assert.equal(source, 'lichess'); assert.equal(username, 'alice');
+    assert.deepEqual(options, { gameUrl: url });
+    return [game('123', { source, url })];
+  } });
+  assert.equal((await check(content(`${url}wXyZ/black?token=secret`))).gameUrl, url);
+});
+
+test('exact-game cache survives worker restart and rejects forged cache targets', async () => {
+  let saved;
+  const session = { readSession: async () => structuredClone(saved), writeSession: async value => { saved = structuredClone(value); } };
+  const first = setup(session);
+  const ready = await first.check(content(game().url));
+  const snapshot = structuredClone(saved);
+  assert.equal(snapshot.cache[0].key, `chesscom:alice:${encodeURIComponent(game().url)}`);
+  const second = setup(session);
+  assert.equal((await second.check(content(game().url))).token, ready.token);
+  assert.equal(second.state.calls.length, 0);
+  for (const key of ['chesscom:alice:%ZZ', 'chesscom:alice:', `chesscom:alice:${encodeURIComponent('https://evil.test/game/live/123')}`, `chesscom:alice:${encodeURIComponent('https://lichess.org/Abcdef12')}`, `chesscom:alice:${encodeURIComponent(game().url + '?move=0')}`]) {
+    const altered = structuredClone(snapshot); altered.jobs = []; altered.cache[0].key = key;
+    const restarted = setup({ readSession: async () => altered });
+    assert.equal((await restarted.check(content(game().url))).status, 'ready');
+    assert.equal(restarted.state.calls.length, 1, 'Invalid cache entries require a fresh exact lookup.');
+  }
+});
+
+test('short Chess.com game links wait for their exact game instead of reopening a previous opponent', async () => {
+  const currentUrl = 'https://www.chess.com/game/186247007610';
+  const old = game('186247000000', { black: { username: 'jpbiloba', result: 'resigned' }, pgn: completedPgn.replace('Bob', 'jpbiloba'), end_time: 1700000002 });
+  const current = game('186247007610', { black: { username: 'mokoka97', result: 'resigned' }, pgn: completedPgn.replace('Bob', 'mokoka97'), end_time: 1700000001 });
+  let games = [old];
+  const { broker, check, advance } = setup({ fetchGames: async () => games });
+  const previous = await check();
+  assert.equal(previous.gameUrl, old.url);
+  const waiting = await check(content(currentUrl));
+  assert.equal(waiting.status, 'waiting');
+  assert.match(waiting.message, /this completed game/);
+  assert.equal((await broker.handle({ type: 'meowl:site-payload', token: previous.token }, frame(currentUrl))).status, 'expired');
+  games = [old, current]; advance(60001);
+  const ready = await check(content(`${currentUrl}?move=0`));
+  assert.equal(ready.status, 'ready');
+  assert.equal(ready.gameUrl, current.url);
+  const payload = await broker.handle({ type: 'meowl:site-payload', token: ready.token }, frame(currentUrl));
+  assert.equal(payload.game.black.username, 'mokoka97');
+  assert.equal((await check(content('https://www.chess.com/analysis/game/186247007610'))).token, ready.token);
+});
+
+test('unrecognized Chess.com game paths never retrieve the latest unrelated game', async () => {
+  const { check, state } = setup();
+  for (const path of ['/game', '/game/', '/game/unknown', '/game/live', '/game/live/123/extra', '/game/123/extra', '/analysis/game', '/analysis/game/', '/analysis/game/rapid/123', '/analysis/game/computer']) {
+    const reply = await check(content(`https://www.chess.com${path}`));
+    assert.equal(reply.status, 'waiting', path);
+    assert.match(reply.message, /game link could not be recognized/);
+  }
+  assert.equal(state.calls.length, 0);
+});
+
+test('SPA navigation from an old document to a short game link uses the current exact game', async () => {
+  const oldUrl = 'https://www.chess.com/game/live/123', shortUrl = 'https://www.chess.com/game/186247007610';
+  const current = game('186247007610');
+  const { broker, check } = setup({ fetchGames: async () => [game('123', { end_time: 1700000002 }), current] });
+  const ready = await check({ ...content(oldUrl), tab: { id: 5, url: `${shortUrl}?move=4` } });
+  assert.equal(ready.status, 'ready');
+  assert.equal(ready.gameUrl, current.url);
+  broker.pageChanged(5, 'https://www.chess.com/analysis/game/186247007610#8');
+  assert.equal((await broker.handle({ type: 'meowl:site-payload', token: ready.token }, frame(shortUrl))).status, 'ready');
+  broker.pageChanged(5, 'https://www.chess.com/game/186247007611');
+  assert.equal((await broker.handle({ type: 'meowl:site-payload', token: ready.token }, frame(shortUrl))).status, 'expired');
+  assert.equal((await check({ ...content(oldUrl), tab: { id: 5, url: 'https://www.chess.com/game/186247007611' } })).status, 'waiting');
 });
 
 test('SPA navigation uses the browser current tab URL when the sender document URL is stale', async () => {
@@ -300,6 +410,19 @@ test('restored jobs reject revoked permissions, expired handles, altered pages, 
   const changedAccount = setup({ readSession: async () => structuredClone(original) });
   changedAccount.state.settings.siteReviewSettings.chesscom.username = 'Someone';
   assert.equal((await changedAccount.broker.handle(request, frame())).status, 'expired');
+});
+
+test('restarting cannot restore an unrelated archived game onto an unrecognized or mismatched game route', async () => {
+  let saved;
+  const first = setup({ writeSession: async value => { saved = structuredClone(value); } });
+  const { token } = await first.check();
+  const original = structuredClone(saved);
+  for (const pageUrl of ['https://www.chess.com/game/unknown', 'https://www.chess.com/analysis/game/future/123', 'https://www.chess.com/game/live/186247007610', 'https://www.chess.com/game/186247007610']) {
+    const snapshot = structuredClone(original);
+    snapshot.jobs[0].pageKey = pageUrl;
+    const restarted = setup({ readSession: async () => snapshot });
+    assert.equal((await restarted.broker.handle({ type: 'meowl:site-payload', token }, frame(pageUrl))).status, 'expired', pageUrl);
+  }
 });
 
 test('session snapshots stay bounded and never retain private Lichess player keys', async () => {

@@ -1,8 +1,11 @@
 :root { color-scheme: dark; --panel: #2e2d29; --text: #efeee8; --muted: #aaa99e; --line: #ffffff17; --green: #81b64c; }
 * { box-sizing: border-box; }
-html { background: var(--panel); overflow-x: hidden; }
-body { margin: 0; color: var(--text); background: var(--panel); font: 13px/1.45 'Segoe UI', Arial, sans-serif; overflow-x: hidden; overscroll-behavior: contain; }
-main { padding: 16px; }
+html { background: var(--panel); overflow-x: hidden; overscroll-behavior: contain; }
+body { margin: 0; color: var(--text); background: var(--panel); font: 13px/1.45 'Segoe UI', Arial, sans-serif; }
+main { padding: 16px; cursor: grab; user-select: none; touch-action: pan-y; }
+html[data-panel-dragging] main { cursor: grabbing; }
+input, textarea, [contenteditable] { cursor: text; user-select: text; }
+a, button, summary, select { touch-action: manipulation; }
 h1, p { margin: 0; }
 button { font: inherit; cursor: pointer; color: inherit; border: 0; }
 button:disabled { opacity: .45; cursor: default; }

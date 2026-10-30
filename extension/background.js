@@ -5,6 +5,7 @@ import { createSiteReviewBroker, createSiteReviewLibraryBridge, normalizeSiteSet
 
 const SETTINGS_KEY = 'siteReviewSettings';
 const SCRIPT_PREFIX = 'meowl-site-';
+const SITE_SCRIPTS = ['site-panel.js', 'site-bot.js', SITE_CONTENT_SCRIPT];
 const permissionFor = source => ({ permissions: ['scripting'], origins: SITE_PROVIDERS[source].origins });
 const hasPermission = source => chrome.permissions.contains(permissionFor(source));
 const libraryBridge = createSiteReviewLibraryBridge({ library: createReviewLibrary({ analysisVersion: ANALYSIS_VERSION }), idForGame: reviewIdForGame });
@@ -50,16 +51,19 @@ async function reconcile({ inject = false } = {}) {
   if (obsolete.length) await chrome.scripting.unregisterContentScripts({ ids: obsolete });
   for (const source of enabled) {
     const id = SCRIPT_PREFIX + source;
-    if (!registered.some(script => script.id === id)) {
+    const existing = registered.find(script => script.id === id);
+    if (!existing) {
       await chrome.scripting.registerContentScripts([{
-        id, matches: SITE_PROVIDERS[source].origins, js: [SITE_CONTENT_SCRIPT],
+        id, matches: SITE_PROVIDERS[source].origins, js: SITE_SCRIPTS,
         runAt: 'document_idle', allFrames: false, persistAcrossSessions: true,
       }]);
+    } else if (JSON.stringify(existing.js) !== JSON.stringify(SITE_SCRIPTS)) {
+      await chrome.scripting.updateContentScripts([{ id, js: SITE_SCRIPTS }]);
     }
     if (!inject) continue;
     const tabs = await chrome.tabs.query({ url: SITE_PROVIDERS[source].origins });
     await Promise.allSettled(tabs.filter(tab => Number.isInteger(tab.id)).map(tab => chrome.scripting.executeScript({
-      target: { tabId: tab.id, allFrames: false }, files: [SITE_CONTENT_SCRIPT],
+      target: { tabId: tab.id, allFrames: false }, files: SITE_SCRIPTS,
     })));
   }
 }
@@ -92,7 +96,7 @@ chrome.tabs.onUpdated.addListener((tabId, changes) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!['meowl:site-check', 'meowl:site-payload', 'meowl:site-load-review', 'meowl:site-save-review', 'meowl:site-release', 'meowl:site-open-review', 'meowl:site-open-settings', 'meowl:site-settings-changed'].includes(message?.type)) return false;
+  if (!['meowl:site-check', 'meowl:site-bot-import', 'meowl:site-payload', 'meowl:site-load-review', 'meowl:site-save-review', 'meowl:site-release', 'meowl:site-open-review', 'meowl:site-open-settings', 'meowl:site-settings-changed'].includes(message?.type)) return false;
   const response = message.type === 'meowl:site-settings-changed'
     ? broker.isSettingsSender(sender) ? scheduleReconcile({ inject: true }).then(() => ({ status: 'ready' })) : Promise.resolve({ status: 'disabled' })
     : broker.handle(message, sender);

@@ -8,8 +8,9 @@ export function safeOriginalGameUrl(value) {
   try {
     const url = new URL(value);
     if (url.protocol !== 'https:' || url.port || url.username || url.password || url.search) return null;
-    if (['www.chess.com', 'chess.com'].includes(url.hostname) && !url.hash && /^\/game\/(?:live|daily)\/\d+\/?$/.test(url.pathname)) {
-      return `https://www.chess.com${url.pathname.replace(/\/$/, '')}`;
+    const chess = url.pathname.match(/^\/(?:analysis\/)?game\/(?:(live|daily)\/)?(\d+)\/?$/);
+    if (['www.chess.com', 'chess.com'].includes(url.hostname) && !url.hash && chess) {
+      return `https://www.chess.com/game/${chess[1] || 'live'}/${chess[2]}`;
     }
     const lichess = url.pathname.match(/^\/([a-zA-Z0-9]{8})(?:\/(?:white|black))?\/?$/);
     if (url.hostname === 'lichess.org' && lichess && (!url.hash || /^#\d+$/.test(url.hash))) return `https://lichess.org/${lichess[1]}`;

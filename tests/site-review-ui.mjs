@@ -24,6 +24,7 @@ const chessGame = (url, event, white = 'sitecat', black = 'siteowl', complete = 
 const lichessGame = (id, complete = true, white = 'sitecat', black = 'siteowl') => ({ id, variant: 'standard', status: complete ? 'mate' : 'started', lastMoveAt: stamp * 1000, speed: 'rapid', players: { white: { user: { name: white }, rating: 1200 }, black: { user: { name: black }, rating: 1200 } }, ...(complete ? { winner: 'black' } : {}), pgn: pgn(`Lichess ${id}`, white, black, complete) });
 const completedChess = chessGame(chessUrl, 'Site review finished fixture');
 const longChess = chessGame(nextChessUrl, 'Site review cancellation fixture');
+const newerChessGames = Array.from({ length: 60 }, (_, index) => ({ ...chessGame(`https://www.chess.com/game/live/${884410000 + index}`, `Newer finished game ${index}`, 'sitecat', 'otherowl'), end_time: stamp + index + 1 }));
 let context, worker, settings, stage = 'launch';
 const errors = [], browserDiagnostics = [], unexpectedRequests = [];
 const checkpoint = setInterval(() => console.log(`Site review checkpoint: ${stage}`), 15000);
@@ -90,13 +91,19 @@ try {
       globalThis.__siteFetches.push(raw);
       const url = new URL(raw);
       const listing = url.pathname.match(/^\/pub\/player\/([a-z0-9_-]+)\/games\/archives$/);
-      if (url.origin === 'https://api.chess.com' && listing) return { ok: true, status: 200, json: async () => ({ archives: [`https://api.chess.com/pub/player/${listing[1]}/games/2026/10`] }) };
-      if (url.origin === 'https://api.chess.com' && /^\/pub\/player\/[a-z0-9_-]+\/games\/2026\/10$/.test(url.pathname)) return { ok: true, status: 200, json: async () => ({ games: globalThis.__siteFixtures.chess }) };
-      if (url.origin === 'https://lichess.org' && /^\/api\/games\/user\/[a-zA-Z0-9_-]+$/.test(url.pathname)) return { ok: true, status: 200, text: async () => globalThis.__siteFixtures.lichess.map(game => JSON.stringify(game)).join('\n') };
+      if (url.origin === 'https://api.chess.com' && listing) return { ok: true, status: 200, json: async () => ({ archives: Object.keys(globalThis.__siteFixtures.chessMonths || { '2026/10': [] }).map(month => `https://api.chess.com/pub/player/${listing[1]}/games/${month}`) }) };
+      const archive = url.pathname.match(/^\/pub\/player\/[a-z0-9_-]+\/games\/(\d{4}\/\d{2})$/);
+      if (url.origin === 'https://api.chess.com' && archive) return { ok: true, status: 200, json: async () => ({ games: globalThis.__siteFixtures.chessMonths?.[archive[1]] || globalThis.__siteFixtures.chess }) };
+      if (url.origin === 'https://lichess.org' && /^\/api\/games\/user\/[a-zA-Z0-9_-]+$/.test(url.pathname)) return { ok: true, status: 200, text: async () => globalThis.__siteFixtures.lichess.slice(0, Number(url.searchParams.get('max')) || 20).map(game => JSON.stringify(game)).join('\n') };
+      const single = url.pathname.match(/^\/game\/export\/([a-zA-Z0-9]{8})$/);
+      if (url.origin === 'https://lichess.org' && single) {
+        const game = globalThis.__siteFixtures.lichess.find(game => game.id === single[1]);
+        return { ok: Boolean(game), status: game ? 200 : 404, text: async () => JSON.stringify(game || { error: 'No such game' }), json: async () => game || { error: 'No such game' } };
+      }
       throw new Error(`Unexpected network access in site-review test: ${raw}`);
     };
   });
-  const fixtures = (chess, lichess = []) => worker.evaluate(value => { globalThis.__siteFixtures = value; }, { chess, lichess });
+  const fixtures = (chess, lichess = [], chessMonths) => worker.evaluate(value => { globalThis.__siteFixtures = value; }, { chess, lichess, chessMonths });
   const watchErrors = page => {
     page.on('pageerror', error => { errors.push(error.message); console.error('Browser error:', error.message); });
     page.on('console', message => { if (['error', 'warning'].includes(message.type())) browserDiagnostics.push(message.text()); });
@@ -146,6 +153,11 @@ try {
     while (page.frames().some(frame => /\/site-summary\.html(?:[?#]|$)/.test(frame.url())) && Date.now() - started < 10000) await new Promise(resolve => setTimeout(resolve, 50));
     assert.equal(page.frames().filter(frame => /\/site-summary\.html(?:[?#]|$)/.test(frame.url())).length, 0);
   };
+  const checkCurrentPage = page => worker.evaluate(async url => {
+    const [tab] = await chrome.tabs.query({ url });
+    const [reply] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => chrome.runtime.sendMessage({ type: 'meowl:site-check' }) });
+    return reply.result;
+  }, page.url());
   const complete = async frame => {
     await poll(async () => {
       const state = await frame.evaluate(() => ({ visible: !document.querySelector('#summary-result').hidden, error: document.querySelector('#summary-status').classList.contains('error'), message: document.querySelector('#summary-status').textContent, workerErrors: window.__siteTest.workerErrors }));
@@ -164,7 +176,7 @@ try {
   assert.equal(await settings.locator('#site-lichess-enabled').isChecked(), false);
   const chess = await context.newPage(); watchErrors(chess);
   await fixtures([chessGame(chessUrl, 'Unfinished fixture', 'sitecat', 'siteowl', false), chessGame('https://www.chess.com/game/live/884400000', 'Older fixture')]);
-  await chess.goto(chessUrl);
+  await chess.goto(chessUrl.replace('/game/live/', '/game/'));
   assert.equal(await chess.locator(hostSelector).count(), 0);
   assert.equal((await worker.evaluate(() => chrome.scripting.getRegisteredContentScripts())).length, 0);
   stage = 'deny site permission through settings';
@@ -185,12 +197,16 @@ try {
   await chess.waitForFunction(() => document.querySelector('#meowlchess-site-review')?.dataset.state === 'waiting');
   await noFrame(chess);
   assert.equal((await records()).length, 0);
-  stage = 'Chess.com real engine progress then summary under restrictive CSP';
-  await fixtures([completedChess]);
+  stage = 'Chess.com requested old game beyond sixty newer games and three archive months';
+  const newerGamesInTargetMonth = newerChessGames.map((game, index) => ({ ...game, url: `https://www.chess.com/game/live/${884420000 + index}` }));
+  await fixtures([], [], { '2026/05': [...newerGamesInTargetMonth, completedChess], '2026/06': [], '2026/07': [], '2026/08': [], '2026/09': [], '2026/10': newerChessGames });
   await enabled('chesscom', false); await enabled('chesscom', true);
   await chess.bringToFront();
   const chessFrame = await waitFrame(chess);
   await complete(chessFrame);
+  assert.equal(await chessFrame.locator('#summary-players').innerText(), 'sitecat vs siteowl', 'The short game URL must select the exact game, not the newest archive entry.');
+  assert.equal((await records())[0].game.url, chessUrl, 'The requested historical game is saved, not one of the sixty newer matches.');
+  assert((await worker.evaluate(() => globalThis.__siteFetches)).some(url => url.endsWith('/2026/05')), 'Exact-game lookup searches beyond the latest three archive months.');
   const telemetry = await chessFrame.evaluate(() => window.__siteTest);
   assert(telemetry.created > 0 && telemetry.searches > 0, 'A real local engine must run.');
   assert.equal(telemetry.progressBeforeSummary, true, 'Progress is displayed before the completed summary.');
@@ -201,7 +217,8 @@ try {
   await chess.setViewportSize({ width: 390, height: 844 });
   await chess.screenshot({ path: join(root, 'test-results', 'site-review-narrow.png') });
   await chess.setViewportSize({ width: 1366, height: 900 });
-  console.log('Site review: Chess.com progress, summary, persistence, and CSP checks passed.');
+  await poll(async () => { const box = await chess.locator(hostSelector).boundingBox(); return Math.abs(box.x + box.width - (1366 - 16)) <= 2; }, 'panel reflows after restoring desktop viewport');
+  console.log('Site review: old Chess.com target beyond sixty newer games and three months, progress, summary, persistence, and CSP checks passed.');
 
   stage = 'forged page messages cannot control the summary';
   const token = new URL(chessFrame.url()).hash.slice(1);
@@ -228,7 +245,7 @@ try {
   await fullReview.close();
 
   stage = 'SPA navigation removes stale results; disabling cancels a new review';
-  await chess.evaluate(url => { history.pushState({}, '', url); document.querySelector('#round-result').textContent = 'New game'; }, nextChessUrl);
+  await chess.evaluate(url => { history.pushState({}, '', url); document.querySelector('#round-result').textContent = 'New game'; }, nextChessUrl.replace('/game/live/', '/game/'));
   await chess.waitForFunction(() => document.querySelector('#meowlchess-site-review')?.dataset.state === 'waiting');
   await noFrame(chess);
   console.log('SPA sender snapshots:', await worker.evaluate(() => globalThis.__siteSenders));
@@ -263,11 +280,23 @@ try {
   const lichess = await context.newPage(); watchErrors(lichess); await lichess.goto(lichessUrl);
   await enabled('lichess', true);
   await lichess.bringToFront();
-  await lichess.waitForFunction(() => document.querySelector('#meowlchess-site-review')?.dataset.state === 'waiting');
+  await lichess.waitForFunction(() => ['waiting', 'error'].includes(document.querySelector('#meowlchess-site-review')?.dataset.state));
+  assert(['waiting', 'error'].includes((await checkCurrentPage(lichess)).status), 'An unfinished exact game cannot open a review.');
   await noFrame(lichess);
   assert.equal((await records()).length, 1);
-  stage = 'Lichess completed game, private suffix, and real Lozza';
-  await fixtures([], [lichessGame('A1b2C3d4')]);
+  stage = 'Lichess exact game still requires the configured player';
+  await fixtures([], [lichessGame('A1b2C3d4', true, 'othercat', 'otherowl')]);
+  await enabled('lichess', false); await enabled('lichess', true); await lichess.bringToFront();
+  assert(['waiting', 'error'].includes((await checkCurrentPage(lichess)).status), 'A completed game from another account cannot open a review.');
+  await noFrame(lichess); assert.equal((await records()).length, 1);
+  stage = 'Lichess unknown exact game cannot fall back to another finished game';
+  await fixtures([], [lichessGame('E5f6G7h8')]);
+  await enabled('lichess', false); await enabled('lichess', true); await lichess.bringToFront();
+  assert(['waiting', 'error'].includes((await checkCurrentPage(lichess)).status), 'A missing exact game cannot fall back to the account list.');
+  await noFrame(lichess); assert.equal((await records()).length, 1);
+  stage = 'Lichess old completed game beyond sixty newer games, private suffix, and real Lozza';
+  const newerLichessGames = Array.from({ length: 60 }, (_, index) => ({ ...lichessGame(`N${String(index).padStart(7, '0')}`, true, 'othercat', 'siteowl'), lastMoveAt: (stamp + index + 1) * 1000 }));
+  await fixtures([], [...newerLichessGames, lichessGame('A1b2C3d4')]);
   await enabled('lichess', false); await enabled('lichess', true);
   await lichess.bringToFront();
   const lichessFrame = await waitFrame(lichess); await complete(lichessFrame);
@@ -276,11 +305,13 @@ try {
   assert.equal(lichessTelemetry.progressBeforeSummary, true);
   assert.equal(lichessTelemetry.created, lichessTelemetry.terminated);
   assert.match(await lichessFrame.locator('#summary-engine').innerText(), /Lozza/i);
+  assert.equal(await lichessFrame.locator('#summary-players').innerText(), 'sitecat vs siteowl', 'The old Lichess game is selected instead of a newer account-list game.');
   assert.equal((await records()).length, 2);
   assert((await records()).some(record => record.game.url === 'https://lichess.org/A1b2C3d4'));
   const apiRequests = await worker.evaluate(() => globalThis.__siteFetches);
-  assert(apiRequests.some(url => url.startsWith('https://lichess.org/api/games/user/siteowl?')));
-  assert(apiRequests.every(url => !url.includes('sEcR') && !url.includes('/game/export/')));
+  assert(apiRequests.some(url => url.startsWith('https://lichess.org/game/export/A1b2C3d4?')), 'The current Lichess page requests its exact canonical game export.');
+  assert(apiRequests.every(url => !url.includes('sEcR')), 'The private player suffix is never sent to public retrieval APIs.');
+  assert.equal(apiRequests.filter(url => url.includes('api/games/user/')).length, 0, 'Exact game pages do not depend on recent account lists.');
   assert(apiRequests.filter(url => url.includes('api/games/user/')).every(url => new URL(url).searchParams.get('ongoing') === 'false' && new URL(url).searchParams.get('finished') === 'true'));
   await lichess.screenshot({ path: join(root, 'test-results', 'site-review-lichess.png') });
   await lichessFrame.locator('#summary-close').click();
@@ -290,7 +321,7 @@ try {
   console.log('Site review: Lichess progress/summary, account checks, private URL handling, local engine, and disable passed.');
 
   stage = 'play page watches the next finished round and starts with progress';
-  await fixtures([completedChess]);
+  await fixtures([completedChess, { ...chessGame('https://www.chess.com/game/live/884499999', 'Unrelated newer finished game', 'sitecat', 'otherowl'), end_time: stamp + 10 }]);
   await enabled('chesscom', true);
   const lobby = await context.newPage(); watchErrors(lobby);
   await lobby.goto('https://www.chess.com/play/online'); await lobby.bringToFront();

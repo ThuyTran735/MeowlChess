@@ -37,9 +37,9 @@ function validateArchiveUrl(value, username) {
   } catch { return false; }
 }
 
-async function fetchJson(url) {
+async function fetchJson(url, { timeoutMs = 15000, timeoutMessage } = {}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, { credentials: 'omit', signal: controller.signal, redirect: 'error' });
     if (response.status === 404) throw new Error('Chess.com could not find that player or game archive. Check the username and try again.');
@@ -48,7 +48,7 @@ async function fetchJson(url) {
     try { return await response.json(); }
     catch { throw new Error('Chess.com returned an unreadable game archive. Please try again later.'); }
   } catch (error) {
-    if (controller.signal.aborted) throw new Error('Chess.com took too long to respond. Check your connection and try again.');
+    if (controller.signal.aborted) throw new Error(timeoutMessage || 'Chess.com took too long to respond. Check your connection and try again.');
     if (error instanceof TypeError) throw new Error('Could not connect to Chess.com. Check your internet connection and try again.');
     throw error;
   } finally { clearTimeout(timeout); }
@@ -74,4 +74,41 @@ export async function fetchRecentGames(value) {
   }
   const unique = new Map(games.map(game => [game.url, game]));
   return [...unique.values()].sort((a, b) => b.end_time - a.end_time).slice(0, 20);
+}
+
+/** Find one game in the complete public archive, without the recent-picker limits. */
+export async function fetchGameFromArchives(value, canonicalGameUrl) {
+  if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{2,50}$/.test(value.trim())) {
+    throw new Error('Enter a Chess.com username with 2–50 letters, numbers, underscores, or hyphens.');
+  }
+  if (typeof canonicalGameUrl !== 'string' || !/^https:\/\/www\.chess\.com\/game\/(?:live|daily)\/\d+$/.test(canonicalGameUrl)) {
+    throw new Error('Choose a canonical completed Chess.com game link.');
+  }
+  const username = value.trim().toLowerCase();
+  const deadline = performance.now() + 45000;
+  const timedOut = 'Searching this game\'s archive took too long. Try again, or import its finished PGN.';
+  const load = async url => {
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) throw new Error(timedOut);
+    const data = await fetchJson(url, { timeoutMs: Math.min(15000, remaining), ...(remaining <= 15000 ? { timeoutMessage: timedOut } : {}) });
+    if (performance.now() >= deadline) throw new Error(timedOut);
+    return data;
+  };
+  const listing = await load(`${API_ORIGIN}/pub/player/${encodeURIComponent(username)}/games/archives`);
+  if (!Array.isArray(listing?.archives) || listing.archives.some(url => !validateArchiveUrl(url, username))) {
+    throw new Error('Chess.com returned an invalid archive list. Please try again later.');
+  }
+  const archives = [...new Set(listing.archives)].sort().reverse();
+  for (const archive of archives) {
+    const data = await load(archive);
+    if (!Array.isArray(data?.games)) throw new Error('Chess.com returned an invalid game archive. Please try again later.');
+    const matches = data.games.filter(game => game?.url === canonicalGameUrl);
+    if (performance.now() >= deadline) throw new Error(timedOut);
+    if (matches.length) {
+      const game = matches.find(isCompletedGame);
+      return game ? [game] : [];
+    }
+  }
+  if (performance.now() >= deadline) throw new Error(timedOut);
+  return [];
 }

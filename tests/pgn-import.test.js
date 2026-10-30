@@ -1,11 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { importPgn } from '../extension/lib/pgn.js';
+import { importPgn, safeOriginalGameUrl } from '../extension/lib/pgn.js';
 import { parseGame } from '../extension/lib/review.js';
 import { importPgnCollection, importPgnFiles, PGN_IMPORT_MAX_BYTES, PGN_IMPORT_MAX_GAMES } from '../extension/lib/pgn-import.js';
 
 const first = '[Event "First"]\n[Site "https://lichess.org/AbCd1234"]\n[White "Alice"]\n[Black "Bob"]\n[WhiteElo "1500"]\n[UTCDate "2024.03.02"]\n[UTCTime "14:30:00"]\n[Result "1-0"]\n\n1. e4 e5 2. Nf3 1-0';
 const second = '[Event "Second"]\n[White "Carol"]\n[Black "Dan"]\n[Result "0-1"]\n\n1. d4 d5 2. c4 0-1';
+
+test('Chess.com short and analysis links preserve the exact live game identity in PGN imports', () => {
+  const canonical = 'https://www.chess.com/game/live/186247007610';
+  for (const url of ['https://www.chess.com/game/186247007610', 'https://chess.com/game/186247007610/', 'https://www.chess.com/analysis/game/186247007610', 'https://www.chess.com/analysis/game/live/186247007610/', canonical]) {
+    assert.equal(safeOriginalGameUrl(url), canonical);
+    assert.equal(importPgn(`[Link "${url}"]\n${second}`).url, canonical);
+  }
+  assert.equal(safeOriginalGameUrl('https://www.chess.com/analysis/game/daily/186247007610'), 'https://www.chess.com/game/daily/186247007610');
+  for (const url of ['https://www.chess.com/game/186247007610?redirect=evil', 'https://www.chess.com/game/186247007610#other', 'https://www.chess.com.evil.test/game/186247007610', 'https://www.chess.com/game/not-a-game', 'https://www.chess.com/game/186247007610/extra', 'https://user@www.chess.com/game/186247007610']) assert.equal(safeOriginalGameUrl(url), null);
+});
 
 test('single-game collections preserve the established normalized import result', () => {
   const input = '\uFEFF' + first.replaceAll('\n', '\r\n') + ' {Finished}';

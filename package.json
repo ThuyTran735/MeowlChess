@@ -1,6 +1,6 @@
 {
   "name": "meowlchess",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "private": true,
   "type": "module",
   "description": "Local reviews of completed Chess.com, Lichess, and imported PGN games",
@@ -14,7 +14,10 @@
     "test:features": "node tests/features.mjs",
     "test:imports": "node tests/import-ui.mjs",
     "test:tutorial": "node tests/tutorial-ui.mjs",
-    "test:site-review": "node tests/site-review-ui.mjs"
+    "test:site-review": "node tests/site-review-ui.mjs",
+    "test:site-bot": "node tests/site-bot-ui.mjs",
+    "test:site-panel": "node tests/site-panel-ui.mjs",
+    "test:site-panel-extension": "node tests/site-panel-extension.mjs"
   },
   "dependencies": {
     "chess.js": "1.4.0",

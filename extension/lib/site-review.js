@@ -1,5 +1,6 @@
 import { isCompletedGame } from './archive.js';
-import { parseCompletedPgn, safeOriginalGameUrl } from './pgn.js';
+import { importPgn, parseCompletedPgn, safeOriginalGameUrl } from './pgn.js';
+import { reviewIdForGame } from './library.js';
 import { ENGINE_OPTIONS } from './engine.js';
 import { ANALYSIS_VERSION } from './review.js';
 
@@ -40,14 +41,32 @@ export function providerForUrl(value) {
   return url?.hostname === 'lichess.org' ? 'lichess' : null;
 }
 
+/** Bot exports are private; never substitute a public human game on these pages. */
+export function isChessComBotPage(value) {
+  const url = trustedUrl(value);
+  return providerForUrl(value) === 'chesscom' && Boolean(url && (
+    /^\/play\/computer(?:\/|$)/.test(url.pathname) ||
+    /^\/(?:analysis\/)?game\/computer\/[^/]+\/?$/.test(url.pathname)
+  ));
+}
+
+function completedBotGame(pgn, timestamp) {
+  if (typeof pgn !== 'string' || pgn.length > 250000 || new TextEncoder().encode(pgn).byteLength > 250000) {
+    throw new Error('Choose one completed bot game, up to 250 KB.');
+  }
+  const game = importPgn(pgn);
+  // A local export is an import, not an independently confirmed archive game.
+  return { ...game, url: null, end_time: game.end_time || Math.floor(timestamp / 1000) };
+}
+
 /** Strip navigation parameters and private Lichess player keys before retaining a URL. */
 export function gameUrlForPage(value) {
   const url = trustedUrl(value);
   const source = providerForUrl(value);
   if (!url || !source) return null;
   if (source === 'chesscom') {
-    const match = url.pathname.match(/^\/(?:analysis\/)?game\/(live|daily)\/(\d+)\/?$/);
-    return match ? `https://www.chess.com/game/${match[1]}/${match[2]}` : null;
+    const match = url.pathname.match(/^\/(?:analysis\/)?game\/(?:(live|daily)\/)?(\d+)\/?$/);
+    return match ? `https://www.chess.com/game/${match[1] || 'live'}/${match[2]}` : null;
   }
   const match = url.pathname.match(/^\/([a-zA-Z0-9]{8}(?:[a-zA-Z0-9]{4})?)(?:\/(?:white|black))?\/?$/);
   return match && !LICHESS_ROUTES.has(match[1].toLowerCase()) ? `https://lichess.org/${match[1].slice(0, 8)}` : null;
@@ -70,6 +89,11 @@ export function normalizeSiteAnalysis(value) {
 function pageKey(value) {
   const url = trustedUrl(value);
   return providerForUrl(value) ? gameUrlForPage(value) || `${url.origin}${url.pathname}` : null;
+}
+
+function unrecognizedChessGamePage(value) {
+  const url = trustedUrl(value);
+  return providerForUrl(value) === 'chesscom' && /^\/(?:analysis\/)?game(?:\/|$)/.test(url.pathname) && !gameUrlForPage(value);
 }
 
 /** An archive result is still untrusted: require the configured player and legal finished PGN. */
@@ -127,6 +151,7 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
   const tabEpochs = new Map();
   const tabPages = new Map();
   const sourceEpochs = new Map();
+  const botImports = new Map();
   let generation = 0;
   let restorePromise, restored = false, persistence = Promise.resolve();
 
@@ -191,6 +216,7 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
   async function restoreSession() {
     const startedGeneration = generation;
     const startedSources = new Map(sourceEpochs);
+    const startedTabs = new Map(tabEpochs);
     try {
       const snapshot = await readSession?.();
       if (snapshot?.version !== 1 || !Array.isArray(snapshot.jobs) || !Array.isArray(snapshot.cache)) return;
@@ -204,18 +230,40 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
         if (!Number.isFinite(item.expiresAt) || item.expiresAt <= now() || item.expiresAt > now() + JOB_LIFETIME) continue;
         if (typeof item.pageKey !== 'string' || pageKey(item.pageKey) !== item.pageKey || providerForUrl(item.pageKey) !== item.source) continue;
         if (providerForUrl(item.parentOrigin) !== item.source || trustedUrl(item.parentOrigin)?.origin !== item.parentOrigin) continue;
-        const [game] = completedSiteGames([item.game], item.source, config.username, now());
+        let game, bot = {};
+        if (item.kind === 'bot') {
+          if (item.source !== 'chesscom' || !isChessComBotPage(item.pageKey) || item.game?.source !== 'pgn' || item.game?.imported !== true || item.game.url !== null) continue;
+          if (!Number.isFinite(item.game.end_time) || item.game.end_time <= 0 || item.game.end_time * 1000 > now()) continue;
+          try {
+            game = completedBotGame(item.game.pgn, item.game.end_time * 1000);
+            const gameKey = `pgn:${await reviewIdForGame(game)}`;
+            if (gameKey !== item.gameKey) continue;
+            bot = { kind: 'bot', gameKey };
+          } catch { continue; }
+          // Parsing and hashing yield; revocation/navigation must still win.
+          if (generation !== startedGeneration || (sourceEpochs.get(item.source) || 0) !== (startedSources.get(item.source) || 0) || (tabEpochs.get(item.tabId) || 0) !== (startedTabs.get(item.tabId) || 0)) continue;
+        } else {
+          if (item.kind !== undefined || isChessComBotPage(item.pageKey) || unrecognizedChessGamePage(item.pageKey)) continue;
+          [game] = completedSiteGames([item.game], item.source, config.username, now());
+          const currentGame = gameUrlForPage(item.pageKey);
+          if (currentGame && game?.url !== currentGame) continue;
+        }
         if (!game) continue;
-        const job = { token: item.token, source: item.source, tabId: item.tabId, pageKey: item.pageKey, parentOrigin: item.parentOrigin, game, analysis: config.analysis, configKey: config.key, expiresAt: item.expiresAt };
+        const job = { token: item.token, source: item.source, tabId: item.tabId, pageKey: item.pageKey, parentOrigin: item.parentOrigin, game, ...bot, analysis: config.analysis, configKey: config.key, expiresAt: item.expiresAt };
         jobs.set(job.token, job); tabPages.set(job.tabId, job.pageKey);
       }
       for (const item of snapshot.cache.slice(0, 20)) {
         if (typeof item?.key !== 'string') continue;
-        const [source, username, extra] = item.key.split(':');
+        const [source, username, encodedGame, ...extra] = item.key.split(':');
         const config = configurations.get(source);
-        if (!config || username !== config.username || extra !== undefined || !Number.isFinite(item.expiresAt) || item.expiresAt <= now() || item.expiresAt > now() + SITE_PROVIDERS[source].retryAfterMs) continue;
+        if (!config || username !== config.username || extra.length || !Number.isFinite(item.expiresAt) || item.expiresAt <= now() || item.expiresAt > now() + SITE_PROVIDERS[source].retryAfterMs) continue;
+        let target = null;
+        if (encodedGame !== undefined) {
+          try { target = decodeURIComponent(encodedGame); } catch { continue; }
+          if (!target || encodeURIComponent(target) !== encodedGame || providerForUrl(target) !== source || gameUrlForPage(target) !== target) continue;
+        }
         let value;
-        if (Array.isArray(item.value?.games)) value = { games: completedSiteGames(item.value.games, source, username, now()) };
+        if (Array.isArray(item.value?.games)) value = { games: completedSiteGames(item.value.games, source, username, now()).filter(game => !target || game.url === target) };
         else if (typeof item.value?.error === 'string') value = { error: item.value.error.slice(0, 240) };
         if (value) cache.set(item.key, { expiresAt: item.expiresAt, value });
       }
@@ -228,14 +276,17 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
     return restorePromise;
   }
 
-  async function archive(source, username) {
-    const key = `${source}:${username}`;
+  async function archive(source, username, target = null) {
+    // A recent-game list must never satisfy an exact game-page lookup: that game
+    // can be outside the picker limit or in an older monthly archive.
+    const key = `${source}:${username}${target ? ':' + encodeURIComponent(target) : ''}`;
     let entry = cache.get(key);
     if (entry && (entry.pending || entry.expiresAt > now())) return entry.pending || entry.value;
     entry = { expiresAt: 0 };
     entry.pending = (async () => {
       try {
-        return { games: completedSiteGames(await fetchGames(source, username), source, username, now()) };
+        const games = completedSiteGames(await fetchGames(source, username, target ? { gameUrl: target } : undefined), source, username, now());
+        return { games: games.filter(game => !target || game.url === target) };
       } catch (error) {
         return { error: error instanceof Error ? error.message.slice(0, 240) : 'Could not load completed games. Try again shortly.' };
       }
@@ -261,11 +312,22 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
     if (!config) return disabled();
     prune();
     const retryAfterMs = SITE_PROVIDERS[source].retryAfterMs;
-    const data = await archive(source, config.username);
+    if (isChessComBotPage(context.pageKey)) {
+      const current = await configuration(source);
+      if (!current || current.key !== config.key || startedGeneration !== generation || (tabEpochs.get(tabId) || 0) !== epoch || (sourceEpochs.get(source) || 0) !== sourceEpoch) return disabled();
+      const job = [...jobs.values()].find(item => item.kind === 'bot' && item.tabId === tabId && item.pageKey === context.pageKey && item.parentOrigin === context.parentOrigin && item.configKey === config.key);
+      if (job) { job.expiresAt = now() + JOB_LIFETIME; return botReady(job); }
+      return { status: 'bot', source, retryAfterMs, message: 'Bot games are private. Open Share → PGN after the game, or import its finished PGN here.' };
+    }
+    if (unrecognizedChessGamePage(context.pageKey)) return {
+      status: 'waiting', source, retryAfterMs,
+      message: 'This game link could not be recognized. Open its full game link or import the finished PGN.',
+    };
+    const currentGame = gameUrlForPage(context.pageKey);
+    const data = await archive(source, config.username, currentGame);
     const current = await configuration(source);
     if (!current || current.key !== config.key || startedGeneration !== generation || (tabEpochs.get(tabId) || 0) !== epoch || (sourceEpochs.get(source) || 0) !== sourceEpoch) return disabled();
     if (data.error) return { status: 'error', source, message: data.error, retryAfterMs };
-    const currentGame = gameUrlForPage(context.pageKey);
     const game = currentGame ? data.games.find(item => item.url === currentGame) : data.games[0];
     if (!game) return {
       status: 'waiting', source, retryAfterMs,
@@ -280,6 +342,36 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
     }
     job.expiresAt = now() + JOB_LIFETIME;
     return { status: 'ready', token: job.token, gameUrl: game.url, source, endTime: game.end_time, retryAfterMs };
+  }
+
+  function botReady(job) {
+    return { status: 'ready', kind: 'bot', token: job.token, gameUrl: job.gameKey, gameKey: job.gameKey, source: job.source, endTime: job.game.end_time, retryAfterMs: SITE_PROVIDERS.chesscom.retryAfterMs };
+  }
+
+  async function importBot(sender, pgn) {
+    const context = contentContext(sender);
+    if (!context || !isChessComBotPage(context.pageKey)) return disabled();
+    const { source, tabId } = context;
+    pageChanged(tabId, context.pageKey);
+    const epoch = tabEpochs.get(tabId) || 0, sourceEpoch = sourceEpochs.get(source) || 0, startedGeneration = generation;
+    const revision = (botImports.get(tabId) || 0) + 1;
+    botImports.set(tabId, revision);
+    if (botImports.size > 200) botImports.delete(botImports.keys().next().value);
+    const config = await configuration(source);
+    if (!config) return disabled();
+    const game = completedBotGame(pgn, now());
+    const gameKey = `pgn:${await reviewIdForGame(game)}`;
+    const current = await configuration(source);
+    if (!current || current.key !== config.key || startedGeneration !== generation || (tabEpochs.get(tabId) || 0) !== epoch || (sourceEpochs.get(source) || 0) !== sourceEpoch || botImports.get(tabId) !== revision) return disabled();
+    prune();
+    let job = [...jobs.values()].find(item => item.kind === 'bot' && item.tabId === tabId && item.pageKey === context.pageKey && item.parentOrigin === context.parentOrigin && item.gameKey === gameKey && item.configKey === config.key);
+    if (!job) {
+      for (const [token, item] of jobs) if (item.tabId === tabId) jobs.delete(token);
+      job = { ...context, kind: 'bot', token: makeToken(), game, gameKey, analysis: config.analysis, configKey: config.key };
+      jobs.set(job.token, job);
+    }
+    job.expiresAt = now() + JOB_LIFETIME;
+    return botReady(job);
   }
 
   async function frameJob(sender, token) {
@@ -339,6 +431,7 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
   async function dispatch(message, sender) {
       switch (message?.type) {
         case 'meowl:site-check': return check(sender);
+        case 'meowl:site-bot-import': return importBot(sender, message.pgn);
         case 'meowl:site-open-settings': {
           const context = contentContext(sender);
           if (!context || !await configuration(context.source)) return disabled();
@@ -347,7 +440,7 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
         }
         case 'meowl:site-payload': {
           const job = await frameJob(sender, message.token);
-          return job ? { status: 'ready', token: job.token, source: job.source, parentOrigin: job.parentOrigin, game: job.game, analysis: job.analysis } : expired();
+          return job ? { status: 'ready', token: job.token, source: job.source, parentOrigin: job.parentOrigin, game: job.game, analysis: job.analysis, ...(job.kind === 'bot' ? { kind: 'bot', gameKey: job.gameKey } : {}) } : expired();
         }
         case 'meowl:site-load-review':
         case 'meowl:site-save-review': {
