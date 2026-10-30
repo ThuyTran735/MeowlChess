@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MeowlChess summary</title>
+  <link rel="stylesheet" href="site-summary.css">
+</head>
+<body>
+<main>
+  <header class="summary-heading"><h1 id="summary-title">Reviewing finished game</h1><span id="summary-source"></span></header>
+  <p id="summary-players" class="game-players"></p>
+  <p id="summary-game-detail" class="game-detail"></p>
+
+  <section id="summary-progress-area" aria-label="Review progress">
+    <div class="progress-heading"><strong id="summary-progress-label">Preparing review…</strong><span id="summary-percent"></span></div>
+    <progress id="summary-progress" max="100" aria-label="Game review progress"></progress>
+    <p id="summary-progress-detail" role="status">Checking this completed game.</p>
+    <button id="summary-cancel" class="quiet-button" type="button">Cancel review</button>
+  </section>
+
+  <section id="summary-result" aria-label="Completed game summary" hidden>
+    <div id="summary-scores" class="scores"></div>
+    <p class="scores-caption">Estimated study scores</p>
+    <div class="counts-heading"><span>Move ratings</span><span>White</span><span></span><span>Black</span></div>
+    <div id="summary-counts" class="counts"></div>
+    <p id="summary-engine" class="engine-caption"></p>
+  </section>
+
+  <p id="summary-status" class="summary-status" role="status"></p>
+  <footer>
+    <div class="footer-actions">
+      <button id="summary-open-review" type="button" class="primary-button" disabled hidden>Open full review</button>
+      <button id="summary-close" type="button" class="quiet-button" hidden>Close panel</button>
+    </div>
+    <p class="independent">MeowlChess · independent, local analysis</p>
+  </footer>
+</main>
+<script type="module" src="site-summary.js"></script>
+</body>
+</html>

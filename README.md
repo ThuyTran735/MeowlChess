@@ -4,7 +4,7 @@
 
 Free local reviews of completed chess games, in Brave, Chrome, and Edge. Load games from **Chess.com or Lichess**, or import completed games from PGN files exported by other websites. Stockfish and Lozza run on your device; no subscription, paid analysis service, or chess-site login is required.
 
-**Version 1.4.0.** An optional, three-step guided tutorial points out the review controls with animated arrows, spotlights, and gentle zooms. Skip it, save your preference with Never show again, or reopen it from the footer. Completed and saved reviews still open at move 0 on Summary, with local engines, PGN imports, and practice tools ready when you are. MeowlChess uses its own cat/owl logo and is independent of Chess.com and Lichess.
+**Version 1.5.0.** Optional automatic reviews now appear directly on Chess.com and Lichess. Enable each site in Settings, then watch a finished game move from a progress bar to a compact summary with both players' scores and move counts. Saved reviews reopen without another engine run, and Open full review starts at move 0 on Summary. Local engines, PGN imports, practice tools, and the skippable guided tutorial remain available. MeowlChess is independent of Chess.com and Lichess.
 
 ## Install or update
 
@@ -18,6 +18,18 @@ For this working copy, load `C:\Users\thuyv\Downloads\meowlchess\extension`. Aft
 ## Quick tutorial
 
 A three-step guided tour appears when you open MeowlChess. Spotlights, animated arrows, and enlarged previews point out Games, Review game, and the review tabs. The tour follows the controls on smaller screens, restores your scroll position when it closes, and respects reduced-motion preferences. Use **Next** and **Back**, or **Skip** (also Escape) to go straight to the extension. Check **Never show again** to stop it opening automatically in this browser profile. Without that check, it appears again the next time you open the review page. The small **Tutorial** link in the footer reopens it at any time; uncheck the box there to restore automatic display. The guide never starts a review or changes the selected game.
+
+## Automatic reviews on Chess.com and Lichess
+
+Open MeowlChess **Settings → On-site reviews**, enter your username for a site, and enable its checkbox. Accept the browser's one-time permission request. Each site is separate and off by default. Turn the site off before changing its username.
+
+After a game finishes, a small dropdown shows **Waiting for game data**, then a local-engine progress bar. When the review finishes, that same dropdown becomes the **Summary**, with both players' study scores and move counts. It uses the engine and speed selected in Settings, or Fast / one line until you have saved review preferences. A current saved review is reused without running the engine again. **Open full review** opens the saved game at move 0 on Summary.
+
+On a game URL, MeowlChess waits for that exact game to appear in the configured player's completed-game archive. On Chess.com's play screen, it watches for a finished-game notice and a new archive entry. On other pages, it can show the latest completed game. Visible finish notices only open the waiting panel; they never authorize analysis by themselves. An unfinished game is never sent to the engine. The panel shows no board, engine lines, or move suggestions.
+
+Chess.com's public archives can be delayed, so the review is not guaranteed to start immediately at the last move. While the page is visible, completed-game checks are cached for 60 seconds on Chess.com and 30 seconds on Lichess. These cached games and temporary review handles use browser session storage, capped at 700 KB and cleared when the browser restarts, so a background restart does not interrupt the summary. No login cookies or private game keys are sent to the API. The optional page helper reads the page URL and visible game-end notices, not live board positions.
+
+Collapse the dropdown to keep just its header, or close it to dismiss that game's review. Closing the panel, leaving the page, switching tabs, or turning the site off stops its active review; no partial review is saved. Returning to a visible game page can start the review again, unless you dismissed it. Use the panel's **Settings** shortcut to disable either site. Disabling removes the helper's panel and future page injections; site permissions can also be removed in the browser's extension settings.
 
 ## Choose a game
 
@@ -101,9 +113,9 @@ Study scores average `100 × exp(-5 × expected-score loss)` across a player's *
 
 ## Privacy and fair play
 
-Use MeowlChess only after a game is finished, including correspondence and Daily games. The extension uses public completed-game exports; it has no content scripts, live-board access, account credentials, analytics, advertising, or remote analysis server.
+Use MeowlChess only after a game is finished, including correspondence and Daily games. The extension uses public completed-game exports. Optional on-site reviews add a page helper only on enabled, permitted Chess.com or Lichess pages. It reads the page URL and visible game-end notices to show a progress/summary panel; it does not read live board positions or account credentials. There is no analytics, advertising, or remote analysis server.
 
-Preferences use `chrome.storage.local`; saved PGNs, reviews, and bookmarks use the extension's local IndexedDB. Host access is limited to Chess.com's API and Lichess's game-export endpoints. Nothing from the saved library is uploaded by MeowlChess. See [PRIVACY.md](PRIVACY.md) for retention and deletion details.
+Preferences use `chrome.storage.local`; saved PGNs, reviews, and bookmarks use the extension's local IndexedDB. Required host permissions support public game retrieval from Chess.com and Lichess. Optional page access and scripting are used only for enabled on-site reviews; Chrome host permissions apply to origins even when a manifest entry contains a path. Nothing from the saved library is uploaded by MeowlChess. See [PRIVACY.md](PRIVACY.md) for retention and deletion details.
 
 Official API documentation: [Chess.com Published-Data API](https://www.chess.com/news/view/published-data-api), [Lichess user games](https://lichess.org/api#tag/Games/operation/apiGamesUser), [Lichess game export](https://lichess.org/api#tag/Games/operation/gamePgn). Follow the original site's fair-play rules, including [Chess.com Fair Play](https://www.chess.com/legal/fair-play) and [Lichess fair play](https://lichess.org/page/fair-play).
 
@@ -118,12 +130,13 @@ npm run test:extension
 npm run test:features
 npm run test:imports
 npm run test:tutorial
+npm run test:site-review
 npm run package
 ```
 
 The build refreshes the pinned chess.js and Stockfish assets. Lozza, artwork, and the generated opening data are checked in. To regenerate opening data from its bundled, pinned TSV sources, run `node scripts/build-openings.mjs`. Packaging creates `dist/meowlchess.zip`, containing the ready-to-load extension, project source, tests, notices, opening sources, and Stockfish's corresponding source and evaluation network. It excludes dependencies, generated test results, and Git data.
 
-Browser checks use Playwright. Set `CHROMIUM_PATH` to a compatible Brave/Chromium executable, or install Playwright's Chromium with `npx playwright-core install chromium`. `test:tutorial` covers onboarding, Skip, remembered opt-out, keyboard access, and startup behavior. `test:imports` covers multi-game imports, file/text drops, promotion choices, and the review landing view. `test:features` exercises the study and saved-library flows in a disposable extension profile. `BROWSER_OFFLINE_ASSETS=1` makes the page tests serve local assets directly. Extension tests do not change your usual browser installation. `LIVE_API_USERNAME` optionally enables a real Chess.com lookup. `LIVE_LICHESS_USERNAME` checks a live Lichess archive and game URL; pair it with `HEADED_EXT_TEST=1` to use a normal minimized browser, since Lichess rejects headless browser user-agents. Chrome compatibility has not been checked directly.
+Browser checks use Playwright. Set `CHROMIUM_PATH` to a compatible Brave/Chromium executable, or install Playwright's Chromium with `npx playwright-core install chromium`. `test:site-review` checks the optional page integration against controlled Chess.com/Lichess pages in a disposable Brave profile, with local API fixtures and real engines. These fixtures do not establish compatibility with every live site layout. `test:tutorial` covers onboarding, Skip, remembered opt-out, keyboard access, and startup behavior. `test:imports` covers multi-game imports, file/text drops, promotion choices, and the review landing view. `test:features` exercises the study and saved-library flows in a disposable extension profile. `BROWSER_OFFLINE_ASSETS=1` makes the page tests serve local assets directly. Extension tests do not change your usual browser installation. `LIVE_API_USERNAME` optionally enables a real Chess.com lookup. `LIVE_LICHESS_USERNAME` checks a live Lichess archive and game URL; pair it with `HEADED_EXT_TEST=1` to use a normal minimized browser, since Lichess rejects headless browser user-agents. Chrome compatibility has not been checked directly.
 
 Source repository: [ThuyTran735/MeowlChess](https://github.com/ThuyTran735/MeowlChess).
 

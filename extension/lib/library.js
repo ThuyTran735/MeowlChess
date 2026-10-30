@@ -220,7 +220,7 @@ export function createReviewLibrary({ store = createIndexedDBReviewStore(), anal
       if (record.id !== id || await reviewIdForGame(record.game) !== id) throw new LibraryError('corrupt', 'This saved review has the wrong game identity.');
       return expose(record);
     },
-    async saveReview(game, result, settings) {
+    async saveReview(game, result, settings, { preserveCurrent = false } = {}) {
       const normalizedGame = normalizeGame(game);
       const { parsed } = parseCompletedPgn(normalizedGame.pgn);
       const normalizedResult = normalizeResult(result, parsed);
@@ -230,7 +230,13 @@ export function createReviewLibrary({ store = createIndexedDBReviewStore(), anal
       const timestamp = now(); if (!number(timestamp, 1, Number.MAX_SAFE_INTEGER)) invalid('The system clock cannot timestamp this review.');
       return call('transact', records => {
         const previous = records.find(record => record.id === id);
-        const old = previous ? normalizeRecord(previous, false) : null;
+        const old = previous ? normalizeRecord(previous, preserveCurrent) : null;
+        if (preserveCurrent && old) {
+          // The incoming identity was hashed before opening this synchronous transaction.
+          // Compare the fully validated stored identity without awaiting inside IndexedDB.
+          if (canonicalIdentity(old.result.game) !== canonicalIdentity(parsed)) throw new LibraryError('corrupt', 'This saved review has the wrong game identity.');
+          if (old.analysis.analysisVersion === analysisVersion) return { value: expose(clone(old)) };
+        }
         const record = { schemaVersion: LIBRARY_SCHEMA_VERSION, id, game: normalizedGame, result: normalizedResult, analysis, bookmarks: old?.bookmarks || [], createdAt: old?.createdAt || timestamp, updatedAt: Math.max(timestamp, old?.updatedAt || 0) };
         capacity([...records.filter(item => item.id !== id), record]);
         return { put: [record], value: expose(clone(record)) };

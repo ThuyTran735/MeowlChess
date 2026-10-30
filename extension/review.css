@@ -405,3 +405,14 @@ dialog::backdrop { background: #0009; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+.site-review-settings { margin: 18px 0 0; padding: 12px 0 0; border: 0; border-top: 1px solid var(--line); min-width: 0; }
+.site-review-settings legend { font-size: 12px; font-weight: 700; padding: 0 8px 0 0; color: #e3e6d9; }
+.site-review-settings p { color: var(--muted); font-size: 11px; line-height: 1.5; margin: 0 0 12px; }
+.site-review-option { display: grid; grid-template-columns: 102px minmax(0, 1fr); gap: 8px; align-items: center; margin-bottom: 10px; }
+.site-review-option label { display: flex; align-items: center; gap: 7px; font-size: 12px; }
+.site-review-option input[type="text"] { width: 100%; min-width: 0; padding: 8px; font-size: 12px; border: 1px solid #ffffff26; border-radius: 4px; background: #242621; color: var(--text); }
+.site-review-option input:disabled { opacity: .55; }
+.site-review-settings .site-review-help { font-size: 10px; margin-bottom: 0; }
+.site-review-settings #site-review-status:empty { display: none; }
+.site-review-settings #site-review-status { color: #bfd99b; margin: 9px 0 0; }

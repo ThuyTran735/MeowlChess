@@ -45,6 +45,14 @@
                 <div class="display-options"><label><input id="show-arrows" type="checkbox" checked> Engine arrows</label><label><input id="show-badges" type="checkbox" checked> Move badges</label><label><input id="show-coordinates" type="checkbox" checked> Coordinates</label></div>
                 <div class="review-options"><label for="play-speed">Playback</label><select id="play-speed"><option value="700">Fast · 0.7s</option><option value="1200" selected>Normal · 1.2s</option><option value="2000">Slow · 2s</option></select></div>
                 <p id="time-estimate" class="settings-note"></p>
+                <fieldset class="site-review-settings">
+                  <legend>On-site reviews</legend>
+                  <p>When a game ends, show progress and then its summary on the website.</p>
+                  <div class="site-review-option"><label><input id="site-chesscom-enabled" type="checkbox" disabled> Chess.com</label><input id="site-chesscom-username" type="text" placeholder="Your Chess.com username" aria-label="Chess.com account for automatic reviews" autocomplete="off" spellcheck="false" maxlength="50" disabled></div>
+                  <div class="site-review-option"><label><input id="site-lichess-enabled" type="checkbox" disabled> Lichess</label><input id="site-lichess-username" type="text" placeholder="Your Lichess username" aria-label="Lichess account for automatic reviews" autocomplete="off" spellcheck="false" maxlength="30" disabled></div>
+                  <p class="site-review-help">Off by default. Enabling a site asks for browser permission. Uses your engine and speed above; Chess.com game data can take time to appear. Turn a site off to change its username.</p>
+                  <p id="site-review-status" role="status" aria-live="polite"></p>
+                </fieldset>
               </div>
             </details>
             <p id="review-config" class="review-config">Stockfish 18 · Standard · 3 lines</p>
@@ -80,7 +88,7 @@
       </div>
     </section>
   </section>
-  <footer><span>MeowlChess v1.4.0 · Local analysis · <button id="open-tutorial" class="footer-link" type="button" disabled aria-haspopup="dialog" aria-controls="tutorial-dialog">Tutorial</button></span><span>Completed games only · <a href="https://www.chess.com/legal/fair-play" target="_blank" rel="noopener noreferrer">Fair play</a></span></footer>
+  <footer><span>MeowlChess v1.5.0 · Local analysis · <button id="open-tutorial" class="footer-link" type="button" disabled aria-haspopup="dialog" aria-controls="tutorial-dialog">Tutorial</button></span><span>Completed games only · <a href="https://www.chess.com/legal/fair-play" target="_blank" rel="noopener noreferrer">Fair play</a></span></footer>
 </main>
 
 <dialog id="library-dialog" class="library-dialog" aria-labelledby="library-title">

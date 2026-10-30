@@ -9,6 +9,7 @@ import { gradeRetry } from './lib/practice.js';
 import { explainConsequence } from './lib/tactics.js';
 import { importPgnCollection, importPgnFiles, PGN_IMPORT_MAX_BYTES } from './lib/pgn-import.js';
 import { createTutorial } from './lib/tutorial.js';
+import { createSiteReviewSettings } from './lib/site-settings.js';
 import { createReviewLibrary } from './lib/library.js';
 const reviewLibrary = createReviewLibrary({ analysisVersion: ANALYSIS_VERSION });
 
@@ -18,6 +19,7 @@ const tutorial = createTutorial({
   onOpen: () => { stopPlayback(); updateControls(); },
   onSaveError: message => { $('save-status').textContent = message; }
 });
+const siteSettings = createSiteReviewSettings();
 const lineColors = ['#96bc4b', '#55a7d7', '#efa64a'];
 const badgeDescriptions = { Book: 'A recorded opening move without a detected tactical error', Brilliant: 'Sound sacrifice in the engine line', Great: 'Best reply after an opponent’s error', Best: 'The engine’s first choice', Excellent: 'Almost no estimated loss', Good: 'A reasonable move', Inaccuracy: 'A small missed opportunity', Mistake: 'A significant loss of chances', Blunder: 'A large loss of chances' };
 function makeBadge(label, extraClass = '') {
@@ -81,6 +83,7 @@ function displayEvaluation(evaluation) {
 }
 function updateControls() {
   const unavailable = state.starting || state.busy || state.loading || !!state.positionController || !!state.retry?.controller || state.libraryBusy || state.importing;
+  siteSettings.setBusy(unavailable);
   $('library-toggle').disabled = unavailable;
   $('open-tutorial').disabled = unavailable || !tutorial.ready || !!state.retry;
   $('summary-tab').disabled = !state.result || !!state.retry;
@@ -1002,8 +1005,19 @@ async function initializeReview() {
   } catch { /* The game picker remains usable when preferences are unavailable. */ }
   syncEngine(); syncSource(); renderMoves(); renderBoard();
   // Finish the optional guide before opening Games or fetching a remembered account.
-  await tutorial.start();
+  const query = new URLSearchParams(location.search);
+  const requestedReview = query.get('reviewId');
+  const openSiteSettings = query.get('siteSettings') === '1';
+  const validReview = /^game-[a-f0-9]{64}$/.test(requestedReview || '');
+  await tutorial.start({ autoOpen: !validReview && !openSiteSettings });
   state.starting = false; updateControls();
+  if (validReview) { await openSavedReview(requestedReview); return; }
+  if (openSiteSettings) {
+    $('review-settings').open = true;
+    document.querySelector('.site-review-settings').scrollIntoView({ block: 'center' });
+    $('site-chesscom-enabled').focus({ preventScroll: true });
+    return;
+  }
   if (remembered && !$('username').value && !state.selected && !state.loading) {
     $('username').value = remembered; setLibraryOpen(true); loadGames();
   } else if (!state.selected) setLibraryOpen(true);

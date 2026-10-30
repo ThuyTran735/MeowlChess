@@ -97,12 +97,12 @@ export function createTutorial({ onOpen = () => {}, onSaveError = () => {} } = {
 
   return {
     get ready() { return ready; },
-    async start() {
+    async start({ autoOpen = true } = {}) {
       try { optedOut = await readPreference(); }
       catch { showStatus('Your saved tutorial preference could not be read. You can still skip this guide.'); }
       ready = true;
       dialog.dataset.ready = 'true';
-      if (!optedOut) await open();
+      if (autoOpen && !optedOut) await open();
     }
   };
 }

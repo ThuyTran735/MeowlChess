@@ -1,6 +1,6 @@
 # MeowlChess privacy notice
 
-MeowlChess is an independent browser extension for local analysis of completed chess games. It is not affiliated with Chess.com or Lichess. This notice describes version 1.4.0.
+MeowlChess is an independent browser extension for local analysis of completed chess games. It is not affiliated with Chess.com or Lichess. This notice describes version 1.5.0.
 
 ## Game data
 
@@ -10,13 +10,13 @@ You can also choose, drag and drop, or paste PGNs exported from other websites, 
 
 ## Local storage and processing
 
-The extension saves website selection, remembered website inputs, engine choice, thinking time, line count, selective recheck setting, board orientation preference, arrow mode, badge/coordinate visibility, playback speed, and the tutorial’s **Never show again** choice in `chrome.storage.local`. A browser preview without extension storage keeps the tutorial choice in localStorage instead. These preferences are not synced to a MeowlChess account or sent to an analysis service.
+The extension saves website selection, remembered website inputs, engine choice, thinking time, line count, selective recheck setting, board orientation preference, arrow mode, badge/coordinate visibility, playback speed, the tutorial’s **Never show again** choice, and separate on-site review toggles and usernames in `chrome.storage.local`. A browser preview without extension storage keeps the tutorial choice in localStorage instead. These preferences are not synced to a MeowlChess account or sent to an analysis service.
 
 Successful full reviews are automatically saved in the extension's **local IndexedDB**. Each record includes the PGN, player/source information, evaluations and engine continuations, move classifications, summary scores, opening metadata, engine settings and analysis version, saved timestamps, and bookmarked positions. Re-reviewing the same game replaces its saved analysis and retains its bookmarks. The Practice list is derived from mistakes and bookmarks in these saved records.
 
 Saved reviews persist after the tab closes. The library is separate for each browser profile; MeowlChess does not sync it between browsers, devices, or accounts. It is capped at **100 reviews**, **40 MiB** of serialized review data in total, and **4 MiB** per record. MeowlChess does not automatically evict old reviews or bookmarks. If its limits or the browser's available storage prevent a save, it reports the failure and keeps the current review open.
 
-Fetched games that have not been reviewed, temporary analysis variations, retry attempts and feedback, and extra position searches remain in the open tab's memory. They are not added to saved records. Returning to the review closes the current variation or retry. Closing the tab discards its remaining in-memory data and stops its active engines. This does not delete an already saved full review.
+Completed-game API responses and temporary handles for optional page reviews are kept in the extension's browser session storage, capped at 700 KB and cleared when the browser restarts. This can include completed-game PGNs and player information, but not private Lichess player keys. It lets an open summary survive an extension background restart. This temporary data is not uploaded or added to the saved library unless a review finishes. Games fetched in the full review page that have not been reviewed, temporary analysis variations, retry attempts and feedback, and extra position searches remain in the open tab's memory. They are not added to saved records. Returning to the review closes the current variation or retry. Closing the tab discards its remaining in-memory data and stops its active engines. This does not delete an already saved full review.
 
 Stockfish, Lozza, chess.js, opening data, piece images, and icons are bundled. There are no runtime code, model, opening-data, font, or artwork downloads. Game review, selective rechecks, opening recognition, practice grading, and continuation explanations all run on your device.
 
@@ -30,14 +30,20 @@ Opening an original game, documentation, or policy link makes a normal browser n
 
 - `storage`: local preferences. Saved reviews also use the browser's built-in IndexedDB storage for the extension.
 - `https://api.chess.com/*`: public Chess.com game archives.
-- `https://lichess.org/api/games/user/*` and `https://lichess.org/game/export/*`: Lichess public game exports.
+- `https://lichess.org/api/games/user/*` and `https://lichess.org/game/export/*`: Lichess public game exports. Chrome host permissions apply to the origin, even when a manifest entry includes a path.
+- Optional `scripting`, `https://www.chess.com/*`, `https://chess.com/*`, and `https://lichess.org/*`: requested when you enable the corresponding on-site review setting. These allow the extension to show its dropdown on that site.
 
-There are no content scripts or requests for account credentials, private messages, browsing history, or live game-page access. Use only finished games; imported PGN results cannot be independently verified against their original site.
+On-site reviews are off by default. With your setting and browser permission, an isolated content script runs on the selected site. It checks the current URL and visible game-end notices, then displays a dropdown. It does not read live board positions, clocks, account credentials, private messages, or browsing history. Lichess private player suffixes are stripped before game URLs are retained or matched. Public API requests omit login credentials.
+
+Only a matching, legally replayable completed-game archive entry can start analysis. The engine runs inside an extension-origin frame. That frame loads and saves completed reviews through the extension background service worker, which verifies the page review and writes to the same local IndexedDB library used by the full review page. The website receives no PGN, analysis, or engine lines through messaging. The frame sends only its height and a close request to the page helper. The dropdown replaces its progress indicator with a completed summary. Successful automatic reviews use the same local library described above and reuse a current saved review when available.
+
+Turning a site off removes its dropdown and stops future injection. Closing the panel, hiding or leaving its page, or disabling it stops its active engine. No partial review is saved. Use only finished games; imported PGN results cannot be independently verified against their original site.
 
 ## Control and deletion
 
 - **Delete a saved game:** use its **×** button under Saved reviews. This removes the stored PGN, analysis, and associated bookmarks. If that game is still open, it remains in memory until you close or replace it; reviewing it again will save it again.
 - **Remove one bookmark:** open its position and click **Bookmarked** to toggle it off.
+- **Turn off on-site reviews:** uncheck the site in Settings → On-site reviews. Existing saved reviews remain in your local library. You can also revoke the optional site access through the browser's extension settings.
 - **Update preferences:** change Settings or enter a replacement website username or game link and load games.
 - **Remove all local extension data:** uninstall MeowlChess from that browser profile. This removes its local preferences and saved library. Closing or reloading a review tab does not delete saved reviews; reloading the unpacked extension is an update step, not a deletion step.
 

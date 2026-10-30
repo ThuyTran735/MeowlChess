@@ -215,3 +215,49 @@ test('opening-book moves retain null study scores and the analysis schema/versio
   await assert.rejects(library.saveReview(importPgn(PGN), result, { ...settings, analysisVersion: 'wrong-version' }), error => error.code === 'invalid');
   await assert.rejects(library.saveReview(importPgn(PGN), result, { ...settings, smartAnalysis: true }), error => error.code === 'invalid');
 });
+
+test('an automatic save preserves a manual review committed while its write is waiting', async () => {
+  const store = memoryStore(), data = await fixture();
+  let release, entered;
+  const waiting = new Promise(resolve => { entered = resolve; });
+  const delayed = { ...store, async transact(update) {
+    entered();
+    await new Promise(resolve => { release = resolve; });
+    return store.transact(update);
+  } };
+  const automatic = create(delayed, { now: () => 1000 });
+  const manual = create(store, { now: () => 2000 });
+  const pending = automatic.saveReview(data.game, data.result, SETTINGS, { preserveCurrent: true });
+  await waiting;
+  const deep = await manual.saveReview(data.game, data.result, { ...SETTINGS, moveTimeMs: 3000 });
+  await manual.toggleBookmark(deep.id, 1, { note: 'Keep this manual review' });
+  release();
+  const retained = await pending;
+  assert.equal(retained.analysis.moveTimeMs, 3000);
+  assert.equal(retained.updatedAt, deep.updatedAt);
+  assert.equal(retained.bookmarks[0].note, 'Keep this manual review');
+  assert.equal((await manual.loadReview(deep.id)).analysis.moveTimeMs, 3000);
+  const replaced = await manual.saveReview(data.game, data.result, { ...SETTINGS, moveTimeMs: 50 });
+  assert.equal(replaced.analysis.moveTimeMs, 50, 'Explicit manual reviews retain their overwrite behavior.');
+});
+
+test('preserving a current review deeply validates its lines and canonical game identity', async () => {
+  for (const corrupt of [
+    record => { record.result.positions[0].pv = ['a1a8']; },
+    record => { record.game.pgn = record.game.pgn.replace('Alice', 'Carol'); },
+  ]) {
+    const store = memoryStore(), data = await fixture(), library = create(store);
+    const saved = await library.saveReview(data.game, data.result, SETTINGS);
+    corrupt(store.records.get(saved.id));
+    await assert.rejects(library.saveReview(data.game, data.result, SETTINGS, { preserveCurrent: true }), error => error.code === 'corrupt');
+  }
+});
+
+test('automatic preservation replaces a valid stale analysis instead of keeping it current', async () => {
+  const store = memoryStore(), data = await fixture();
+  const oldResult = copy(data.result); oldResult.analysis.version = 'old-analysis';
+  await createReviewLibrary({ store, analysisVersion: 'old-analysis' }).saveReview(data.game, oldResult, { ...SETTINGS, analysisVersion: 'old-analysis' });
+  const current = await create(store).saveReview(data.game, data.result, SETTINGS, { preserveCurrent: true });
+  assert.equal(current.stale, false);
+  assert.equal(current.analysis.analysisVersion, 'test-v1');
+});
