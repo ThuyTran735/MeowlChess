@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MeowlChess — Game Review</title><link rel="icon" type="image/png" href="icons/icon32.png"><link rel="stylesheet" href="review.css">
+</head>
+<body>
+<header class="topbar"><a class="brand" href="review.html"><img src="icons/icon128.png" width="44" height="44" alt="">Meowl<span>Chess</span></a><span class="header-title">Game Review</span><span class="local-pill"><i></i> Local analysis</span><a class="rules-link" href="https://www.chess.com/legal/fair-play" target="_blank" rel="noopener noreferrer">Fair play ↗</a></header>
+<main>
+<section class="intro"><h1>Game review</h1><span class="engine-chip">Stockfish 18 <span>Completed games only</span></span></section>
+<section class="workspace" aria-label="Game review">
+<aside class="library-panel">
+<div class="panel-heading"><span aria-hidden="true">▦</span><h2>Your games</h2></div><p class="muted">Recent Chess.com games</p>
+<form id="username-form"><label for="username">Chess.com username</label><div class="input-group"><input id="username" name="username" placeholder="Enter your username" autocomplete="username" maxlength="50" required><button id="load-button" type="submit" aria-label="Find completed games" title="Find completed games">→</button></div></form>
+<p class="helper">No login needed. Completed games only.</p><div class="library-heading"><h3>RECENT GAMES</h3><span id="game-count">—</span></div>
+<p id="library-status" class="muted" role="status">Enter a username to load completed games.</p><div id="games" class="game-list" aria-label="Completed games"></div>
+<button id="demo-button" class="demo-button" type="button"><span>Try a sample game</span><span>↗</span></button>
+<div class="privacy-note"><p>Analysis runs on your device.<br>No subscription or account access.</p></div>
+</aside>
+<section class="study-panel">
+<div class="study-title"><div><span id="game-kind" class="eyebrow">GAME</span><h2 id="game-title">No game selected</h2><p id="game-subtitle" class="muted">Choose a finished game, or try the sample.</p></div><button id="flip-button" class="icon-button" type="button" aria-label="Flip board" title="Flip board">⇅</button></div>
+<div class="board-layout"><div class="board-column">
+<div class="player-line"><span class="player-avatar" aria-hidden="true">♚</span><strong id="top-player">Black</strong><span id="top-rating"></span><span id="top-score" class="player-score"></span></div>
+<div class="board-with-eval"><div class="eval-bar" aria-label="Position evaluation"><div id="eval-white"></div><span id="eval-text">—</span></div><div id="board" class="board" role="img" aria-label="Chess board in starting position"></div></div>
+<div class="player-line bottom-player"><span class="player-avatar white-avatar" aria-hidden="true">♔</span><strong id="bottom-player">White</strong><span id="bottom-rating"></span><span id="bottom-score" class="player-score"></span></div>
+<div class="board-controls"><span id="position-label" aria-live="polite" aria-atomic="true">Starting position</span><div><button id="first-button" class="nav-button" type="button" aria-label="First position" title="First position (Home)">⇤</button><button id="previous-button" class="nav-button" type="button" aria-label="Previous move" title="Previous move (←)">‹</button><button id="next-button" class="nav-button" type="button" aria-label="Next move" title="Next move (→)">›</button><button id="last-button" class="nav-button" type="button" aria-label="Last position" title="Last position (End)">⇥</button></div></div>
+<div class="chart-panel"><div class="library-heading"><h3>EVALUATION</h3><span>White’s advantage ↑</span></div><div id="eval-chart" class="eval-chart" aria-label="Evaluation history"><p>Evaluation graph appears after review.</p></div></div><p class="keyboard-hint">← → Step through moves <span>•</span> Click the graph to explore</p>
+</div><div class="insights-column">
+<div class="analysis-box"><div class="review-heading"><img src="icons/icon48.png" width="34" height="34" alt=""><div><span class="eyebrow">ANALYSIS</span><span class="review-engine">Stockfish 18 · local</span></div><span id="insight-badge" class="move-badge insight-badge" hidden></span></div>
+<h3 id="insight-title">No game selected</h3><p id="insight-text">Select a game to review its moves.</p><div id="best-move" class="best-move" hidden></div>
+<div class="review-options"><label for="depth">Analysis time</label><select id="depth"><option value="150">Quick · 0.15 sec / position</option><option value="500">Deeper · 0.5 sec / position</option></select></div><button id="analyze-button" class="primary-button" type="button" disabled>Review game <span>↗</span></button><button id="cancel-button" class="cancel-button" type="button" hidden>Cancel review</button><div id="progress-area" hidden><progress id="progress" max="100" value="0"></progress><p id="progress-text" role="status">Starting local engine…</p></div><p id="review-status" class="review-status" role="status"></p></div>
+<div id="summary" class="summary" hidden></div><div id="key-moments" class="key-moments" hidden><span>Key moments</span><button id="previous-key" type="button" aria-label="Previous key moment">‹</button><button id="next-key" type="button" aria-label="Next key moment">›</button></div>
+<div class="move-section"><div class="library-heading"><h3>MOVES</h3><span id="move-count">0 moves</span></div><div id="move-list" class="move-list"><p class="muted move-empty">Your game’s moves will appear here.</p></div></div>
+<details class="legend"><summary>What do the move badges mean?</summary><div id="classification-legend"></div><p>MeowlChess estimates, not Chess.com ratings. Brilliant and Great use conservative local heuristics; deeper analysis can change a label.</p></details>
+</div></div><div id="error" class="error-message" role="alert" hidden></div>
+</section></section>
+<footer><span><strong>MeowlChess</strong> v1.0.0 · Local game analysis</span><span>Independent of Chess.com. For completed games only.</span></footer>
+</main><script type="module" src="review.js"></script></body></html>

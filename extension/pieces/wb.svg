@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="White bishop">
+  <title>White bishop</title>
+  <!-- Original MeowlChess vector artwork. GPL-3.0-or-later. -->
+  <defs><linearGradient id="body" x1="0" y1="0" x2="0.85" y2="1"><stop stop-color="#fffdf5"/><stop offset="1" stop-color="#e8e5d9"/></linearGradient></defs>
+  <ellipse cx="50" cy="88" rx="34" ry="5" fill="#182019" opacity=".16"/>
+  <g fill="url(#body)" stroke="#383b33" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M50 15c-5 7-18 13-18 25 0 8 8 13 18 13s18-5 18-13c0-12-13-18-18-25Z"/><circle cx="50" cy="13" r="4.8"/><path d="m56 27-12 17" fill="none"/><path d="M42 52h16c-1 8 1 13 8 20H34c7-7 9-12 8-20Z"/><path d="M35 69h30l5 8H30Z"/>
+    <path d="M29 76h42c3 0 4 4 5 7l2 5H22l2-5c1-3 2-7 5-7Z"/>
+    <path d="M27 83h46" fill="none" stroke="#c9c9bc" stroke-width="1.5"/>
+  </g>
+  
+</svg>

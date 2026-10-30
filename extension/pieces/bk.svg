@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Black king">
+  <title>Black king</title>
+  <!-- Original MeowlChess vector artwork. GPL-3.0-or-later. -->
+  <defs><linearGradient id="body" x1="0" y1="0" x2="0.85" y2="1"><stop stop-color="#5b5b55"/><stop offset="1" stop-color="#30322f"/></linearGradient></defs>
+  <ellipse cx="50" cy="88" rx="34" ry="5" fill="#182019" opacity=".16"/>
+  <g fill="url(#body)" stroke="#20231f" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M46 7h8v7h8v8h-8v9h-8v-9h-8v-8h8Z"/><path d="M50 35c-13-18-31-3-22 9l9 12h26l9-12c9-12-9-27-22-9Z"/><path d="M38 54h24c-1 8 0 12 5 19H33c5-7 6-11 5-19Z"/><path d="M37 54h26M39 60h22" fill="none"/><path d="M32 70h36l5 7H27Z"/>
+    <path d="M29 76h42c3 0 4 4 5 7l2 5H22l2-5c1-3 2-7 5-7Z"/>
+    <path d="M27 83h46" fill="none" stroke="#71716a" stroke-width="1.5"/>
+  </g>
+  
+</svg>

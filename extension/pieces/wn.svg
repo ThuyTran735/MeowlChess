@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="White knight">
+  <title>White knight</title>
+  <!-- Original MeowlChess vector artwork. GPL-3.0-or-later. -->
+  <defs><linearGradient id="body" x1="0" y1="0" x2="0.85" y2="1"><stop stop-color="#fffdf5"/><stop offset="1" stop-color="#e8e5d9"/></linearGradient></defs>
+  <ellipse cx="50" cy="88" rx="34" ry="5" fill="#182019" opacity=".16"/>
+  <g fill="url(#body)" stroke="#383b33" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M29 74c1-12 5-23 14-33l-10 5-12-2-5-9 18-17 5-9 11 7c17 2 29 16 29 33 0 9-4 18-7 25Z"/><path d="m40 17 3 8-7 2" fill="none"/><path d="M48 36c-1 15 12 15 10 34" fill="none"/><path d="M28 70h44l3 7H25Z"/>
+    <path d="M29 76h42c3 0 4 4 5 7l2 5H22l2-5c1-3 2-7 5-7Z"/>
+    <path d="M27 83h46" fill="none" stroke="#c9c9bc" stroke-width="1.5"/>
+  </g>
+  <circle cx="39" cy="32" r="2.5" fill="#41443a"/><path d="m21 38 6 1" stroke="#383b33" stroke-width="2" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "MeowlChess — Free Post-Game Analysis",
+  "description": "Independent local Stockfish analysis of completed Chess.com games. No subscriptions, no live-game assistance.",
+  "version": "1.0.0",
+  "minimum_chrome_version": "109",
+  "permissions": ["storage"],
+  "host_permissions": ["https://api.chess.com/*"],
+  "action": {
+    "default_title": "Open MeowlChess",
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+  },
+  "background": { "service_worker": "background.js" },
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://api.chess.com; worker-src 'self'"
+  }
+}
