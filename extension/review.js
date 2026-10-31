@@ -10,6 +10,7 @@ import { explainConsequence } from './lib/tactics.js';
 import { importPgnCollection, importPgnFiles, PGN_IMPORT_MAX_BYTES } from './lib/pgn-import.js';
 import { createTutorial } from './lib/tutorial.js';
 import { createSupportPrompt } from './lib/support-prompt.js';
+import { createMoveNotation } from './lib/move-notation.js';
 import { createSiteReviewSettings } from './lib/site-settings.js';
 import { createReviewLibrary } from './lib/library.js';
 const reviewLibrary = createReviewLibrary({ analysisVersion: ANALYSIS_VERSION });
@@ -34,6 +35,23 @@ function pieceImage(color, type) {
 }
 let renderedBoard = null;
 const savedUsernames = {};
+let usernameSource = 'chesscom', usernameSaveQueue = Promise.resolve();
+function rememberUsername(source, value) {
+  const username = value.trim();
+  savedUsernames[source] = username;
+  if (!globalThis.chrome?.storage?.local) return Promise.resolve();
+  // Merge the latest provider entries so another review tab's input is retained.
+  usernameSaveQueue = usernameSaveQueue.then(async () => {
+    const stored = await chrome.storage.local.get(['username', 'usernames']);
+    const usernames = {};
+    if (stored.usernames && typeof stored.usernames === 'object') {
+      for (const provider of ['chesscom', 'lichess']) if (typeof stored.usernames[provider] === 'string') usernames[provider] = stored.usernames[provider];
+    } else if (typeof stored.username === 'string') usernames.chesscom = stored.username;
+    usernames[source] = username;
+    await chrome.storage.local.set({ usernames, ...(source === 'chesscom' ? { username } : {}) });
+  }).catch(() => {});
+  return usernameSaveQueue;
+}
 function selectedEngine() { return ENGINE_OPTIONS.find(engine => engine.id === $('engine').value) || ENGINE_OPTIONS[0]; }
 function syncEngine() {
   const engine = selectedEngine();
@@ -210,7 +228,8 @@ function renderBoard() {
   }
   renderedBoard = { game: state.selected, ply: positionIndex(), flipped: state.flipped, study: state.study?.line };
   board.setAttribute('aria-label', `Chess board ${state.study ? `in ${state.retry ? 'practice' : 'variation'}, step ${state.study.line.cursor}` : state.ply ? `after move ${state.ply}: ${move.san}` : 'in starting position'}. FEN: ${chess.fen()}`);
-  $('position-label').textContent = move ? `${move.before.split(' ')[5]}${move.color === 'w' ? '.' : '…'} ${move.san}` : state.study ? 'Line starts here' : 'Starting position';
+  if (move) $('position-label').replaceChildren(`${move.before.split(' ')[5]}${move.color === 'w' ? '.' : '…'} `, createMoveNotation(move.san, move.color));
+  else $('position-label').textContent = state.study ? 'Line starts here' : 'Starting position';
   const evaluation = currentEvaluation();
   $('eval-text').textContent = displayEvaluation(evaluation);
   const cp = evaluation?.cp || 0;
@@ -254,9 +273,9 @@ function renderInsight() {
   }
   $('best-move').hidden = !reviewMove?.bestSan || reviewMove.bestSan === reviewMove.san;
   if (reviewMove) {
-    $('insight-title').textContent = `${reviewMove.san} · ${reviewMove.label}`;
+    $('insight-title').replaceChildren(createMoveNotation(reviewMove.san, reviewMove.color), ` · ${reviewMove.label}`);
     $('insight-text').textContent = reviewMove.explanation || `Estimated evaluation loss: ${(reviewMove.loss / 100).toFixed(2)} pawns.`;
-    $('best-move').textContent = `Engine's choice: ${reviewMove.bestSan}`;
+    $('best-move').replaceChildren("Engine's choice: ", createMoveNotation(reviewMove.bestSan, reviewMove.color));
   } else if (state.result) {
     $('insight-title').textContent = 'Starting position';
     $('insight-text').textContent = 'Select a move or use the arrows to step through the game. Evaluations are from White’s perspective.';
@@ -280,7 +299,7 @@ function renderMoves() {
       previousNumber = moveNumber;
     }
     const button = document.createElement('button'); button.type = 'button'; button.className = 'move-button'; button.dataset.ply = String(index + 1);
-    const san = document.createElement('span'); san.textContent = move.san; button.append(san);
+    button.append(createMoveNotation(move.san, move.color));
     const reviewMove = state.result?.moves[index];
     if (reviewMove && $('show-badges').checked) button.append(makeBadge(reviewMove.label));
     button.setAttribute('aria-label', `Move ${moveNumber}, ${move.color === 'w' ? 'White' : 'Black'}: ${move.san}${reviewMove ? `, ${reviewMove.label}` : ''}`);
@@ -362,10 +381,12 @@ function lineNotation(candidate) {
     try {
       const number = chess.fen().split(' ')[5], turn = chess.turn();
       const move = chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
-      parts.push(`${turn === 'w' ? `${number}. ` : parts.length ? '' : `${number}… `}${move.san}`);
+      parts.push({ prefix: turn === 'w' ? `${number}. ` : parts.length ? '' : `${number}… `, san: move.san, color: move.color });
     } catch { break; }
   }
-  return parts.join(' ');
+  const fragment = document.createDocumentFragment();
+  parts.forEach((move, index) => fragment.append(index ? ' ' : '', move.prefix, createMoveNotation(move.san, move.color)));
+  return fragment;
 }
 function renderEngineLines() {
   const candidates = currentCandidates();
@@ -385,7 +406,7 @@ function renderEngineLines() {
     button.title = 'Hover for its arrow; click to play through this line';
     const rank = document.createElement('span'); rank.className = 'line-rank'; rank.textContent = String(candidate.rank);
     const score = document.createElement('strong'); score.className = 'line-score'; score.textContent = displayEvaluation(candidate);
-    const notation = document.createElement('span'); notation.className = 'line-notation'; notation.textContent = lineNotation(candidate);
+    const notation = document.createElement('span'); notation.className = 'line-notation'; notation.append(lineNotation(candidate));
     button.append(rank, score, notation);
     const preview = () => { state.hoverLine = candidate.rank; renderEngineArrows(currentCandidates()); };
     const clear = () => { state.hoverLine = null; renderEngineArrows(currentCandidates()); };
@@ -521,7 +542,8 @@ function renderGames() {
 }
 async function loadGames() {
   if (state.busy || state.loading) return;
-  const username = $('username').value.trim();
+  const source = $('game-source').value, username = $('username').value.trim();
+  void rememberUsername(source, username);
   if (!username) return;
   stopPlayback(); cancelPositionSearch(); resetExploration(); state.positionAnalysis.clear(); state.branchAnalysis.clear(); state.selectedLine = null;
   state.loading = true; state.games = []; state.selected = null; state.parsed = null; state.result = null; state.ply = 0; state.opening = null; state.reviewId = null; state.bookmarks = [];
@@ -530,9 +552,7 @@ async function loadGames() {
   $('review-status').textContent = ''; $('progress-area').hidden = true;
   $('library-status').textContent = 'Finding your completed games…';
   try {
-    state.games = await fetchGames($('game-source').value, username);
-    savedUsernames[$('game-source').value] = username;
-    if (globalThis.chrome?.storage?.local) await chrome.storage.local.set({ username, usernames: savedUsernames }).catch(() => {});
+    state.games = await fetchGames(source, username);
     savePreferences();
     renderGames();
     $('library-status').textContent = state.games.length ? 'Choose a game to explore.' : 'No recent completed standard games found. Newly finished games may take time to appear.';
@@ -619,7 +639,9 @@ function renderStudyControls() {
     if (!answersHidden()) {
       const start = document.createElement('button'); start.type = 'button'; start.textContent = 'Start'; start.classList.toggle('active', study.line.cursor === 0); start.addEventListener('click', () => navigatePosition(0)); $('study-moves').append(start);
       study.line.moves.forEach((move, index) => {
-        const button = document.createElement('button'); button.type = 'button'; button.textContent = `${move.before.split(' ')[5]}${move.color === 'w' ? '.' : '…'} ${move.san}`;
+        const button = document.createElement('button'); button.type = 'button';
+        button.append(`${move.before.split(' ')[5]}${move.color === 'w' ? '.' : '…'} `, createMoveNotation(move.san, move.color));
+        button.setAttribute('aria-label', `${move.before.split(' ')[5]}${move.color === 'w' ? '.' : '…'} ${move.san}`);
         button.classList.toggle('active', study.line.cursor === index + 1); button.addEventListener('click', () => navigatePosition(index + 1)); $('study-moves').append(button);
       });
     }
@@ -868,6 +890,7 @@ document.querySelector('.review-tabs').addEventListener('keydown', event => {
 $('library-toggle').addEventListener('click', () => setLibraryOpen($('library-toggle').getAttribute('aria-expanded') !== 'true'));
 $('close-library').addEventListener('click', () => setLibraryOpen(false));
 $('library-dialog').addEventListener('close', () => $('library-toggle').setAttribute('aria-expanded', 'false'));
+$('username').addEventListener('change', () => { void rememberUsername(usernameSource, $('username').value); });
 $('username-form').addEventListener('submit', event => { event.preventDefault(); loadGames(); });
 $('demo-button').addEventListener('click', () => selectGame(sample));
 $('analyze-button').addEventListener('click', review);
@@ -881,7 +904,12 @@ $('previous-key').addEventListener('click', () => { const ply = keyPlies().filte
 $('next-key').addEventListener('click', () => { const ply = keyPlies().find(p => p > state.ply); if (ply != null) goTo(ply); });
 $('deepen-button').addEventListener('click', () => deepenPosition(false));
 $('quick-position').addEventListener('click', () => deepenPosition(true));
-$('game-source').addEventListener('change', () => { syncSource(); $('username').value = savedUsernames[$('game-source').value] || ''; savePreferences(); $('library-status').textContent = 'Enter a username to find completed games.'; });
+$('game-source').addEventListener('change', () => {
+  void rememberUsername(usernameSource, $('username').value);
+  usernameSource = $('game-source').value;
+  syncSource(); $('username').value = savedUsernames[usernameSource] ?? ''; savePreferences();
+  $('library-status').textContent = 'Enter a username to find completed games.';
+});
 function importUnavailable() { return state.busy || state.loading || state.importing || state.libraryBusy || state.positionController || state.retry?.controller; }
 function renderImportedGames(collection) {
   state.importGames = collection.games;
@@ -1005,6 +1033,8 @@ async function initializeReview() {
       remembered = savedUsernames[$('game-source').value];
     }
   } catch { /* The game picker remains usable when preferences are unavailable. */ }
+  usernameSource = $('game-source').value;
+  $('username').value = remembered ?? '';
   syncEngine(); syncSource(); renderMoves(); renderBoard();
   // Finish the optional support prompt and guide before opening Games or fetching a remembered account.
   const query = new URLSearchParams(location.search);
@@ -1022,8 +1052,8 @@ async function initializeReview() {
     $('site-chesscom-enabled').focus({ preventScroll: true });
     return;
   }
-  if (remembered && !$('username').value && !state.selected && !state.loading) {
-    $('username').value = remembered; setLibraryOpen(true); loadGames();
+  if (remembered && !state.selected && !state.loading) {
+    setLibraryOpen(true); loadGames();
   } else if (!state.selected) setLibraryOpen(true);
 }
 initializeReview();

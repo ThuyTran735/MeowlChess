@@ -160,6 +160,9 @@ progress::-webkit-progress-value { background: var(--green); }
 .move-button:hover { background: #444b38; }
 .move-button.active { background: #526440; color: white; }
 .move-button .move-badge { width: 20px; height: 20px; }
+.move-notation { display: inline-block; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.notation-piece { display: inline-block; width: 1.3em; height: 1.3em; margin-right: .04em; vertical-align: -.22em; overflow: visible; pointer-events: none; }
+.move-button > .move-notation { flex-shrink: 0; }
 .engine-panel { border-top: 1px solid var(--line); }
 .engine-panel > summary { padding: 11px 13px; font-size: 12px; color: #c5ceb9; }
 .engine-body { padding: 0 13px 13px; }

@@ -72,7 +72,9 @@ The move-badge SVGs in `extension/move-icons/` use symbol contours extracted fro
 - Font source: https://www.chess.com/bundles/web/fonts/chessglyph-v3/chessglyph-v3.274864ae.woff
 - Palette reference: https://www.chess.com/bundles/app/vite/main-global-styles.HF1rcCqZrQ.css
 
-These third-party artwork files are not authored by MeowlChess and are excluded from MeowlChess's GPL code-license grant. No redistribution permission or other license grant from Chess.com is asserted here. The original font is not bundled; the SVGs contain the used outlines. MeowlChess does not claim endorsement by Chess.com.
+These third-party artwork files are not authored by MeowlChess and are excluded from MeowlChess's GPL code-license grant. No redistribution permission or other license grant from Chess.com is asserted here. The small filled and outlined piece symbols used in move notation are also extracted from that font. Their paths are bundled in `extension/lib/figurine-paths.js` and rendered as inline SVG.
+
+The original font is not bundled; only the used outlines are included. MeowlChess does not claim endorsement by Chess.com.
 
 ## Meowl / Melonpi Cat
 

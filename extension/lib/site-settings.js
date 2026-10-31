@@ -61,8 +61,10 @@ export function createSiteReviewSettings() {
       const values = await chrome.storage.local.get(['siteReviewSettings', 'usernames', 'username']);
       settings = normalizeSiteSettings(values.siteReviewSettings);
       for (const [source, { username }] of Object.entries(controls)) {
-        const remembered = values.usernames?.[source] || (source === 'chesscom' ? values.username : '') || '';
+        const hasUsernames = values.usernames && typeof values.usernames === 'object';
+        const remembered = hasUsernames ? values.usernames[source] : source === 'chesscom' ? values.username : '';
         const candidate = normalizeSiteSettings({ [source]: { username: remembered } })[source].username;
+        // Empty normalized site defaults may use picker history; an empty picker entry stays empty.
         username.value = settings[source].username || candidate;
       }
       chrome.storage.onChanged.addListener((changes, area) => {

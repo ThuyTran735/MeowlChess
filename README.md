@@ -13,9 +13,9 @@
   </p>
 </div>
 
-**Version 1.6.2** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.6.2) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
+**Version 1.6.3** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.6.3) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
 
-> New in 1.6.2: an optional GitHub support popup before the tutorial, with Skip and its own Never show again preference.
+> New in 1.6.3: piece symbols in move notation and more reliable username memory across the review page and panel settings.
 
 MeowlChess runs Stockfish or Lozza on your device. No subscription, analysis-service account, or chess-site login is required. Once a game is loaded, its analysis works offline.
 
@@ -53,6 +53,10 @@ MeowlChess is distributed as an unpacked extension. It is not listed in the Chro
 1. Open **Games** and choose a website, import a PGN, or try the four-move **Sample**.
 2. Choose a completed game. Adjust the engine and speed in **Settings** if you want, then select **Review game**.
 3. The finished review opens at **move 0** on **Summary**. Switch to **Moves** to explore the game.
+
+Move notation uses small filled piece symbols for White and outlined symbols for Black, including promotions. Pawn moves and castling keep their usual notation.
+
+The game picker remembers your entry separately for Chess.com and Lichess, including when you open Settings from the on-site panel. Edits are remembered when you leave the field or switch websites, and submitting an entry saves it even if the lookup fails. Clear the field to forget that entry.
 
 The game picker closes after selection. Move through the review with the move list, arrow keys, evaluation graph, key moments, or **Play**. **Engine lines** stays collapsed until you open it.
 
@@ -253,6 +257,8 @@ npm run test:extension
 npm run test:features
 npm run test:imports
 npm run test:tutorial
+npm run test:notation
+npm run test:usernames
 npm run test:site-review
 npm run test:site-bot
 npm run test:site-panel
