@@ -5,9 +5,10 @@
   if (!source || location.protocol !== 'https:' || window !== top) return;
   const extensionOrigin = chrome.runtime.getURL('').replace(/\/$/, '');
   const tokenPattern = /^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i;
+  const lichessRoutes = new Set(['analysis', 'training', 'practice', 'features', 'insights', 'streamer', 'password', 'bookmark', 'timeline', 'settings', 'checkout', 'registration']);
   let enabled = false, username = '', generation = 0, checking = false, timer, routeTimer, observer, debounce;
   let route = pageKey(), host, shadow, body, frame, message, stageLabel, bar, launcher, token = null, gameUrl = null;
-  let panelRelease = Promise.resolve();
+  let selection = null, panelState = 'open', stateRevision = 0, stateWrite = Promise.resolve(), freshSelection = null;
   let dismissed = null, baseline = null, completedUrl = null, baselineKnown = false, hint = false, hintSince = 0, nextCheck = 0;
   let interval = source === 'chesscom' ? 60000 : 30000;
   const bot = globalThis.__meowlChessBot;
@@ -21,22 +22,44 @@
       return game ? `/game/${game[1] || 'live'}/${game[2]}` : path;
     }
     const game = path.match(/^\/([a-zA-Z0-9]{8}(?:[a-zA-Z0-9]{4})?)(?:\/(?:white|black))?\/?$/);
-    return game ? '/' + game[1].slice(0, 8) : path;
+    return game && !lichessRoutes.has(game[1].toLowerCase()) ? '/' + game[1].slice(0, 8) : path;
   }
   function liveLobby() { return source === 'chesscom' && !botPage() && /^\/(?:play|live)(?:\/|$)/.test(location.pathname); }
   function gamePage() {
-    return source === 'chesscom' ? botPage() || liveLobby() || /^\/(?:analysis\/)?game\//.test(location.pathname) : /^\/[a-zA-Z0-9]{8}(?:[a-zA-Z0-9]{4})?(?:\/(?:white|black))?\/?$/.test(location.pathname);
+    return source === 'chesscom' ? botPage() || liveLobby() || /^\/(?:analysis\/)?game\//.test(location.pathname) : Boolean(specificGameUrl());
   }
   function send(type, extra = {}) {
     try { return Promise.resolve(chrome.runtime.sendMessage({ type, ...extra })); }
     catch (error) { return Promise.reject(error); } // An extension reload can invalidate this old page helper.
   }
-  function release(value) { return value ? send('meowl:site-release', { token: value }).catch(() => {}) : Promise.resolve(); }
+  function release(value) {
+    return value ? send('meowl:site-release', { token: value.token, panelGeneration: value.panelGeneration }).catch(() => {}) : Promise.resolve();
+  }
+  function savePanelState(value) {
+    panelState = value; stateRevision++;
+    const selected = selection;
+    if (!selected) return stateWrite;
+    stateWrite = stateWrite.catch(() => {}).then(() => send('meowl:site-panel-state', {
+      token: selected.token, panelGeneration: selected.panelGeneration, panelState: value,
+    })).catch(() => {});
+    return stateWrite;
+  }
+  function forgetSelection() {
+    const previous = selection;
+    selection = freshSelection = null; panelState = 'open'; stateRevision++;
+    stateWrite = stateWrite.catch(() => {}).then(() => release(previous));
+  }
+  function collapsed(value) {
+    if (!host || !body) return;
+    body.hidden = value; host.dataset.collapsed = String(value);
+    const toggle = shadow.querySelector('button[aria-expanded]');
+    toggle.textContent = value ? '⌄' : '⌃'; toggle.setAttribute('aria-label', value ? 'Expand review' : 'Collapse review');
+    toggle.setAttribute('aria-expanded', String(!value));
+  }
   function clearPanel() {
     panelMover?.destroy(); panelMover = botForm = null;
     frame?.remove(); frame = null;
     host?.remove(); host = shadow = body = message = stageLabel = bar = null;
-    if (token) panelRelease = release(token);
     token = gameUrl = null;
   }
   function clearLauncher() { launcher?.remove(); launcher = null; }
@@ -54,8 +77,10 @@
     if (focus) open.focus({ preventScroll: true });
   }
   function dismiss() {
-    dismissed = gameUrl || 'waiting';
+    dismissed = gameUrl || selection?.gameUrl || 'waiting';
+    void savePanelState('closed');
     generation++; clearTimeout(timer); clearPanel(); showLauncher(true);
+    schedule();
   }
   async function reopenPanel() {
     if (!enabled || document.hidden) return;
@@ -63,13 +88,12 @@
     inspectPage();
     if (!dismissed) return;
     const started = ++generation;
+    await savePanelState('open');
+    if (!enabled || document.hidden || started !== generation) return;
     dismissed = null; nextCheck = 0; clearLauncher();
     if (botPage()) { botExportAttempted = Boolean(botSavedPgn); botAttemptPgn = botSavedPgn; }
-    waiting();
-    shadow?.querySelector('.brand')?.focus({ preventScroll: true });
-    // Let the closed frame release its old handle before asking for a fresh one.
-    await panelRelease;
-    if (!enabled || document.hidden || started !== generation) return;
+    if (selection) { showReview({ ...selection, resumed: true }); shadow?.querySelector('.brand')?.focus({ preventScroll: true }); }
+    else { waiting(); shadow?.querySelector('.brand')?.focus({ preventScroll: true }); }
     void check();
   }
   function button(label, text, action) {
@@ -80,6 +104,7 @@
     clearLauncher();
     if (host?.isConnected) return;
     host = document.createElement('div'); host.id = 'meowlchess-site-review'; host.dataset.collapsed = 'false';
+    if (selection?.resumed) host.dataset.restored = 'true';
     // Keep host dimensions out of the chess site's stylesheet.
     host.style.cssText = 'all:initial!important;position:fixed!important;top:76px!important;right:16px!important;width:min(360px,calc(100vw - 24px))!important;z-index:2147483646!important;display:block!important;color-scheme:dark!important;';
     shadow = host.attachShadow({ mode: 'closed' });
@@ -113,6 +138,7 @@
       .resize-handle[data-pointer-focus="true"]:focus{outline:none}
       .waiting .loading-stage{font-size:15px;font-weight:650;line-height:1.3;margin:0 0 10px}
       .brand:focus{outline:none}.brand:focus-visible{outline:2px solid #9dbb74;outline-offset:3px;border-radius:2px}.brand[data-pointer-focus="true"]:focus{outline:none}
+      :host([data-restored="true"]) .panel{animation:none}
     `;
     const panel = document.createElement('section'); panel.className = 'panel'; panel.setAttribute('aria-label', 'MeowlChess game review');
     const header = document.createElement('div'); header.className = 'head';
@@ -121,8 +147,7 @@
     const chess = document.createElement('span'); chess.textContent = 'Chess'; brand.append(chess);
     const settings = button('Page review settings', 'Settings', () => { void send('meowl:site-open-settings').catch(() => {}); }); settings.className = 'settings';
     const collapse = button('Collapse review', '⌃', () => {
-      body.hidden = !body.hidden; host.dataset.collapsed = String(body.hidden);
-      collapse.textContent = body.hidden ? '⌄' : '⌃'; collapse.setAttribute('aria-label', body.hidden ? 'Expand review' : 'Collapse review'); collapse.setAttribute('aria-expanded', String(!body.hidden));
+      collapsed(!body.hidden); void savePanelState(body.hidden ? 'collapsed' : 'open');
     }); collapse.setAttribute('aria-expanded', 'true');
     header.append(icon, brand, settings, collapse, button('Close review', '×', dismiss));
     body = document.createElement('div'); body.className = 'body';
@@ -153,13 +178,13 @@
     try {
       botPrompt(); botForm?.feedback('Reading the finished game…');
       const reply = await send('meowl:site-bot-import', { pgn });
-      if (!enabled || document.hidden || started !== generation || !botPage()) { release(reply?.token); return; }
+      if (!enabled || document.hidden || started !== generation || !botPage()) return;
       if (reply?.status !== 'ready' || reply.kind !== 'bot') throw new Error(reply?.message || 'This game could not be loaded. Choose its finished PGN export.');
-      botAttemptPgn = botSavedPgn = pgn; showReview(reply); nextCheck = Date.now() + interval;
+      botAttemptPgn = botSavedPgn = pgn; acceptReview(reply); nextCheck = Date.now() + interval;
     } finally { botSubmitting = false; }
   }
   function inspectBot() {
-    if (!enabled || document.hidden || !botPage() || dismissed || botSubmitting || botExporting) return;
+    if (!enabled || document.hidden || !botPage() || dismissed || selection || checking || freshSelection || botSubmitting || botExporting) return;
     const pgn = bot.readExport();
     if (pgn && pgn !== botAttemptPgn) {
       botAttemptPgn = pgn;
@@ -200,7 +225,23 @@
     ensurePanel(); host.dataset.state = 'review';
     frame = document.createElement('iframe'); frame.title = 'MeowlChess review progress and summary'; frame.referrerPolicy = 'origin';
     frame.src = chrome.runtime.getURL('site-summary.html') + '#' + token; frame.style.height = '270px'; body.replaceChildren(frame);
+    collapsed(panelState === 'collapsed');
     if (keepFocus) shadow.querySelector('.brand')?.focus({ preventScroll: true });
+  }
+  function acceptReview(reply, revision = stateRevision) {
+    if (!tokenPattern.test(reply.token) || typeof reply.gameUrl !== 'string') return;
+    selection = reply;
+    if (revision === stateRevision) panelState = ['open', 'collapsed', 'closed'].includes(reply.panelState) ? reply.panelState : 'open';
+    else void savePanelState(panelState);
+    if (panelState === 'closed') {
+      dismissed = reply.gameUrl; clearPanel(); showLauncher(); return;
+    }
+    dismissed = null; showReview(reply); collapsed(panelState === 'collapsed');
+  }
+  function specificGameUrl() {
+    const current = pageKey();
+    if (source === 'chesscom') return /^\/game\/(?:live|daily)\/\d+$/.test(current) ? 'https://www.chess.com' + current : null;
+    return /^\/[a-zA-Z0-9]{8}$/.test(current) && !lichessRoutes.has(current.slice(1).toLowerCase()) ? 'https://lichess.org' + current : null;
   }
   function visible(element) {
     if (!element || !element.getClientRects().length) return false;
@@ -219,20 +260,32 @@
     if (!enabled || document.hidden) return;
     const current = pageKey();
     if (current !== route) {
-      generation++; clearPanel(); clearLauncher(); route = current; dismissed = baseline = completedUrl = null; baselineKnown = false; hint = false; hintSince = 0; nextCheck = 0; botExportAttempted = false; botAttemptPgn = botSavedPgn = null;
+      generation++; route = current; nextCheck = 0;
+      const target = specificGameUrl();
+      if (target && target !== selection?.gameUrl) {
+        forgetSelection(); clearPanel(); clearLauncher(); dismissed = null;
+      }
+      baseline = completedUrl = null; baselineKnown = false;
+      // A notice already present on the destination is not a newly finished
+      // round. First let the broker restore the selected completed review.
+      hint = finishedHint(); hintSince = hint ? Date.now() : 0;
+      if (!selection) { botExportAttempted = false; botAttemptPgn = botSavedPgn = null; }
       void check();
+      return;
     }
     const nextHint = finishedHint();
     if (botPage() && hint && !nextHint) {
       // The bot page reuses its URL for a rematch. Forget the previous result
       // when its final notice disappears rather than showing it as the new game.
-      generation++; clearPanel(); clearLauncher(); botAttemptPgn = botSavedPgn = null; botExportAttempted = false; dismissed = null; nextCheck = 0;
+      generation++; forgetSelection(); clearPanel(); clearLauncher(); botAttemptPgn = botSavedPgn = null; botExportAttempted = false; dismissed = null; nextCheck = 0;
     }
     if (nextHint && !hint) {
       if (botPage()) { botExportAttempted = false; botAttemptPgn = botSavedPgn = null; }
       if (liveLobby() || botPage()) {
         // A new result notice on the play screen starts with progress, never the old summary.
-        baseline = gameUrl || completedUrl || baseline; completedUrl = null; generation++; clearPanel(); clearLauncher();
+        baseline = selection?.gameUrl || gameUrl || completedUrl || baseline; completedUrl = null;
+        freshSelection = selection; selection = null; panelState = 'open'; stateRevision++;
+        generation++; clearPanel(); clearLauncher();
       }
       hintSince = Date.now(); dismissed = null; waiting(); nextCheck = 0; void check();
       if (botPage() && body?.hidden) shadow.querySelector('button[aria-label="Expand review"]')?.click();
@@ -242,42 +295,52 @@
   }
   function schedule() {
     clearTimeout(timer);
-    if (enabled && !document.hidden && !dismissed) timer = setTimeout(() => { void check(); }, Math.max(1000, nextCheck - Date.now()));
+    if (enabled && !document.hidden && (!dismissed || selection)) timer = setTimeout(() => { void check(); }, Math.max(1000, nextCheck - Date.now()));
   }
   async function check() {
-    if (!enabled || document.hidden || checking || dismissed) return;
+    if (!enabled || document.hidden || checking || botSubmitting || (dismissed && !selection)) return;
     if (Date.now() < nextCheck) { schedule(); return; }
-    checking = true; const started = generation;
+    checking = true; const started = generation, revision = stateRevision, fresh = freshSelection;
+    // Cached selections normally return immediately. Show retrieval progress
+    // only if there is still no review to restore after that brief handshake.
+    const reveal = setTimeout(() => {
+      if (enabled && !document.hidden && started === generation && !selection && !host && !dismissed && hint) waiting();
+    }, 150);
     try {
       if (host && !frame && !botPage()) waiting();
-      const reply = await send('meowl:site-check');
+      await stateWrite;
       if (!enabled || document.hidden || started !== generation) return;
+      const reply = await send('meowl:site-check', fresh ? { fresh: true, token: fresh.token, panelGeneration: fresh.panelGeneration } : {});
+      if (!enabled || document.hidden || started !== generation) return;
+      if (freshSelection === fresh) freshSelection = null;
       interval = Math.max(15000, Math.min(300000, Number(reply?.retryAfterMs) || interval)); nextCheck = Date.now() + interval;
-      if (reply?.status === 'disabled') { clearPanel(); clearLauncher(); return; }
+      if (reply?.status === 'disabled') { selection = null; clearPanel(); clearLauncher(); return; }
       if (reply?.status === 'bot') {
+        if (selection) { selection = null; panelState = 'open'; dismissed = null; clearPanel(); clearLauncher(); }
         // Keep a small header available even if the site's end-notice layout changes.
         const first = !host; botPrompt();
         if (first && host && !hint) shadow.querySelector('button[aria-label="Collapse review"]')?.click();
         if (botSavedPgn && !dismissed && !botSubmitting) void submitBot(botSavedPgn).catch(error => botForm?.feedback(error.message));
-        else inspectBot();
       } else if (reply?.status === 'ready') {
-        if (botPage() !== (reply.kind === 'bot')) {
-          release(reply.token); if (botPage()) botPrompt(); return;
+        if (!reply.resumed && botPage() !== (reply.kind === 'bot')) {
+          release(reply); if (botPage()) botPrompt(); return;
         }
-        if (token === reply.token && frame?.isConnected) return;
-        if (liveLobby()) {
+        if (liveLobby() && !reply.resumed) {
           // Establish a baseline so the previous match never opens as the one just finished.
           if (!baselineKnown) {
             baseline = reply.gameUrl; baselineKnown = true;
             // A fresh final-result notice can predate the very first archive response.
-            if (!hintSince || reply.endTime * 1000 < hintSince - 120000) { release(reply.token); return; }
+            if (!hintSince || reply.endTime * 1000 < hintSince - 120000) { release(reply); return; }
             completedUrl = reply.gameUrl;
           }
-          if (!hintSince || (reply.gameUrl !== completedUrl && (reply.gameUrl === baseline || reply.endTime * 1000 < hintSince - 120000))) { release(reply.token); return; }
+          if (!hintSince || (reply.gameUrl !== completedUrl && (reply.gameUrl === baseline || reply.endTime * 1000 < hintSince - 120000))) { release(reply); return; }
           baseline = completedUrl = reply.gameUrl;
         }
-        if (dismissed === reply.gameUrl || dismissed === 'waiting') { release(reply.token); return; }
-        dismissed = null; showReview(reply);
+        if (liveLobby() && reply.resumed) {
+          baselineKnown = true; baseline = completedUrl = reply.gameUrl;
+        }
+        if (!reply.resumed && (dismissed === reply.gameUrl || dismissed === 'waiting')) { release(reply); return; }
+        acceptReview(reply, revision);
       } else if (reply?.status === 'waiting') {
         if (liveLobby() && !baselineKnown) baselineKnown = true;
         if (hint || host) waiting(reply.message);
@@ -285,9 +348,10 @@
     } catch {
       nextCheck = Date.now() + interval;
       if (enabled && started === generation && (hint || host)) waiting('Could not connect to MeowlChess. Reload this page to reconnect.', true);
-    } finally { checking = false; schedule(); }
+    } finally { clearTimeout(reveal); checking = false; inspectBot(); schedule(); }
   }
-  function stop() {
+  function stop(preserve = false) {
+    if (!preserve) forgetSelection();
     enabled = false; generation++; clearTimeout(timer); clearTimeout(debounce); clearInterval(routeTimer); observer?.disconnect(); observer = null; clearPanel(); clearLauncher();
   }
   function configure(raw) {
@@ -295,10 +359,10 @@
     if (config?.enabled === true && enabled && name === username) return;
     stop(); username = name;
     if (config?.enabled !== true || !new RegExp(`^[a-z0-9_-]{2,${source === 'lichess' ? 30 : 50}}$`).test(name)) return;
-    enabled = true; route = pageKey(); dismissed = baseline = completedUrl = null; baselineKnown = false; hint = false; hintSince = 0; nextCheck = 0; botAttemptPgn = botSavedPgn = null; botExportAttempted = false;
+    enabled = true; route = pageKey(); dismissed = baseline = completedUrl = null; baselineKnown = false; hint = finishedHint(); hintSince = hint ? Date.now() : 0; nextCheck = 0; botAttemptPgn = botSavedPgn = null; botExportAttempted = false;
     observer = new MutationObserver(() => { clearTimeout(debounce); debounce = setTimeout(inspectPage, 350); });
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });
-    routeTimer = setInterval(inspectPage, 1000); inspectPage(); void check();
+    routeTimer = setInterval(inspectPage, 1000); void check();
   }
   window.addEventListener('message', event => {
     if (!event.isTrusted || event.origin !== extensionOrigin || !frame || event.source !== frame.contentWindow || event.data?.token !== token) return;
@@ -317,7 +381,7 @@
     if (document.hidden) { generation++; clearTimeout(timer); clearPanel(); clearLauncher(); }
     else { nextCheck = 0; if (botPage() && !botSavedPgn) botExportAttempted = false; inspectPage(); if (dismissed) showLauncher(); else void check(); }
   });
-  window.addEventListener('pagehide', stop);
+  window.addEventListener('pagehide', () => stop(true));
   window.addEventListener('pageshow', event => {
     if (event.persisted) void chrome.storage.local.get('siteReviewSettings').then(values => configure(values.siteReviewSettings)).catch(() => {});
   });

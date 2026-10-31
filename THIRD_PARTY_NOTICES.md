@@ -72,7 +72,16 @@ The move-badge SVGs in `extension/move-icons/` use symbol contours extracted fro
 - Font source: https://www.chess.com/bundles/web/fonts/chessglyph-v3/chessglyph-v3.274864ae.woff
 - Palette reference: https://www.chess.com/bundles/app/vite/main-global-styles.HF1rcCqZrQ.css
 
-These third-party artwork files are not authored by MeowlChess and are excluded from MeowlChess's GPL code-license grant. No redistribution permission or other license grant from Chess.com is asserted here. The original font is not bundled; the SVGs contain the used outlines. The project uses its own MeowlChess logo and does not claim endorsement by Chess.com.
+These third-party artwork files are not authored by MeowlChess and are excluded from MeowlChess's GPL code-license grant. No redistribution permission or other license grant from Chess.com is asserted here. The original font is not bundled; the SVGs contain the used outlines. MeowlChess does not claim endorsement by Chess.com.
+
+## Meowl / Melonpi Cat
+
+The cat likeness behind the Meowl meme is **Melonpi Cat (瓜皮 / Guapi)**. Credit to Melonpi Cat and the photo account **瓜皮的id酱 (@melonpi on Weibo)**.
+
+- Cat/photo account: [Melonpi Cat — 瓜皮的id酱](https://weibo.com/melonpi).
+- Original Meowl post: [zhumaokele’s cat/owl images on Weibo, April 28, 2013](https://weibo.com/1505044005/zuePUyE2D), documented in [Know Your Meme’s Meowl history](https://knowyourmeme.com/memes/meowl).
+
+MeowlChess uses a user-supplied chess-themed adaptation of Meowl. The supplied PNG is retained unchanged in `extension/icons/logo.png`; the browser icons are resized copies. MeowlChess does not claim authorship or ownership of Melonpi’s photographs or the underlying Meowl meme. These credits do not grant a license to the underlying third-party artwork.
 
 ## Lichess opening names
 

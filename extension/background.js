@@ -93,10 +93,11 @@ chrome.permissions.onAdded.addListener(() => { void scheduleReconcile({ inject: 
 chrome.tabs.onRemoved.addListener(tabId => broker.invalidate(tabId));
 chrome.tabs.onUpdated.addListener((tabId, changes) => {
   if (changes.url) broker.pageChanged(tabId, changes.url);
+  if (changes.status === 'loading') broker.documentChanged(tabId);
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!['meowl:site-check', 'meowl:site-bot-import', 'meowl:site-payload', 'meowl:site-load-review', 'meowl:site-save-review', 'meowl:site-release', 'meowl:site-open-review', 'meowl:site-open-settings', 'meowl:site-settings-changed'].includes(message?.type)) return false;
+  if (!['meowl:site-check', 'meowl:site-panel-state', 'meowl:site-bot-import', 'meowl:site-payload', 'meowl:site-load-review', 'meowl:site-save-review', 'meowl:site-release', 'meowl:site-open-review', 'meowl:site-open-settings', 'meowl:site-settings-changed'].includes(message?.type)) return false;
   const response = message.type === 'meowl:site-settings-changed'
     ? broker.isSettingsSender(sender) ? scheduleReconcile({ inject: true }).then(() => ({ status: 'ready' })) : Promise.resolve({ status: 'disabled' })
     : broker.handle(message, sender);

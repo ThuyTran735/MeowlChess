@@ -52,7 +52,7 @@ try {
   await context.route(/^https?:\/\//, async route => {
     const request = route.request(), url = new URL(request.url());
     if (request.isNavigationRequest() && ['www.chess.com', 'chess.com', 'lichess.org'].includes(url.hostname)) {
-      return route.fulfill({ contentType: 'text/html', headers: { 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-src 'none'; child-src 'none'", ...(url.hostname === 'lichess.org' ? { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp' } : {}) }, body: `<!doctype html><html><head><meta charset="utf-8"><title>Completed game fixture</title><style>body{margin:0;background:#302e2b;color:#eee;font:18px Arial}main{padding:30px}button,iframe{display:none!important}</style></head><body><main class="round__app"><h1>Chess site fixture</h1><div id="round-result" class="game-over-component result" ${url.pathname === '/play/online' ? 'hidden' : ''}>Game over · 0–1</div></main></body></html>` });
+      return route.fulfill({ contentType: 'text/html', headers: { 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-src 'none'; child-src 'none'", ...(url.hostname === 'lichess.org' ? { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp' } : {}) }, body: `<!doctype html><html><head><meta charset="utf-8"><title>Completed game fixture</title><style>body{margin:0;background:#302e2b;color:#eee;font:18px Arial}main{padding:30px}button,iframe{display:none!important}</style></head><body><main class="round__app"><h1>Chess site fixture</h1><div id="round-result" class="game-over-component result" ${url.pathname === '/play/online' || url.pathname.startsWith('/member/') ? 'hidden' : ''}>Game over · 0–1</div></main></body></html>` });
     }
     if (url.pathname !== '/favicon.ico') unexpectedRequests.push(request.url());
     return route.abort();
@@ -200,6 +200,22 @@ try {
     const [reply] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => chrome.runtime.sendMessage({ type: 'meowl:site-check' }) });
     return reply.result;
   }, page.url());
+  const persistedPanelState = page => worker.evaluate(async url => {
+    const [tab] = await chrome.tabs.query({ url });
+    const session = (await chrome.storage.session.get('siteReviewSession')).siteReviewSession;
+    return session?.jobs?.find(job => job.tabId === tab.id)?.panelState;
+  }, page.url());
+  const browseSpa = async (page, path) => {
+    await page.evaluate(path => { history.pushState({}, '', path); document.querySelector('#round-result').hidden = true; }, path);
+    // Let both the DOM observer and the site's one-second route poll run.
+    await page.waitForTimeout(1150);
+  };
+  const sameReview = async (page, frame, url, previous, label) => {
+    assert.equal(frame.isDetached(), false, `${label}: the original iframe stays attached.`);
+    assert.equal(page.frames().filter(item => /\/site-summary\.html#/.test(item.url())).length, 1, `${label}: one summary frame.`);
+    assert.equal(frame.url(), url, `${label}: review token is unchanged.`);
+    assert.deepEqual(await frame.evaluate(() => ({ created: window.__siteTest.created, stages: window.__siteTest.stages, players: document.querySelector('#summary-players').textContent })), previous, `${label}: no additional engine or loading-stage flicker.`);
+  };
   const complete = async frame => {
     await poll(async () => {
       const state = await frame.evaluate(() => ({ visible: !document.querySelector('#summary-result').hidden, error: document.querySelector('#summary-status').classList.contains('error'), message: document.querySelector('#summary-status').textContent, workerErrors: window.__siteTest.workerErrors, savePending: window.__siteTest.savePending }));
@@ -290,6 +306,39 @@ try {
   assert.deepEqual(await chess.locator(hostSelector).boundingBox(), geometry);
   assert.equal((await chessFrame.evaluate(() => window.__siteTest)).created, telemetry.created);
 
+  stage = 'same summary survives profile and play browsing without a new frame or loading flicker';
+  const retainedUrl = chessFrame.url();
+  const retainedView = await chessFrame.evaluate(() => ({ created: window.__siteTest.created, stages: window.__siteTest.stages, players: document.querySelector('#summary-players').textContent }));
+  await browseSpa(chess, '/member/sitecat');
+  await sameReview(chess, chessFrame, retainedUrl, retainedView, 'profile navigation');
+  await browseSpa(chess, '/play/online');
+  await sameReview(chess, chessFrame, retainedUrl, retainedView, 'play navigation');
+  await clickShadow(chess, 'meowlchess-site-review', 'button[aria-label="Collapse review"]');
+  await poll(async () => await persistedPanelState(chess) === 'collapsed', 'collapsed state persisted');
+  await browseSpa(chess, '/member/sitecat');
+  await sameReview(chess, chessFrame, retainedUrl, retainedView, 'collapsed profile navigation');
+  assert.equal(await chess.locator(hostSelector).getAttribute('data-collapsed'), 'true');
+  stage = 'collapsed summary restores from storage after a full profile reload';
+  await chess.reload();
+  const collapsedRestored = await waitFrame(chess);
+  await poll(async () => {
+    const state = await collapsedRestored.evaluate(() => ({ ready: !document.querySelector('#summary-result').hidden && !document.querySelector('#summary-open-review').disabled, error: document.querySelector('#summary-status').classList.contains('error'), message: document.querySelector('#summary-status').textContent }));
+    if (state.error) throw new Error(`Collapsed summary: ${state.message}`);
+    return state.ready;
+  }, 'saved collapsed summary ready without animation-frame polling');
+  assert.equal(await chess.locator(hostSelector).getAttribute('data-collapsed'), 'true', 'A full reload restores the collapsed review.');
+  assert.equal((await collapsedRestored.evaluate(() => window.__siteTest)).created, 0, 'Collapsed restoration loads the saved result without analysis.');
+  await clickShadow(chess, 'meowlchess-site-review', 'button[aria-label="Expand review"]');
+  await complete(collapsedRestored);
+  await poll(async () => await persistedPanelState(chess) === 'open', 'expanded state persisted');
+  stage = 'full navigation restores the open saved summary';
+  await chess.goto('https://www.chess.com/play/online');
+  const navigatedSummary = await waitFrame(chess); await complete(navigatedSummary);
+  assert.equal((await navigatedSummary.evaluate(() => window.__siteTest)).created, 0, 'Full navigation restores the selected summary without a new engine.');
+  assert.equal(await navigatedSummary.locator('#summary-players').innerText(), 'sitecat vs siteowl');
+  assert.equal((await checkCurrentPage(chess)).gameUrl, chessUrl, 'Browsing does not select a newer account game.');
+  console.log('Site review: SPA keeps the same summary, and full navigation restores the saved selection and collapsed/open state.');
+
   stage = 'saved summaries reopen without another engine run';
   await chess.reload();
   const cachedFrame = await waitFrame(chess); await complete(cachedFrame);
@@ -306,6 +355,14 @@ try {
   await chess.locator(hostSelector).waitFor({ state: 'detached' });
   await noFrame(chess);
   await chess.locator(launcherSelector).waitFor({ state: 'visible' });
+  await poll(async () => await persistedPanelState(chess) === 'closed', 'closed state persisted');
+  await browseSpa(chess, '/member/sitecat');
+  assert.equal(await chess.locator(hostSelector).count(), 0, 'Profile browsing keeps a closed review closed.');
+  assert.equal(await chess.locator(launcherSelector).count(), 1);
+  await chess.goto('https://www.chess.com/play/online');
+  await chess.locator(launcherSelector).waitFor({ state: 'visible' });
+  assert.equal(await chess.locator(hostSelector).count(), 0, 'Full navigation restores only the launcher for a closed review.');
+  await noFrame(chess);
   await chess.screenshot({ path: join(root, 'test-results', 'site-review-launcher.png') });
   await reopen(chess);
   const reopenedChessFrame = await waitFrame(chess); await complete(reopenedChessFrame);
@@ -317,7 +374,7 @@ try {
   await noFrame(chess);
 
   stage = 'SPA navigation removes stale results; disabling cancels a new review';
-  await chess.evaluate(url => { history.pushState({}, '', url); document.querySelector('#round-result').textContent = 'New game'; }, nextChessUrl.replace('/game/live/', '/game/'));
+  await chess.evaluate(url => { history.pushState({}, '', url); document.querySelector('#round-result').textContent = 'New game'; document.querySelector('#round-result').hidden = false; }, nextChessUrl.replace('/game/live/', '/game/'));
   await chess.waitForFunction(() => document.querySelector('#meowlchess-site-review')?.dataset.state === 'waiting');
   await chess.locator(launcherSelector).waitFor({ state: 'detached' });
   await noFrame(chess);
@@ -335,6 +392,11 @@ try {
   await cancelling.waitForFunction(() => window.__siteTest.searches > 0);
   assert.equal(await cancelling.locator('#summary-progress').isVisible(), true);
   assert.equal(await cancelling.locator('#summary-title').innerText(), 'Analyzing');
+  const analyzingUrl = cancelling.url(), analyzingWorkers = await cancelling.evaluate(() => window.__siteTest.created);
+  await browseSpa(cancellationPage, '/member/sitecat');
+  assert.equal(cancelling.isDetached(), false, 'An in-progress review also survives profile browsing.');
+  assert.equal(cancelling.url(), analyzingUrl);
+  assert.equal(await cancelling.evaluate(() => window.__siteTest.created), analyzingWorkers, 'Browsing does not restart the active engine.');
   await clickShadow(cancellationPage, 'meowlchess-site-review', 'button[aria-label="Close review"]');
   await cancellationPage.locator(hostSelector).waitFor({ state: 'detached' });
   await noFrame(cancellationPage);
@@ -397,6 +459,13 @@ try {
   assert(apiRequests.every(url => !url.includes('sEcR')), 'The private player suffix is never sent to public retrieval APIs.');
   assert.equal(apiRequests.filter(url => url.includes('api/games/user/')).length, 0, 'Exact game pages do not depend on recent account lists.');
   assert(apiRequests.filter(url => url.includes('api/games/user/')).every(url => new URL(url).searchParams.get('ongoing') === 'false' && new URL(url).searchParams.get('finished') === 'true'));
+  stage = 'Lichess profile and reserved routes retain the same completed review';
+  const retainedLichessUrl = lichessFrame.url();
+  const retainedLichessView = await lichessFrame.evaluate(() => ({ created: window.__siteTest.created, stages: window.__siteTest.stages, players: document.querySelector('#summary-players').textContent }));
+  for (const path of ['/@/siteowl', '/analysis', '/registration']) {
+    await browseSpa(lichess, path);
+    await sameReview(lichess, lichessFrame, retainedLichessUrl, retainedLichessView, `Lichess ${path}`);
+  }
   await lichess.screenshot({ path: join(root, 'test-results', 'site-review-lichess.png') });
   await lichessFrame.locator('#summary-close').click();
   await lichess.locator(hostSelector).waitFor({ state: 'detached' });
@@ -433,6 +502,24 @@ try {
   assert.equal((await roundFrame.evaluate(() => window.__siteTest)).progressBeforeSummary, true);
   assert.equal((await records()).length, 3);
   await lobby.screenshot({ path: join(root, 'test-results', 'site-review-round-ended.png') });
+  stage = 'a new finish notice after browsing cannot reopen the retained old match';
+  await browseSpa(lobby, '/member/sitecat');
+  await browseSpa(lobby, '/play/online');
+  assert.equal(roundFrame.isDetached(), false, 'Browsing back to play retains the completed round before a new finish notice.');
+  await lobby.evaluate(() => { document.querySelector('#round-result').hidden = false; });
+  await lobby.waitForFunction(() => document.querySelector('#meowlchess-site-review')?.dataset.state === 'waiting');
+  await lobby.waitForTimeout(1150);
+  await noFrame(lobby);
+  assert.equal((await records()).length, 3, 'The still-cached old match cannot be reviewed as the newly finished round.');
+  const nextRound = chessGame('https://www.chess.com/game/live/884400004', 'Next finished round after browsing', 'sitecat', 'newowl');
+  nextRound.end_time = Math.floor(Date.now() / 1000) - 1;
+  await fixtures([nextRound, latest, completedChess]);
+  await worker.evaluate(() => { const readClock = Date.now.bind(Date); Date.now = () => readClock() + 65000; });
+  await settings.bringToFront(); await settings.waitForTimeout(150); await lobby.bringToFront();
+  const nextRoundFrame = await waitFrame(lobby); await complete(nextRoundFrame);
+  assert.equal(await nextRoundFrame.locator('#summary-players').innerText(), 'sitecat vs newowl', 'Only the newly finished match replaces the retained summary.');
+  assert.equal((await checkCurrentPage(lobby)).gameUrl, nextRound.url);
+  assert.equal((await records()).length, 4);
   await enabled('chesscom', false);
   console.log('Site review: next-round detection and progress-first play-page flow passed.');
   assert.deepEqual(unexpectedRequests, [], 'No live network requests are allowed.');
@@ -444,7 +531,7 @@ try {
   console.error('Browser errors:', errors);
   console.error('Browser diagnostics:', browserDiagnostics.slice(-40));
   if (context) for (const page of context.pages()) console.error('Page:', page.url());
-  if (worker) console.error('Broker diagnostic:', await worker.evaluate(async () => JSON.stringify({ fetches: globalThis.__siteFetches, senders: globalThis.__siteSenders, fixtures: globalThis.__siteFixtures, local: await chrome.storage.local.get('siteReviewSettings'), session: await chrome.storage.session.get('siteReviewSession') })).catch(() => 'Worker unavailable'));
+  if (worker) console.error('Broker diagnostic:', await worker.evaluate(async () => JSON.stringify({ fetches: globalThis.__siteFetches, senders: globalThis.__siteSenders, fixtureCounts: { chess: globalThis.__siteFixtures.chess.length, lichess: globalThis.__siteFixtures.lichess.length, months: Object.fromEntries(Object.entries(globalThis.__siteFixtures.chessMonths || {}).map(([month, games]) => [month, games.length])) }, local: await chrome.storage.local.get('siteReviewSettings'), session: await chrome.storage.session.get('siteReviewSession') })).catch(() => 'Worker unavailable'));
   throw error;
 } finally {
   clearInterval(checkpoint);

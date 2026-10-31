@@ -114,7 +114,7 @@ try {
     return route.abort();
   });
   await context.addInitScript(() => {
-    window.__botUi = { workers: 0, terminated: 0, searches: 0, progressSeen: false, summarySeen: false, progressBeforeSummary: false, messages: [] };
+    window.__botUi = { workers: 0, terminated: 0, searches: 0, progressSeen: false, summarySeen: false, progressBeforeSummary: false, stages: [], messages: [] };
     const NativeWorker = Worker;
     window.Worker = class extends NativeWorker {
       constructor(...args) { super(...args); window.__botUi.workers++; this.addEventListener('message', event => { if (typeof event.data === 'string') { window.__botUi.messages.push(event.data.slice(0, 600)); if (window.__botUi.messages.length > 12) window.__botUi.messages.shift(); } }); }
@@ -123,6 +123,8 @@ try {
     };
     const visible = element => element && !element.hidden && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
     new MutationObserver(() => {
+      const stage = document.querySelector('#summary-title')?.textContent.trim();
+      if (stage && window.__botUi.stages.at(-1) !== stage) window.__botUi.stages.push(stage);
       if (visible(document.querySelector('#summary-progress'))) window.__botUi.progressSeen = true;
       if (visible(document.querySelector('#summary-result')) && !window.__botUi.summarySeen) { window.__botUi.summarySeen = true; window.__botUi.progressBeforeSummary = window.__botUi.progressSeen; }
     }).observe(document, { attributes: true, childList: true, subtree: true });
@@ -189,6 +191,25 @@ try {
   await mkdir(join(root, 'test-results'), { recursive: true });
   await page.screenshot({ path: join(root, 'test-results', 'site-bot-summary.png') });
   console.log('Bot UI: automatic export, Stockfish progress/summary, Guest save, drag and growth clamp passed.');
+
+  stage = 'bot summary survives profile and play browsing without exporting the old round again';
+  const retainedBotUrl = firstFrame.url();
+  const retainedBotView = await firstFrame.evaluate(() => ({ workers: window.__botUi.workers, stages: window.__botUi.stages, players: document.querySelector('#summary-players').textContent }));
+  for (const path of ['/member/alice', '/play/online', '/play/computer']) {
+    await page.evaluate(path => {
+      history.pushState({}, '', path);
+      document.querySelector('#result').hidden = path !== '/play/computer';
+      document.querySelector('.small-controls-leftIcons').hidden = path !== '/play/computer';
+    }, path);
+    await page.waitForTimeout(1150);
+    assert.equal(firstFrame.isDetached(), false, `${path} keeps the same bot summary iframe.`);
+    assert.equal(firstFrame.url(), retainedBotUrl, `${path} keeps the exported game token.`);
+    assert.deepEqual(await firstFrame.evaluate(() => ({ workers: window.__botUi.workers, stages: window.__botUi.stages, players: document.querySelector('#summary-players').textContent })), retainedBotView, `${path} introduces no loading-stage flicker or new engine.`);
+    assert.equal(await page.evaluate(() => window.__downloads), 1, `${path} does not request another PGN export.`);
+    assert.equal(await firstFrame.locator('#summary-result').isVisible(), true);
+  }
+  assert.equal((await records()).length, 1, 'Returning to the old finished notice does not create another review.');
+  console.log('Bot UI: profile/play browsing keeps the same exported review and ignores the old finish notice on return.');
 
   stage = 'rematch clears old review; custom starting position and promotion export';
   await restartRound();

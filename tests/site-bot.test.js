@@ -106,10 +106,10 @@ test('canonical same-game import reuses its handle; a new game replaces the old 
   assert.equal((await payload(next.token)).game.pgn, otherPgn);
 });
 
-test('a bot handle is bound to its frame, tab, page, origin, settings, and expiry', async () => {
+test('a bot handle is bound to its frame, tab, selected game, origin, settings, and expiry', async () => {
   const { submit, payload, state, advance } = setup();
   const { token } = await submit();
-  for (const sender of [content(), frame(token, PAGE, 6), frame(token, 'https://www.chess.com/play/computer/another'), frame(token, 'https://chess.com/play/computer'), { ...frame(token), frameId: 0 }, { ...frame(token), id: 'other' }]) assert.equal((await payload(token, sender)).status, 'expired');
+  for (const sender of [content(), frame(token, PAGE, 6), frame(token, 'https://www.chess.com/game/computer/another'), frame(token, 'https://chess.com/play/computer'), { ...frame(token), frameId: 0 }, { ...frame(token), id: 'other' }]) assert.equal((await payload(token, sender)).status, 'expired');
   state.settings.siteReviewSettings.chesscom.username = 'Bob';
   assert.equal((await payload(token)).status, 'expired');
   state.settings.siteReviewSettings.chesscom.username = 'Alice';
@@ -119,14 +119,19 @@ test('a bot handle is bound to its frame, tab, page, origin, settings, and expir
   assert.equal((await payload(token)).status, 'expired');
 });
 
-test('release and route changes clear bot jobs without an archive request', async () => {
+test('release clears bot jobs, while browsing preserves their completed import identity', async () => {
   const { submit, payload, check, broker, state } = setup();
   const first = await submit();
-  assert.equal((await broker.handle({ type: 'meowl:site-release', token: first.token }, content())).status, 'released');
+  assert.equal((await broker.handle({ type: 'meowl:site-release', token: first.token, panelGeneration: first.panelGeneration }, content())).status, 'released');
   assert.equal((await payload(first.token)).status, 'expired');
   assert.equal((await check()).status, 'bot');
   const second = await submit();
   broker.pageChanged(5, 'https://www.chess.com/play/online');
+  const carried = await check(content('https://www.chess.com/play/online'));
+  assert.equal(carried.token, second.token);
+  assert.equal(carried.kind, 'bot');
+  assert.equal((await payload(second.token, frame(second.token, 'https://www.chess.com/play/online'))).game.pgn, pgn);
+  broker.pageChanged(5, 'https://www.chess.com/game/computer/another');
   assert.equal((await payload(second.token)).status, 'expired');
   assert.equal(state.fetches, 0);
 });
@@ -155,7 +160,7 @@ test('restoring bot jobs rejects changed identity, source, route, result, timest
     item => { item.game.source = 'chesscom'; },
     item => { item.game.imported = false; },
     item => { item.game.url = 'https://www.chess.com/game/live/123'; },
-    item => { item.pageKey = 'https://www.chess.com/play/online'; },
+    item => { item.selectionPageKey = 'https://www.chess.com/play/online'; },
     item => { item.game.end_time = Date.now() / 1000 + 300; },
     item => { item.game.end_time = -1; },
     item => { item.expiresAt = Date.now() - 1; },
@@ -187,14 +192,14 @@ test('navigation or settings revocation while bot import is pending prevents a l
   }
 });
 
-test('navigation during a worker session restore cannot resurrect the old bot job', async () => {
+test('an unrelated exact game during worker restore cannot resurrect the old bot job', async () => {
   let saved, release;
   const first = setup({ writeSession: async value => { saved = structuredClone(value); } });
   const { token } = await first.submit();
   const next = setup({ readSession: () => new Promise(resolve => { release = resolve; }) });
   const pending = next.payload(token);
   while (!release) await new Promise(resolve => setImmediate(resolve));
-  next.broker.pageChanged(5, 'https://www.chess.com/play/online');
+  next.broker.pageChanged(5, 'https://www.chess.com/game/live/456');
   release(saved);
   assert.equal((await pending).status, 'expired');
 });

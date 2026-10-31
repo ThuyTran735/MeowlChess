@@ -16,6 +16,9 @@ const JOB_LIFETIME = 10 * 60 * 1000;
 const MAX_JOBS = 100;
 const SESSION_BYTES = 700000;
 const TOKEN = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
+const PANEL_STATES = new Set(['open', 'collapsed', 'closed']);
+const documentId = sender => typeof sender?.documentId === 'string' && /^[a-zA-Z0-9-]{1,128}$/.test(sender.documentId) ? sender.documentId : null;
+const activeDocument = sender => sender?.documentLifecycle === undefined || sender.documentLifecycle === 'active';
 
 export function normalizeSiteSettings(value) {
   return Object.fromEntries(Object.entries(SITE_PROVIDERS).map(([source, provider]) => {
@@ -96,6 +99,22 @@ function unrecognizedChessGamePage(value) {
   return providerForUrl(value) === 'chesscom' && /^\/(?:analysis\/)?game(?:\/|$)/.test(url.pathname) && !gameUrlForPage(value);
 }
 
+function savedBotPage(value) {
+  const url = trustedUrl(value);
+  const match = providerForUrl(value) === 'chesscom' && url.pathname.match(/^\/(?:analysis\/)?game\/computer\/([^/]+)\/?$/);
+  return match ? `${url.origin}/game/computer/${match[1]}` : null;
+}
+
+function canCarryJob(job, value) {
+  if (providerForUrl(value) !== job.source || trustedUrl(value)?.origin !== job.parentOrigin) return false;
+  const target = gameUrlForPage(value), botTarget = savedBotPage(value);
+  if (target) return job.kind !== 'bot' && job.game.url === target;
+  if (botTarget) return job.kind === 'bot' && savedBotPage(job.selectionPageKey) === botTarget;
+  return !unrecognizedChessGamePage(value);
+}
+
+const pageAtOrigin = (key, origin) => trustedUrl(key) ? `${origin}${new URL(key).pathname}` : key;
+
 /** An archive result is still untrusted: require the configured player and legal finished PGN. */
 export function completedSiteGames(games, source, username, now = Date.now()) {
   if (!Array.isArray(games)) return [];
@@ -150,6 +169,9 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
   const cache = new Map();
   const tabEpochs = new Map();
   const tabPages = new Map();
+  const tabOrigins = new Map();
+  const pendingDocuments = new Set();
+  const invalidatedTabs = new Set();
   const sourceEpochs = new Map();
   const botImports = new Map();
   let generation = 0;
@@ -159,13 +181,14 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
   const expired = () => ({ status: 'expired', message: 'This review has expired. Open the dropdown again.' });
 
   function prune() {
-    for (const [token, job] of jobs) if (job.expiresAt <= now()) jobs.delete(token);
+    // Selection and panel state live for the tab/session; only iframe access has
+    // a short lease. A returning content document renews its selected job.
     while (jobs.size >= MAX_JOBS) jobs.delete(jobs.keys().next().value);
     while (cache.size > 20) cache.delete(cache.keys().next().value);
   }
 
   function contentContext(sender) {
-    if (sender?.id !== extensionId || sender.frameId !== 0 || !Number.isInteger(sender.tab?.id) || sender.tab.id < 0) return null;
+    if (!activeDocument(sender) || sender?.id !== extensionId || sender.frameId !== 0 || !Number.isInteger(sender.tab?.id) || sender.tab.id < 0) return null;
     const source = providerForUrl(sender.url);
     const documentUrl = trustedUrl(sender.url), currentUrl = trustedUrl(sender.tab.url);
     // Chromium can retain the original document URL after history.pushState.
@@ -203,7 +226,7 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
       if (size + length > SESSION_BYTES) return;
       collection.push(value); size += length;
     };
-    for (const job of [...jobs.values()].reverse().filter(item => item.expiresAt > now()).sort((a, b) => b.expiresAt - a.expiresAt).slice(0, MAX_JOBS)) add(snapshot.jobs, job);
+    for (const job of [...jobs.values()].reverse().sort((a, b) => b.expiresAt - a.expiresAt).slice(0, MAX_JOBS)) add(snapshot.jobs, job);
     for (const [key, entry] of cache) {
       if (!entry.pending && entry.expiresAt > now() && entry.value) add(snapshot.cache, { key, expiresAt: entry.expiresAt, value: entry.value });
     }
@@ -227,12 +250,13 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
       for (const item of snapshot.jobs.slice(0, MAX_JOBS)) {
         const config = configurations.get(item?.source);
         if (!config || !TOKEN.test(item.token || '') || !Number.isInteger(item.tabId) || item.tabId < 0 || item.configKey !== config.key) continue;
-        if (!Number.isFinite(item.expiresAt) || item.expiresAt <= now() || item.expiresAt > now() + JOB_LIFETIME) continue;
+        if (invalidatedTabs.has(item.tabId)) continue;
+        if (!Number.isFinite(item.expiresAt) || item.expiresAt <= 0 || item.expiresAt > now() + JOB_LIFETIME) continue;
         if (typeof item.pageKey !== 'string' || pageKey(item.pageKey) !== item.pageKey || providerForUrl(item.pageKey) !== item.source) continue;
         if (providerForUrl(item.parentOrigin) !== item.source || trustedUrl(item.parentOrigin)?.origin !== item.parentOrigin) continue;
         let game, bot = {};
         if (item.kind === 'bot') {
-          if (item.source !== 'chesscom' || !isChessComBotPage(item.pageKey) || item.game?.source !== 'pgn' || item.game?.imported !== true || item.game.url !== null) continue;
+          if (item.source !== 'chesscom' || !isChessComBotPage(item.selectionPageKey || item.pageKey) || item.game?.source !== 'pgn' || item.game?.imported !== true || item.game.url !== null) continue;
           if (!Number.isFinite(item.game.end_time) || item.game.end_time <= 0 || item.game.end_time * 1000 > now()) continue;
           try {
             game = completedBotGame(item.game.pgn, item.game.end_time * 1000);
@@ -241,16 +265,32 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
             bot = { kind: 'bot', gameKey };
           } catch { continue; }
           // Parsing and hashing yield; revocation/navigation must still win.
-          if (generation !== startedGeneration || (sourceEpochs.get(item.source) || 0) !== (startedSources.get(item.source) || 0) || (tabEpochs.get(item.tabId) || 0) !== (startedTabs.get(item.tabId) || 0)) continue;
+          if (generation !== startedGeneration || (sourceEpochs.get(item.source) || 0) !== (startedSources.get(item.source) || 0)) continue;
         } else {
-          if (item.kind !== undefined || isChessComBotPage(item.pageKey) || unrecognizedChessGamePage(item.pageKey)) continue;
+          const selection = item.selectionPageKey || item.pageKey;
+          if (item.kind !== undefined || isChessComBotPage(selection) || unrecognizedChessGamePage(selection)) continue;
           [game] = completedSiteGames([item.game], item.source, config.username, now());
-          const currentGame = gameUrlForPage(item.pageKey);
+          const currentGame = gameUrlForPage(selection);
           if (currentGame && game?.url !== currentGame) continue;
         }
         if (!game) continue;
-        const job = { token: item.token, source: item.source, tabId: item.tabId, pageKey: item.pageKey, parentOrigin: item.parentOrigin, game, ...bot, analysis: config.analysis, configKey: config.key, expiresAt: item.expiresAt };
-        jobs.set(job.token, job); tabPages.set(job.tabId, job.pageKey);
+        const selectionPageKey = item.selectionPageKey || item.pageKey;
+        if (pageKey(selectionPageKey) !== selectionPageKey || providerForUrl(selectionPageKey) !== item.source) continue;
+        const job = { token: item.token, source: item.source, tabId: item.tabId, pageKey: item.pageKey, selectionPageKey, parentOrigin: item.parentOrigin, game, ...bot, analysis: config.analysis, configKey: config.key, expiresAt: item.expiresAt,
+          panelState: PANEL_STATES.has(item.panelState) ? item.panelState : 'open',
+          panelGeneration: Number.isSafeInteger(item.panelGeneration) && item.panelGeneration > 0 ? item.panelGeneration : 1,
+          documentId: documentId(item), frameDocumentId: documentId({ documentId: item.frameDocumentId }),
+          retiredDocuments: (Array.isArray(item.retiredDocuments) ? item.retiredDocuments : []).filter(id => documentId({ documentId: id })).slice(-8),
+          retiredFrames: (Array.isArray(item.retiredFrames) ? item.retiredFrames : []).filter(id => documentId({ documentId: id })).slice(-8),
+          documentPending: item.documentPending === true, accessRevision: 0 };
+        if (!canCarryJob(job, pageAtOrigin(item.pageKey, job.parentOrigin))) continue;
+        if (tabPages.has(job.tabId)) {
+          const currentPage = tabPages.get(job.tabId);
+          if (!canCarryJob(job, pageAtOrigin(currentPage, tabOrigins.get(job.tabId))) || tabOrigins.get(job.tabId) !== job.parentOrigin) continue;
+          job.pageKey = currentPage;
+        } else if ((tabEpochs.get(job.tabId) || 0) !== (startedTabs.get(job.tabId) || 0)) continue;
+        if (pendingDocuments.has(job.tabId)) suspendDocument(job);
+        jobs.set(job.token, job); tabPages.set(job.tabId, job.pageKey); tabOrigins.set(job.tabId, job.parentOrigin);
       }
       for (const item of snapshot.cache.slice(0, 20)) {
         if (typeof item?.key !== 'string') continue;
@@ -300,23 +340,89 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
     return entry.pending;
   }
 
-  async function check(sender) {
+  function tabJob(tabId) { return [...jobs.values()].find(job => job.tabId === tabId); }
+
+  function retireFrame(job) {
+    if (job.frameDocumentId) job.retiredFrames = [...(job.retiredFrames || []), job.frameDocumentId].slice(-8);
+    job.frameDocumentId = null;
+    job.accessRevision = (job.accessRevision || 0) + 1;
+  }
+
+  function suspendDocument(job) {
+    if (job.documentPending) return;
+    job.documentPending = true;
+    job.panelGeneration++;
+    retireFrame(job);
+  }
+
+  function claimDocument(job, sender) {
+    const id = documentId(sender);
+    // A bfcache return may reuse a formerly active document, but an old document
+    // cannot claim the current panel after its replacement has checked in.
+    if (id && job.retiredDocuments?.includes(id) && !job.documentPending) return false;
+    if (id && job.documentId && id !== job.documentId) {
+      job.retiredDocuments = [...(job.retiredDocuments || []), job.documentId].slice(-8);
+      if (!job.documentPending) {
+        job.panelGeneration++; retireFrame(job);
+        tabEpochs.set(job.tabId, (tabEpochs.get(job.tabId) || 0) + 1);
+      }
+    }
+    if (id) {
+      job.documentId = id;
+      job.retiredDocuments = (job.retiredDocuments || []).filter(value => value !== id);
+    }
+    job.documentPending = false;
+    pendingDocuments.delete(job.tabId);
+    return true;
+  }
+
+  function ownsPanel(context, sender, message, job) {
+    return Boolean(context && job && activeDocument(sender) && context.tabId === job.tabId && context.source === job.source && context.parentOrigin === job.parentOrigin && context.pageKey === job.pageKey &&
+      message.token === job.token && Number.isSafeInteger(message.panelGeneration) && message.panelGeneration === job.panelGeneration && !job.documentPending &&
+      (!job.documentId || documentId(sender) === job.documentId));
+  }
+
+  function jobReady(job, resumed = false) {
+    return { status: 'ready', token: job.token, gameUrl: job.kind === 'bot' ? job.gameKey : job.game.url, source: job.source,
+      endTime: job.game.end_time, retryAfterMs: SITE_PROVIDERS[job.source].retryAfterMs,
+      panelState: job.panelState, panelGeneration: job.panelGeneration, resumed,
+      ...(job.kind === 'bot' ? { kind: 'bot', gameKey: job.gameKey } : {}) };
+  }
+
+  function newJob(context, sender, config, game, extra = {}) {
+    return { ...context, token: makeToken(), game, ...extra, selectionPageKey: context.pageKey, analysis: config.analysis, configKey: config.key,
+      panelState: 'open', panelGeneration: 1, documentId: documentId(sender), frameDocumentId: null, retiredDocuments: [], retiredFrames: [], documentPending: false, accessRevision: 0 };
+  }
+
+  async function check(sender, message = {}) {
     const context = contentContext(sender);
     if (!context) return disabled();
     const { source, tabId } = context;
-    pageChanged(tabId, context.pageKey);
+    pageChanged(tabId, sender.tab.url);
     const epoch = tabEpochs.get(tabId) || 0;
     const sourceEpoch = sourceEpochs.get(source) || 0;
     const startedGeneration = generation;
     const config = await configuration(source);
     if (!config) return disabled();
+    if (startedGeneration !== generation || (tabEpochs.get(tabId) || 0) !== epoch || (sourceEpochs.get(source) || 0) !== sourceEpoch) return disabled();
     prune();
     const retryAfterMs = SITE_PROVIDERS[source].retryAfterMs;
+    const retained = tabJob(tabId);
+    if (retained && retained.configKey === config.key && canCarryJob(retained, sender.tab.url)) {
+      if (message.fresh === true && !ownsPanel(context, sender, message, retained)) return expired();
+      if (!claimDocument(retained, sender)) return expired();
+      if (message.fresh !== true) {
+        retained.expiresAt = now() + JOB_LIFETIME;
+        return jobReady(retained, true);
+      }
+        // A confirmed new round ends the previous selection even when its new
+        // archive entry/export is delayed. Never resume that old game afterward.
+        retireFrame(retained);
+        jobs.delete(retained.token);
+    }
     if (isChessComBotPage(context.pageKey)) {
       const current = await configuration(source);
       if (!current || current.key !== config.key || startedGeneration !== generation || (tabEpochs.get(tabId) || 0) !== epoch || (sourceEpochs.get(source) || 0) !== sourceEpoch) return disabled();
-      const job = [...jobs.values()].find(item => item.kind === 'bot' && item.tabId === tabId && item.pageKey === context.pageKey && item.parentOrigin === context.parentOrigin && item.configKey === config.key);
-      if (job) { job.expiresAt = now() + JOB_LIFETIME; return botReady(job); }
       return { status: 'bot', source, retryAfterMs, message: 'Bot games are private. Open Share → PGN after the game, or import its finished PGN here.' };
     }
     if (unrecognizedChessGamePage(context.pageKey)) return {
@@ -333,26 +439,25 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
       status: 'waiting', source, retryAfterMs,
       message: currentGame ? 'Waiting for this completed game to appear in the public archive.' : 'Waiting for your latest completed game.',
     };
-    let job = [...jobs.values()].find(item => item.tabId === tabId && item.source === source && item.pageKey === context.pageKey && item.parentOrigin === context.parentOrigin && item.game.url === game.url && item.configKey === config.key);
+    let job = [...jobs.values()].find(item => item.kind !== 'bot' && item.tabId === tabId && item.source === source && item.parentOrigin === context.parentOrigin && item.game.url === game.url && item.configKey === config.key);
     if (!job) {
       for (const [token, item] of jobs) if (item.tabId === tabId) jobs.delete(token);
       prune();
-      job = { ...context, token: makeToken(), game, analysis: config.analysis, configKey: config.key };
+      job = newJob(context, sender, config, game);
       jobs.set(job.token, job);
     }
+    if (!claimDocument(job, sender)) return expired();
     job.expiresAt = now() + JOB_LIFETIME;
-    return { status: 'ready', token: job.token, gameUrl: game.url, source, endTime: game.end_time, retryAfterMs };
-  }
-
-  function botReady(job) {
-    return { status: 'ready', kind: 'bot', token: job.token, gameUrl: job.gameKey, gameKey: job.gameKey, source: job.source, endTime: job.game.end_time, retryAfterMs: SITE_PROVIDERS.chesscom.retryAfterMs };
+    return jobReady(job);
   }
 
   async function importBot(sender, pgn) {
     const context = contentContext(sender);
     if (!context || !isChessComBotPage(context.pageKey)) return disabled();
     const { source, tabId } = context;
-    pageChanged(tabId, context.pageKey);
+    pageChanged(tabId, sender.tab.url);
+    const retained = tabJob(tabId);
+    if (retained && (retained.documentPending || (retained.documentId && documentId(sender) !== retained.documentId))) return expired();
     const epoch = tabEpochs.get(tabId) || 0, sourceEpoch = sourceEpochs.get(source) || 0, startedGeneration = generation;
     const revision = (botImports.get(tabId) || 0) + 1;
     botImports.set(tabId, revision);
@@ -367,21 +472,25 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
     let job = [...jobs.values()].find(item => item.kind === 'bot' && item.tabId === tabId && item.pageKey === context.pageKey && item.parentOrigin === context.parentOrigin && item.gameKey === gameKey && item.configKey === config.key);
     if (!job) {
       for (const [token, item] of jobs) if (item.tabId === tabId) jobs.delete(token);
-      job = { ...context, kind: 'bot', token: makeToken(), game, gameKey, analysis: config.analysis, configKey: config.key };
+      job = newJob(context, sender, config, game, { kind: 'bot', gameKey });
       jobs.set(job.token, job);
     }
+    if (!claimDocument(job, sender)) return expired();
     job.expiresAt = now() + JOB_LIFETIME;
-    return botReady(job);
+    return jobReady(job);
   }
 
   async function frameJob(sender, token) {
-    if (!isExtensionPage(sender, SITE_SUMMARY_FRAME, token) || !Number.isInteger(sender.frameId) || sender.frameId <= 0 || !Number.isInteger(sender.tab?.id)) return null;
+    if (!activeDocument(sender) || !isExtensionPage(sender, SITE_SUMMARY_FRAME, token) || !Number.isInteger(sender.frameId) || sender.frameId <= 0 || !Number.isInteger(sender.tab?.id)) return null;
     if (typeof token !== 'string' || token.length > 100) return null;
     const job = jobs.get(token);
-    if (!job || job.expiresAt <= now() || job.tabId !== sender.tab.id || job.pageKey !== pageKey(sender.tab.url) || job.source !== providerForUrl(sender.tab.url)) return null;
+    if (!job || job.expiresAt <= now() || job.documentPending || job.panelState === 'closed' || job.tabId !== sender.tab.id || !canCarryJob(job, sender.tab.url)) return null;
     if (trustedUrl(sender.tab.url)?.origin !== job.parentOrigin) return null;
+    const id = documentId(sender), revision = job.accessRevision;
+    if (id && job.retiredFrames?.includes(id)) return null;
     const config = await configuration(job.source);
-    if (!config || config.key !== job.configKey || jobs.get(token) !== job) return null;
+    if (!config || config.key !== job.configKey || jobs.get(token) !== job || job.accessRevision !== revision || job.documentPending || job.panelState === 'closed') return null;
+    if (id) job.frameDocumentId = id;
     return job;
   }
 
@@ -389,22 +498,44 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
     if (Number.isInteger(tabId)) {
       tabEpochs.set(tabId, (tabEpochs.get(tabId) || 0) + 1);
       tabPages.delete(tabId);
+      tabOrigins.delete(tabId);
+      pendingDocuments.delete(tabId);
+      invalidatedTabs.add(tabId);
+      if (invalidatedTabs.size > 200) invalidatedTabs.delete(invalidatedTabs.values().next().value);
       for (const [token, job] of jobs) if (job.tabId === tabId) jobs.delete(token);
       if (tabEpochs.size > 200) tabEpochs.delete(tabEpochs.keys().next().value);
     } else {
       generation++;
       jobs.clear();
       cache.clear();
+      pendingDocuments.clear();
     }
     void saveSession();
   }
 
   function pageChanged(tabId, url) {
-    const key = pageKey(url);
-    if (tabPages.get(tabId) === key) return;
-    invalidate(tabId);
+    const key = pageKey(url), origin = trustedUrl(url)?.origin;
+    if (tabPages.get(tabId) === key && tabOrigins.get(tabId) === origin) return;
+    const retained = tabJob(tabId);
+    if (retained && canCarryJob(retained, url)) {
+      tabEpochs.set(tabId, (tabEpochs.get(tabId) || 0) + 1);
+      retained.pageKey = key;
+    } else invalidate(tabId);
     tabPages.set(tabId, key);
+    tabOrigins.set(tabId, origin);
+    invalidatedTabs.delete(tabId);
     if (tabPages.size > 200) tabPages.delete(tabPages.keys().next().value);
+    void saveSession();
+  }
+
+  function documentChanged(tabId) {
+    if (!Number.isInteger(tabId)) return;
+    tabEpochs.set(tabId, (tabEpochs.get(tabId) || 0) + 1);
+    pendingDocuments.add(tabId);
+    if (pendingDocuments.size > 200) pendingDocuments.delete(pendingDocuments.values().next().value);
+    const job = tabJob(tabId);
+    if (job) suspendDocument(job);
+    void saveSession();
   }
 
   function invalidateSource(source) {
@@ -419,6 +550,7 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
     invalidate,
     invalidateSource,
     pageChanged,
+    documentChanged,
     isSettingsSender: sender => isExtensionPage(sender, 'review.html') && (!Number.isInteger(sender.frameId) || sender.frameId === 0),
     async handle(message, sender) {
       await ready();
@@ -430,7 +562,7 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
 
   async function dispatch(message, sender) {
       switch (message?.type) {
-        case 'meowl:site-check': return check(sender);
+        case 'meowl:site-check': return check(sender, message);
         case 'meowl:site-bot-import': return importBot(sender, message.pgn);
         case 'meowl:site-open-settings': {
           const context = contentContext(sender);
@@ -446,8 +578,9 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
         case 'meowl:site-save-review': {
           const job = await frameJob(sender, message.token);
           if (!job) return expired();
+          const revision = job.accessRevision;
           const assertActive = async () => {
-            if (await frameJob(sender, message.token) !== job) throw new Error('This page review was canceled or its settings changed.');
+            if (await frameJob(sender, message.token) !== job || job.accessRevision !== revision) throw new Error('This page review was canceled or its settings changed.');
           };
           if (message.type === 'meowl:site-load-review') {
             if (!loadReview) throw new Error('Saved reviews are unavailable in this browser session.');
@@ -459,9 +592,19 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
           const record = await saveReview(job, message.result, assertActive);
           return { status: 'saved', record };
         }
+        case 'meowl:site-panel-state':
         case 'meowl:site-release': {
           const context = contentContext(sender), job = jobs.get(message.token);
-          if (!context || !job || context.tabId !== job.tabId || context.source !== job.source || context.pageKey !== job.pageKey) return expired();
+          if (!ownsPanel(context, sender, message, job)) return expired();
+          const config = await configuration(job.source);
+          if (!config || config.key !== job.configKey || jobs.get(job.token) !== job || !ownsPanel(context, sender, message, job)) return expired();
+          if (message.type === 'meowl:site-panel-state') {
+            if (!PANEL_STATES.has(message.panelState)) return expired();
+            if (message.panelState === 'closed' && job.panelState !== 'closed') retireFrame(job);
+            job.panelState = message.panelState;
+            job.expiresAt = now() + JOB_LIFETIME;
+            return { status: 'updated', panelState: job.panelState, panelGeneration: job.panelGeneration };
+          }
           jobs.delete(message.token);
           return { status: 'released' };
         }

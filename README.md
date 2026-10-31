@@ -1,8 +1,9 @@
 <div align="center">
-  <img src="extension/icons/logo.png" alt="MeowlChess crowned cat and owl mascot on a green-and-cream chessboard" width="200">
+  <img src="extension/icons/logo.png" alt="Crowned Meowl, featuring Melonpi Cat, on a green-and-cream chessboard" width="200">
   <h1>MeowlChess</h1>
   <p><strong>Free chess reviews. Local engines. Your own games.</strong></p>
   <p>Review completed games from Chess.com, Lichess, or a PGN file in Brave, Chrome, and Edge.</p>
+  <p><sub>Meowl's cat likeness comes from <a href="https://weibo.com/melonpi">Melonpi Cat (瓜皮)</a>. <a href="THIRD_PARTY_NOTICES.md#meowl--melonpi-cat">Artwork credits</a></sub></p>
   <p>
     <a href="https://github.com/ThuyTran735/MeowlChess/releases/latest"><strong>Download</strong></a> ·
     <a href="#install">Install</a> ·
@@ -12,9 +13,9 @@
   </p>
 </div>
 
-**Version 1.6.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.6.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
+**Version 1.6.1** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.6.1) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
 
-> New in 1.6.0: clearer on-site review progress, a button to reopen the panel, refreshed artwork, and smoother panel controls.
+> New in 1.6.1: your review stays with you while browsing, panel state survives navigation, and the artwork credits now name Melonpi Cat.
 
 MeowlChess runs Stockfish or Lozza on your device. No subscription, analysis-service account, or chess-site login is required. Once a game is loaded, its analysis works offline.
 
@@ -100,7 +101,9 @@ A current saved review goes straight to Summary without another engine run or sa
 | Double-click a resize edge or corner | Restore automatic sizing. |
 | Focus the name or bottom-right resize corner | Use arrow keys to move or resize; Shift takes larger steps, and Home resets that control. |
 
-Position and size are remembered separately for each site and kept within the window. The reopen button disappears when you change games or disable the site. Closing the panel, leaving its page, switching tabs, or disabling the site stops active analysis; partial reviews are not saved. Use the panel's **Settings** shortcut to turn it off. You can also remove site access in the browser's extension settings.
+Position and size are remembered separately for each site and kept within the window. Closing the panel, switching tabs, a full page load, leaving the site, or disabling it stops active analysis; partial reviews are not saved. Use the panel's **Settings** shortcut to turn it off and remove its panel and reopen button. You can also remove site access in the browser's extension settings.
+
+**Browsing between pages:** Your current completed-game review keeps its open, collapsed, or closed state as you browse other pages on the same site, including profiles, home, play, and computer pages. Browsing without a full page load also keeps any active analysis of that completed game running. Opening a different specific game clears the old review immediately and looks up that game's completed record; unavailable or unfinished games stay waiting. A new finished round replaces the prior review, and starting a bot rematch clears it. Full page loads briefly recreate the panel; an already-saved review reopens without another engine run.
 
 <details>
 <summary><strong>Chess.com bot games</strong></summary>
@@ -270,4 +273,4 @@ Found a problem or have an idea? [Open an issue](https://github.com/ThuyTran735/
 
 MeowlChess code is [GPL-3.0-or-later](LICENSE). Stockfish is GPL-licensed, chess.js is BSD-2-Clause, Lozza has its own permissive license, and the Lichess opening dataset is CC0. Keep the included notices and engine source materials with redistributions.
 
-The Chess.com Neo pieces and move-icon outlines are third-party artwork, excluded from MeowlChess's code license. Their inclusion does not assert a license grant or affiliation with Chess.com. The cat/owl logo is separate MeowlChess branding. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for sources and license details.
+The Chess.com Neo pieces and move-icon outlines are third-party artwork, excluded from MeowlChess's code license. Their inclusion does not assert a license grant or affiliation with Chess.com. The project icon uses a user-supplied adaptation of Meowl, whose cat likeness comes from **Melonpi Cat (瓜皮 / Guapi)**. Cat/photo credit: [瓜皮的id酱 (@melonpi on Weibo)](https://weibo.com/melonpi). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for sources and license details.

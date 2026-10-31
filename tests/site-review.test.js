@@ -28,7 +28,7 @@ function setup(options = {}) {
     fetchGames: async (source, username) => { state.calls.push([source, username]); return [game()]; },
     openReview: async url => state.opened.push(url), now: () => clock, makeToken: () => `00000000-0000-4000-8000-${String(++token).padStart(12, '0')}`, ...options,
   });
-  return { broker, state, advance: ms => { clock += ms; }, check: (sender = content()) => broker.handle({ type: 'meowl:site-check' }, sender) };
+  return { broker, state, advance: ms => { clock += ms; }, check: (sender = content(), options = {}) => broker.handle({ type: 'meowl:site-check', ...options }, sender) };
 }
 
 function bridgeFixture() {
@@ -95,7 +95,7 @@ test('checks fetch only configured archives and return metadata without moves', 
   const response = await check();
   assert.deepEqual(state.calls, [['chesscom', 'alice']]);
   assert.equal(response.status, 'ready');
-  assert.deepEqual(Object.keys(response).sort(), ['endTime', 'gameUrl', 'retryAfterMs', 'source', 'status', 'token']);
+  assert.deepEqual(Object.keys(response).sort(), ['endTime', 'gameUrl', 'panelGeneration', 'panelState', 'resumed', 'retryAfterMs', 'source', 'status', 'token']);
   assert.equal(response.retryAfterMs, 60000);
 });
 
@@ -255,7 +255,7 @@ test('untrusted senders, nested content frames, disabled sources, and revoked pe
   assert.equal(state.calls.length, 0);
 });
 
-test('parallel archive checks coalesce, repeated polls reuse jobs, and cache expires', async () => {
+test('parallel archive checks coalesce, retained polls skip archives, and explicit fresh checks honor cache expiry', async () => {
   let resolve, calls = 0;
   const { check, advance } = setup({ fetchGames: () => { calls++; return new Promise(done => { resolve = done; }); } });
   const one = check(), two = check(content(page, 6));
@@ -267,11 +267,13 @@ test('parallel archive checks coalesce, repeated polls reuse jobs, and cache exp
   assert.equal((await check()).token, first.token);
   assert.equal(calls, 1);
   advance(60001);
-  const next = check();
+  assert.equal((await check()).token, first.token);
+  assert.equal(calls, 1, 'A retained selection does not poll the archive.');
+  const next = check(content(), { fresh: true, token: first.token, panelGeneration: first.panelGeneration });
   await new Promise(done => setImmediate(done));
   assert.equal(calls, 2);
   resolve([game()]);
-  assert.equal((await next).token, first.token);
+  assert.notEqual((await next).token, first.token, 'A new finished-game notice ends the prior selected job.');
 });
 
 test('failed archive requests are cached briefly instead of retrying on every poll', async () => {
@@ -316,14 +318,15 @@ test('only the bound extension iframe can receive the game; tokens expire and re
 
 test('release and review opening enforce tab ownership and safe local review IDs', async () => {
   const { broker, check, state } = setup();
-  const { token } = await check();
+  const { token, panelGeneration } = await check();
   const type = 'meowl:site-open-review';
   assert.equal((await broker.handle({ type, token, reviewId: '../review.html?url=evil' }, frame())).status, 'expired');
   const reviewId = `game-${'a'.repeat(64)}`;
   assert.equal((await broker.handle({ type, token, reviewId }, frame())).status, 'opened');
   assert.deepEqual(state.opened, [extensionUrl(`review.html?reviewId=${reviewId}`)]);
-  assert.equal((await broker.handle({ type: 'meowl:site-release', token }, content(page, 6))).status, 'expired');
-  assert.equal((await broker.handle({ type: 'meowl:site-release', token }, content())).status, 'released');
+  assert.equal((await broker.handle({ type: 'meowl:site-release', token, panelGeneration }, content(page, 6))).status, 'expired');
+  assert.equal((await broker.handle({ type: 'meowl:site-release', token }, content())).status, 'expired');
+  assert.equal((await broker.handle({ type: 'meowl:site-release', token, panelGeneration }, content())).status, 'released');
   assert.equal((await broker.handle({ type: 'meowl:site-payload', token }, frame())).status, 'expired');
 });
 
@@ -530,6 +533,182 @@ test('revoking access while a library save waits prevents committing the result'
   assert.equal(response.status, 'error');
   assert.match(response.message, /canceled|settings changed/i);
   assert.equal(writes, 0);
+});
+
+test('same-site browsing carries the completed selection without archive fetches or a new token', async () => {
+  const { broker, check, state, advance } = setup();
+  const initial = await check({ ...content(game().url), documentId: 'document-a' });
+  advance(60001);
+  for (const url of ['https://www.chess.com/member/alice', 'https://www.chess.com/play/online', 'https://www.chess.com/play/computer', game().url]) {
+    broker.pageChanged(5, url);
+    const result = await check({ ...content(game().url), documentId: 'document-a', tab: { id: 5, url } });
+    assert.equal(result.token, initial.token);
+    assert.equal(result.panelGeneration, initial.panelGeneration);
+    assert.equal(result.resumed, true);
+    assert.equal(result.kind, undefined, 'A human review is never relabeled as a bot import.');
+    assert.equal((await broker.handle({ type: 'meowl:site-payload', token: initial.token }, frame(url))).game.url, game().url);
+  }
+  assert.equal(state.calls.length, 1);
+});
+
+test('panel state authenticates the content document, generation, token, tab, and settings', async () => {
+  const { broker, check, state } = setup();
+  const sender = { ...content(), documentId: 'document-a' };
+  const selected = await check(sender);
+  const update = { type: 'meowl:site-panel-state', token: selected.token, panelGeneration: selected.panelGeneration, panelState: 'collapsed' };
+  for (const [message, actor] of [[{ ...update, panelGeneration: undefined }, sender], [{ ...update, token: 'invalid' }, sender], [{ ...update, panelState: 'evil' }, sender], [update, { ...sender, documentId: 'document-b' }], [update, content(page, 6)], [update, frame()]]) {
+    assert.equal((await broker.handle(message, actor)).status, 'expired');
+  }
+  assert.deepEqual(await broker.handle(update, sender), { status: 'updated', panelState: 'collapsed', panelGeneration: selected.panelGeneration });
+  assert.equal((await check(sender)).panelState, 'collapsed');
+  assert.equal((await broker.handle({ type: 'meowl:site-payload', token: selected.token }, { ...frame(), documentId: 'frame-a' })).status, 'ready');
+  assert.equal((await broker.handle({ ...update, panelState: 'closed' }, sender)).status, 'updated');
+  const closed = await check(sender);
+  assert.equal(closed.panelState, 'closed');
+  for (const type of ['meowl:site-payload', 'meowl:site-load-review', 'meowl:site-save-review', 'meowl:site-open-review']) {
+    assert.equal((await broker.handle({ type, token: selected.token, reviewId: `game-${'a'.repeat(64)}` }, frame())).status, 'expired');
+  }
+  await broker.handle({ ...update, panelState: 'open' }, sender);
+  assert.equal((await broker.handle({ type: 'meowl:site-payload', token: selected.token }, { ...frame(), documentId: 'frame-a' })).status, 'expired');
+  assert.equal((await broker.handle({ type: 'meowl:site-payload', token: selected.token }, { ...frame(), documentId: 'frame-b' })).status, 'ready');
+  state.settings.siteReviewSettings.chesscom.enabled = false;
+  assert.equal((await broker.handle(update, sender)).status, 'expired');
+});
+
+test('full navigation retains state but rejects old document writes and retired iframe access', async () => {
+  const { broker, check, state } = setup();
+  const before = { ...content(), documentId: 'document-a', documentLifecycle: 'active' };
+  const initial = await check(before);
+  const request = { type: 'meowl:site-payload', token: initial.token };
+  assert.equal((await broker.handle(request, { ...frame(), documentId: 'frame-a' })).status, 'ready');
+  const update = { type: 'meowl:site-panel-state', token: initial.token, panelGeneration: initial.panelGeneration, panelState: 'collapsed' };
+  await broker.handle(update, before);
+  const target = 'https://www.chess.com/member/alice';
+  broker.pageChanged(5, target); broker.documentChanged(5);
+  const old = { ...before, tab: { id: 5, url: target } };
+  assert.equal((await broker.handle({ ...update, panelState: 'closed' }, old)).status, 'expired');
+  assert.equal((await broker.handle({ type: 'meowl:site-release', token: initial.token, panelGeneration: initial.panelGeneration }, old)).status, 'expired');
+  assert.equal((await broker.handle(request, { ...frame(target), documentId: 'frame-a' })).status, 'expired');
+  const after = { ...content(target), documentId: 'document-b', documentLifecycle: 'active' };
+  const carried = await check(after);
+  assert.equal(carried.token, initial.token); assert.equal(carried.panelState, 'collapsed');
+  assert.ok(carried.panelGeneration > initial.panelGeneration);
+  assert.equal((await check(old)).status, 'expired');
+  assert.equal((await broker.handle({ ...update, panelGeneration: carried.panelGeneration }, old)).status, 'expired');
+  assert.equal((await broker.handle(request, { ...frame(target), documentId: 'frame-a' })).status, 'expired');
+  assert.equal((await broker.handle(request, { ...frame(target), documentId: 'frame-b' })).status, 'ready');
+  assert.equal((await broker.handle(request, { ...frame(target), documentId: 'frame-c' })).status, 'ready', 'A visibility remount within the active document can use a new iframe.');
+  assert.equal(state.calls.length, 1);
+  broker.pageChanged(5, page); broker.documentChanged(5);
+  assert.equal((await check({ ...before, documentLifecycle: 'cached' })).status, 'disabled');
+  assert.equal((await check(before)).token, initial.token, 'An active bfcache return can reclaim the selection.');
+});
+
+test('worker restart preserves closed/collapsed selection and renews an expired iframe lease without archives', async () => {
+  for (const panelState of ['closed', 'collapsed']) {
+    let snapshot;
+    const persistence = { readSession: async () => structuredClone(snapshot), writeSession: async value => { snapshot = structuredClone(value); } };
+    const first = setup(persistence), sender = { ...content(), documentId: 'document-a' };
+    const selected = await first.check(sender);
+    await first.broker.handle({ type: 'meowl:site-panel-state', token: selected.token, panelGeneration: selected.panelGeneration, panelState }, sender);
+    snapshot.jobs[0].expiresAt = Date.now() - 24 * 60 * 60 * 1000;
+    const second = setup(persistence);
+    assert.equal((await second.broker.handle({ type: 'meowl:site-payload', token: selected.token }, frame())).status, 'expired');
+    const after = await second.check({ ...content('https://www.chess.com/play/online'), documentId: 'document-b' });
+    assert.equal(after.token, selected.token); assert.equal(after.panelState, panelState); assert.equal(after.resumed, true);
+    assert.equal(second.state.calls.length, 0);
+    assert.equal(snapshot.jobs.length, 1);
+    second.broker.invalidate(5);
+    assert.equal((await second.broker.handle({ type: 'meowl:site-payload', token: selected.token }, frame())).status, 'expired');
+  }
+});
+
+test('explicit fresh checks require the current panel identity and replace only with validated completed games', async () => {
+  let entries = [game()];
+  const { broker, check, state, advance } = setup({ fetchGames: async () => { state.calls.push('archive'); return entries; } });
+  const sender = { ...content(), documentId: 'document-a' }, first = await check(sender);
+  advance(60001); entries = [game('456', { end_time: 1700000001 })];
+  assert.equal((await check(sender)).token, first.token);
+  assert.equal((await check(sender, { fresh: true })).status, 'expired');
+  assert.equal((await check(sender, { fresh: true, token: first.token, panelGeneration: first.panelGeneration + 1 })).status, 'expired');
+  const next = await check(sender, { fresh: true, token: first.token, panelGeneration: first.panelGeneration });
+  assert.equal(next.gameUrl, game('456').url); assert.notEqual(next.token, first.token); assert.equal(next.resumed, false);
+  assert.equal(state.calls.length, 2);
+  assert.equal((await broker.handle({ type: 'meowl:site-payload', token: first.token }, frame())).status, 'expired');
+  advance(60001); entries = [game('789', { pgn: completedPgn.replace('1. e4 e5 1-0', '1. e4 e5 *') })];
+  assert.equal((await check(sender, { fresh: true, token: next.token, panelGeneration: next.panelGeneration })).status, 'waiting');
+  assert.equal((await check(sender)).status, 'waiting', 'A delayed/unfinished new game cannot fall back to the old selection.');
+  assert.equal((await broker.handle({ type: 'meowl:site-payload', token: next.token }, frame())).status, 'expired');
+});
+
+test('authorized fresh bot/error checks retire the prior review and prevent later fallback', async () => {
+  for (const mode of ['bot', 'error']) {
+    let failed = false;
+    const { broker, check, advance } = setup({ fetchGames: async () => { if (failed) throw new Error('Archive delayed'); return [game()]; } });
+    const selected = await check();
+    const url = mode === 'bot' ? 'https://www.chess.com/play/computer' : page;
+    broker.pageChanged(5, url); failed = true; advance(60001);
+    const reply = await check(content(url), { fresh: true, token: selected.token, panelGeneration: selected.panelGeneration });
+    assert.equal(reply.status, mode);
+    assert.equal((await check(content(url))).status, mode);
+    assert.equal((await broker.handle({ type: 'meowl:site-payload', token: selected.token }, frame(url))).status, 'expired');
+  }
+});
+
+test('tab removal before a sleeping worker restores session cannot resurrect that tab selection', async () => {
+  let snapshot;
+  const first = setup({ writeSession: async value => { snapshot = structuredClone(value); } });
+  const selected = await first.check();
+  const second = setup({ readSession: async () => structuredClone(snapshot) });
+  second.broker.invalidate(5);
+  assert.equal((await second.broker.handle({ type: 'meowl:site-payload', token: selected.token }, frame())).status, 'expired');
+});
+
+test('an authorized fresh round cancels a pending save of the prior review', async () => {
+  let release, writes = 0;
+  const { broker, check } = setup({ saveReview: async (job, result, assertActive) => {
+    await new Promise(resolve => { release = resolve; }); await assertActive(); writes++; return {};
+  } });
+  const selected = await check();
+  const pending = broker.handle({ type: 'meowl:site-save-review', token: selected.token, result: {} }, frame());
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  await check(content(), { fresh: true, token: selected.token, panelGeneration: selected.panelGeneration });
+  release(); assert.equal((await pending).status, 'error'); assert.equal(writes, 0);
+});
+
+test('different exact games, unknown game paths, origins, providers, and tab removal invalidate continuity', async () => {
+  for (const destination of ['https://www.chess.com/game/live/456', 'https://www.chess.com/game/computer/another', 'https://www.chess.com/game/unknown', 'https://chess.com/member/alice', 'https://lichess.org/@/alice', 'https://example.org/']) {
+    const { broker, check } = setup();
+    const first = await check(content(game().url));
+    broker.pageChanged(5, destination);
+    assert.equal((await broker.handle({ type: 'meowl:site-payload', token: first.token }, frame(game().url))).status, 'expired', destination);
+  }
+});
+
+test('same-site SPA navigation does not cancel a completed review save already in flight', async () => {
+  let release;
+  const { broker, check } = setup({ saveReview: async (job, result, assertActive) => {
+    await new Promise(resolve => { release = resolve; }); await assertActive(); return { id: 'saved' };
+  } });
+  const first = await check();
+  const pending = broker.handle({ type: 'meowl:site-save-review', token: first.token, result: {} }, frame());
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  broker.pageChanged(5, 'https://www.chess.com/member/alice');
+  release(); assert.equal((await pending).status, 'saved');
+});
+
+test('closing during a pending save prevents the old frame from committing after reopen', async () => {
+  let release, writes = 0;
+  const { broker, check } = setup({ saveReview: async (job, result, assertActive) => {
+    await new Promise(resolve => { release = resolve; }); await assertActive(); writes++; return {};
+  } });
+  const first = await check();
+  const pending = broker.handle({ type: 'meowl:site-save-review', token: first.token, result: {} }, frame());
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  const update = { type: 'meowl:site-panel-state', token: first.token, panelGeneration: first.panelGeneration };
+  await broker.handle({ ...update, panelState: 'closed' }, content());
+  await broker.handle({ ...update, panelState: 'open' }, content());
+  release(); assert.equal((await pending).status, 'error'); assert.equal(writes, 0);
 });
 
 test('background registers only opted-in permitted sites and disables a site after permission loss', async t => {
