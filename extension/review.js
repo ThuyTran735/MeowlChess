@@ -9,12 +9,14 @@ import { gradeRetry } from './lib/practice.js';
 import { explainConsequence } from './lib/tactics.js';
 import { importPgnCollection, importPgnFiles, PGN_IMPORT_MAX_BYTES } from './lib/pgn-import.js';
 import { createTutorial } from './lib/tutorial.js';
+import { createSupportPrompt } from './lib/support-prompt.js';
 import { createSiteReviewSettings } from './lib/site-settings.js';
 import { createReviewLibrary } from './lib/library.js';
 const reviewLibrary = createReviewLibrary({ analysisVersion: ANALYSIS_VERSION });
 
 const $ = (id) => document.getElementById(id);
 const state = { starting: true, reviewTab: 'moves', importGames: [], importing: false, games: [], selected: null, parsed: null, result: null, ply: 0, flipped: false, busy: false, loading: false, controller: null, positionController: null, positionAnalysis: new Map(), selectedLine: null, playTimer: null, study: null, retry: null, selectedSquare: null, focusSquare: 'a8', pendingPromotion: null, hoverLine: null, reviewId: null, bookmarks: [], savedReviews: [], practiceItems: [], bookmarkItems: [], libraryBusy: false, branchAnalysis: new Map(), opening: null, recordMeta: null };
+const supportPrompt = createSupportPrompt({ onSaveError: message => { $('save-status').textContent = message; } });
 const tutorial = createTutorial({
   onOpen: () => { stopPlayback(); updateControls(); },
   onSaveError: message => { $('save-status').textContent = message; }
@@ -983,7 +985,7 @@ for (const label of MOVE_LABELS) {
   row.append(makeBadge(label), name, description); $('classification-legend').append(row);
 }
 document.addEventListener('keydown', event => {
-  if ($('tutorial-dialog').open || $('library-dialog').open || $('promotion-picker').open || answersHidden() || event.target.closest('#board') || ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName) || event.ctrlKey || event.metaKey || event.altKey) return;
+  if ($('support-dialog').open || $('tutorial-dialog').open || $('library-dialog').open || $('promotion-picker').open || answersHidden() || event.target.closest('#board') || ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName) || event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.key === 'ArrowLeft') { event.preventDefault(); navigatePosition(positionIndex() - 1); }
   if (event.key === 'ArrowRight') { event.preventDefault(); navigatePosition(positionIndex() + 1); }
   if (event.key === 'Home') { event.preventDefault(); navigatePosition(0); }
@@ -1004,12 +1006,14 @@ async function initializeReview() {
     }
   } catch { /* The game picker remains usable when preferences are unavailable. */ }
   syncEngine(); syncSource(); renderMoves(); renderBoard();
-  // Finish the optional guide before opening Games or fetching a remembered account.
+  // Finish the optional support prompt and guide before opening Games or fetching a remembered account.
   const query = new URLSearchParams(location.search);
   const requestedReview = query.get('reviewId');
   const openSiteSettings = query.get('siteSettings') === '1';
   const validReview = /^game-[a-f0-9]{64}$/.test(requestedReview || '');
-  await tutorial.start({ autoOpen: !validReview && !openSiteSettings });
+  const autoOpen = !validReview && !openSiteSettings;
+  await supportPrompt.start({ autoOpen });
+  await tutorial.start({ autoOpen });
   state.starting = false; updateControls();
   if (validReview) { await openSavedReview(requestedReview); return; }
   if (openSiteSettings) {

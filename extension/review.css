@@ -331,6 +331,22 @@ dialog::backdrop { background: #0009; }
 
 .footer-link { display: inline; padding: 0; color: inherit; font: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .footer-link:hover:enabled { color: var(--text); }
+.support-dialog { width: 420px; max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); padding: 28px; overflow-y: auto; }
+.support-logo { display: block; width: 64px; height: 64px; margin-bottom: 18px; border-radius: 12px; }
+.support-dialog h2 { margin: 0 0 10px; font-size: 23px; font-weight: 650; letter-spacing: -.4px; }
+#support-title:focus { outline: none; }
+#support-description { margin: 0; color: #c7c8bb; font-size: 14px; line-height: 1.65; }
+.support-preference { display: flex; align-items: center; gap: 9px; margin: 24px 0 0; color: var(--muted); font-size: 13px; font-weight: 400; cursor: pointer; }
+.support-preference input { width: 16px; height: 16px; margin: 0; accent-color: var(--green); }
+.support-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.support-actions > button, .support-actions > a { min-height: 40px; padding: 10px 14px; border-radius: 5px; font-size: 13px; }
+#support-skip { color: #c6cbbd; }
+#support-skip:hover { background: #ffffff0b; color: var(--text); }
+#support-github { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: auto; color: #18200f; text-decoration: none; font-weight: 650; }
+#support-github:hover { background: #94c763; }
+#support-github:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+@media (max-width: 420px) { .support-dialog { padding: 22px; } .support-actions { gap: 8px; } }
+
 .tutorial-dialog { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; overflow: hidden; }
 .tutorial-dialog::backdrop { background: transparent; }
 #tutorial-overlay { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; overflow: visible; }

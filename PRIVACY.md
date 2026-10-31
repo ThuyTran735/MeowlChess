@@ -1,6 +1,6 @@
 # MeowlChess privacy notice
 
-MeowlChess is an independent browser extension for local analysis of completed chess games. It is not affiliated with Chess.com or Lichess. This notice describes version 1.6.1.
+MeowlChess is an independent browser extension for local analysis of completed chess games. It is not affiliated with Chess.com or Lichess. This notice describes version 1.6.2.
 
 ## Game data
 
@@ -10,7 +10,7 @@ You can also choose, drag and drop, or paste PGNs exported from other websites, 
 
 ## Local storage and processing
 
-The extension saves website selection, remembered website inputs, engine choice, thinking time, line count, selective recheck setting, board orientation preference, arrow mode, badge/coordinate visibility, playback speed, the tutorial’s **Never show again** choice, the panel position and size for each site, and separate on-site review toggles and usernames in `chrome.storage.local`. A browser preview without extension storage keeps the tutorial choice in localStorage instead. These preferences are not synced to a MeowlChess account or sent to an analysis service.
+The extension saves website selection, remembered website inputs, engine choice, thinking time, line count, selective recheck setting, board orientation preference, arrow mode, badge/coordinate visibility, playback speed, separate **Never show again** choices for the tutorial and GitHub support popup, the panel position and size for each site, and separate on-site review toggles and usernames in `chrome.storage.local`. A browser preview without extension storage keeps those two choices in localStorage instead. These preferences are not synced to a MeowlChess account or sent to an analysis service.
 
 Successful full reviews are automatically saved in the extension's **local IndexedDB**. Each record includes the PGN, player/source information, evaluations and engine continuations, move classifications, summary scores, opening metadata, engine settings and analysis version, saved timestamps, and bookmarked positions. Re-reviewing the same game replaces its saved analysis and retains its bookmarks. The Practice list is derived from mistakes and bookmarks in these saved records.
 
@@ -24,7 +24,9 @@ Stockfish, Lozza, chess.js, opening data, piece images, and icons are bundled. T
 
 The installed extension requests public archive data from `api.chess.com` and finished-game exports from `lichess.org/api/games/user/` or `lichess.org/game/export/`. These services receive normal connection information, including your IP address and request headers. Their handling is governed by [Chess.com's privacy policy](https://www.chess.com/legal/privacy) and [Lichess's privacy policy](https://lichess.org/privacy).
 
-Opening an original game, documentation, or policy link makes a normal browser navigation to that site. MeowlChess itself has no developer-operated servers, analytics, advertising, telemetry, or paid analysis APIs. Saved PGNs, reviews, bookmarks, variations, and practice answers are not uploaded by MeowlChess.
+The support popup does not contact GitHub automatically or check whether you have starred the project. **Star on GitHub** opens the public repository in a new tab, where starring is your choice.
+
+Opening an original game, the GitHub repository, documentation, or policy link makes a normal browser navigation to that site. MeowlChess itself has no developer-operated servers, analytics, advertising, telemetry, or paid analysis APIs. Saved PGNs, reviews, bookmarks, variations, and practice answers are not uploaded by MeowlChess.
 
 ## Permissions
 

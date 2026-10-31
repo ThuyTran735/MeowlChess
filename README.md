@@ -13,9 +13,9 @@
   </p>
 </div>
 
-**Version 1.6.1** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.6.1) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
+**Version 1.6.2** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.6.2) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
 
-> New in 1.6.1: your review stays with you while browsing, panel state survives navigation, and the artwork credits now name Melonpi Cat.
+> New in 1.6.2: an optional GitHub support popup before the tutorial, with Skip and its own Never show again preference.
 
 MeowlChess runs Stockfish or Lozza on your device. No subscription, analysis-service account, or chess-site login is required. Once a game is loaded, its analysis works offline.
 
@@ -55,6 +55,8 @@ MeowlChess is distributed as an unpacked extension. It is not listed in the Chro
 3. The finished review opens at **move 0** on **Summary**. Switch to **Moves** to explore the game.
 
 The game picker closes after selection. Move through the review with the move list, arrow keys, evaluation graph, key moments, or **Play**. **Engine lines** stays collapsed until you open it.
+
+On a normal launch, an optional **Support MeowlChess** popup appears before the tutorial. **Star on GitHub** opens the repository in a new tab; you can star it there or choose **Skip** (or press Escape) to continue. Its **Never show again** checkbox is separate from the tutorial preference. Opening a saved review from the on-site panel or going directly to its settings bypasses both prompts.
 
 The three-step tutorial points out the main controls with spotlights and arrows. Use **Next**, **Back**, or **Skip**; Escape also skips it. Check **Never show again** to stop automatic tutorials in this browser profile. The footer's **Tutorial** link reopens it, and unchecking that option restores automatic display. The tour follows smaller screens, restores your scroll position, respects reduced motion, and never starts a review or changes your selected game.
 

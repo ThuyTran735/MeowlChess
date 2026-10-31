@@ -6,6 +6,12 @@ import { promisify } from 'node:util';
 
 // Complete first-use onboarding through its real controls before legacy workflows.
 export async function dismissTutorial(page) {
+  await page.waitForFunction(() => document.querySelector('#support-dialog')?.open || document.querySelector('#tutorial-dialog')?.open || document.querySelector('#library-dialog')?.open || document.querySelector('#open-tutorial')?.disabled === false);
+  if (await page.locator('#support-dialog').evaluate(dialog => dialog.open)) {
+    await page.locator('#support-never').check();
+    await page.locator('#support-skip').click();
+    await page.locator('#support-dialog').waitFor({ state: 'hidden' });
+  }
   await page.waitForFunction(() => document.querySelector('#tutorial-dialog')?.open || document.querySelector('#library-dialog')?.open || document.querySelector('#open-tutorial')?.disabled === false);
   if (await page.locator('#tutorial-dialog').evaluate(dialog => dialog.open)) {
     await page.locator('#tutorial-never').check();

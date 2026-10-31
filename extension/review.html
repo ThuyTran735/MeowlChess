@@ -88,7 +88,7 @@
       </div>
     </section>
   </section>
-  <footer><span>MeowlChess v1.6.1 · Local analysis · <button id="open-tutorial" class="footer-link" type="button" disabled aria-haspopup="dialog" aria-controls="tutorial-dialog">Tutorial</button></span><span>Completed games only · <a href="https://www.chess.com/legal/fair-play" target="_blank" rel="noopener noreferrer">Fair play</a></span></footer>
+  <footer><span>MeowlChess v1.6.2 · Local analysis · <button id="open-tutorial" class="footer-link" type="button" disabled aria-haspopup="dialog" aria-controls="tutorial-dialog">Tutorial</button></span><span>Completed games only · <a href="https://www.chess.com/legal/fair-play" target="_blank" rel="noopener noreferrer">Fair play</a></span></footer>
 </main>
 
 <dialog id="library-dialog" class="library-dialog" aria-labelledby="library-title">
@@ -119,6 +119,17 @@
   <h2 id="promotion-title">Promote pawn</h2><p id="promotion-help">Choose a piece.</p>
   <div class="promotion-choices"><button type="button" data-promotion="q" aria-label="Promote to queen"><img src="pieces/wq.png" width="64" height="64" alt="" draggable="false"><span>Queen</span></button><button type="button" data-promotion="r" aria-label="Promote to rook"><img src="pieces/wr.png" width="64" height="64" alt="" draggable="false"><span>Rook</span></button><button type="button" data-promotion="b" aria-label="Promote to bishop"><img src="pieces/wb.png" width="64" height="64" alt="" draggable="false"><span>Bishop</span></button><button type="button" data-promotion="n" aria-label="Promote to knight"><img src="pieces/wn.png" width="64" height="64" alt="" draggable="false"><span>Knight</span></button></div>
   <button id="cancel-promotion" type="button" class="secondary-button">Cancel</button>
+</dialog>
+<dialog id="support-dialog" class="support-dialog" aria-labelledby="support-title" aria-describedby="support-description">
+  <img class="support-logo" src="icons/icon128.png" width="64" height="64" alt="">
+  <h2 id="support-title" tabindex="-1">Support MeowlChess</h2>
+  <p id="support-description">MeowlChess is free and open source. Give the project a star on GitHub to show your support.</p>
+  <label class="support-preference" for="support-never"><input id="support-never" type="checkbox"> Never show again</label>
+  <p id="support-storage-status" class="tutorial-storage-status" role="status" hidden></p>
+  <div class="support-actions">
+    <button id="support-skip" type="button">Skip</button>
+    <a id="support-github" class="primary-button" href="https://github.com/ThuyTran735/MeowlChess" target="_blank" rel="noopener noreferrer" aria-label="Star MeowlChess on GitHub (opens in a new tab)"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>Star on GitHub</a>
+  </div>
 </dialog>
 <dialog id="tutorial-dialog" class="tutorial-dialog" aria-labelledby="tutorial-title" aria-describedby="tutorial-progress">
   <svg id="tutorial-overlay" aria-hidden="true" focusable="false"></svg>
