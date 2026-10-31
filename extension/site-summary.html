@@ -7,15 +7,15 @@
   <link rel="stylesheet" href="site-summary.css">
 </head>
 <body>
-<main>
-  <header class="summary-heading"><h1 id="summary-title">Reviewing finished game</h1><span id="summary-source"></span></header>
+<main data-stage="finding-game" aria-busy="true">
+  <header class="summary-heading"><h1 id="summary-title">Finding game</h1><span id="summary-source"></span></header>
   <p id="summary-players" class="game-players"></p>
   <p id="summary-game-detail" class="game-detail"></p>
 
   <section id="summary-progress-area" aria-label="Review progress">
-    <div class="progress-heading"><strong id="summary-progress-label">Preparing review…</strong><span id="summary-percent"></span></div>
-    <progress id="summary-progress" max="100" aria-label="Game review progress"></progress>
-    <p id="summary-progress-detail" role="status">Checking this completed game.</p>
+    <div class="progress-heading"><span id="summary-progress-label">Checking this completed game…</span><span id="summary-percent" hidden></span></div>
+    <progress id="summary-progress" max="100" aria-label="Finding game"></progress>
+    <p id="summary-progress-detail" role="status"></p>
     <button id="summary-cancel" class="quiet-button" type="button">Cancel review</button>
   </section>
 

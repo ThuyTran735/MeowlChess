@@ -40,10 +40,31 @@ function status(message = '', error = false) {
   $('summary-status').textContent = message;
   $('summary-status').classList.toggle('error', error);
 }
-function cancel(message = 'Review canceled. Reload this page to try again.') {
+function showStage(stage, label, detail = '') {
+  assertActive();
+  const main = document.querySelector('main');
+  main.dataset.stage = stage;
+  main.setAttribute('aria-busy', 'true');
+  $('summary-title').textContent = { 'finding-game': 'Finding game', analyzing: 'Analyzing', saving: 'Saving' }[stage];
+  $('summary-progress-area').hidden = false;
+  $('summary-progress-label').textContent = label;
+  $('summary-progress-detail').textContent = detail;
+  $('summary-progress').removeAttribute('value');
+  $('summary-progress').setAttribute('aria-label', $('summary-title').textContent);
+  $('summary-percent').textContent = '';
+  $('summary-percent').hidden = stage !== 'analyzing';
+  reportSize();
+}
+function finishStage(stage) {
+  const main = document.querySelector('main');
+  main.dataset.stage = stage;
+  main.setAttribute('aria-busy', 'false');
+  $('summary-progress-area').hidden = true;
+}
+function cancel(message = 'Review canceled. Close this panel, then select MeowlChess to start again.') {
   if (stopped) return;
   stopped = true; controller.abort();
-  $('summary-progress-area').hidden = true;
+  finishStage($('summary-result').hidden ? 'stopped' : 'summary');
   $('summary-cancel').hidden = true;
   if ($('summary-result').hidden) $('summary-title').textContent = 'Review stopped';
   $('summary-close').hidden = false;
@@ -95,8 +116,8 @@ function showGame(game, parsed) {
 }
 function renderSummary(result, analysis, reused = false) {
   assertActive();
+  finishStage('summary');
   $('summary-title').textContent = 'Summary';
-  $('summary-progress-area').hidden = true;
   $('summary-result').hidden = false;
   $('summary-scores').replaceChildren(); $('summary-counts').replaceChildren();
   for (const color of ['w', 'b']) {
@@ -125,7 +146,7 @@ function onProgress({ completed, total, phase, phaseCompleted, phaseTotal }) {
   percent = Math.max(percent, Math.min(99, total > 0 ? completed / total * 100 : 0));
   $('summary-progress').value = percent;
   $('summary-percent').textContent = `${Math.round(percent)}%`;
-  $('summary-progress-label').textContent = phase === 'recheck' ? 'Rechecking key moves' : 'Reviewing your game';
+  $('summary-progress-label').textContent = phase === 'recheck' ? 'Rechecking key moves' : 'Reviewing positions';
   $('summary-progress-detail').textContent = `${phaseCompleted ?? completed} of ${phaseTotal ?? total} positions · ${payload.analysis.engineName}, on your device`;
 }
 async function readSaved(id) {
@@ -139,14 +160,15 @@ async function readSaved(id) {
 }
 async function runReview(id) {
   await checkEnabled();
+  showStage('finding-game', 'Checking saved reviews…');
   const saved = await readSaved(id);
   await checkEnabled();
   if (saved && !saved.stale) {
     savedId = saved.id; renderSummary(saved.result, saved.analysis, true); status('Saved review loaded.'); return;
   }
-  $('summary-progress-label').textContent = 'Starting the local engine…';
-  $('summary-progress-detail').textContent = `${payload.analysis.engineName} · analysis runs on this device.`;
+  showStage('analyzing', 'Starting the local engine…', `${payload.analysis.engineName} · running on this device`);
   const result = await analyzeGame(payload.game.pgn, { engineFactory: () => createEngine(payload.analysis.engineId), moveTimeMs: payload.analysis.moveTimeMs, multiPV: payload.analysis.multiPV, smartAnalysis: payload.analysis.smartAnalysis, signal: controller.signal, onProgress });
+  showStage('saving', 'Checking for an existing review…', 'Analysis is complete.');
   await checkEnabled();
   // A full review may have been saved elsewhere while this automatic pass ran.
   const newer = await readSaved(id);
@@ -157,6 +179,7 @@ async function runReview(id) {
   let saveMessage = 'Review complete. Saved on this device.';
   let displayedResult = result, displayedAnalysis = payload.analysis;
   try {
+    showStage('saving', 'Saving on this device…', 'Analysis is complete.');
     const reply = await chrome.runtime.sendMessage({ type: 'meowl:site-save-review', token, result });
     assertActive();
     if (reply?.status !== 'saved') throw new Error(reply?.status === 'expired' ? 'This panel has expired. Reload this page to try again.' : reply?.message || 'Saved reviews are unavailable. Reload this page to try again.');
@@ -184,8 +207,7 @@ async function start() {
     if (payload.kind === 'bot' && payload.gameKey !== `pgn:${id}`) throw new Error('This bot export does not match the selected game.');
     assertActive();
     if (navigator.locks?.request) {
-      $('summary-progress-label').textContent = 'Preparing your summary…';
-      $('summary-progress-detail').textContent = 'Checking saved reviews before starting the engine.';
+      showStage('finding-game', 'Checking saved reviews…');
       let acquired = false;
       try {
         await navigator.locks.request(`meowlchess-site-review-${id}`, { signal: controller.signal }, () => { acquired = true; return runReview(id); });
@@ -198,7 +220,8 @@ async function start() {
     } else await runReview(id);
   } catch (error) {
     if (stopped || disposed || error?.name === 'AbortError') return;
-    $('summary-title').textContent = 'Summary unavailable'; $('summary-progress-area').hidden = true; $('summary-close').hidden = false;
+    finishStage('error');
+    $('summary-title').textContent = 'Summary unavailable'; $('summary-close').hidden = false;
     status(error?.message || 'This panel could not start. Reload this page to try again.', true);
   }
 }
@@ -224,7 +247,7 @@ window.addEventListener('unload', dispose);
 window.addEventListener('pageshow', event => {
   if (!event.persisted || !disposed) return;
   // A restored document must not resume an engine or reuse an expired page handle.
-  $('summary-progress-area').hidden = true;
+  finishStage($('summary-result').hidden ? 'stopped' : 'summary');
   if ($('summary-result').hidden) $('summary-title').textContent = 'Review stopped';
   $('summary-open-review').disabled = true;
   $('summary-close').hidden = false;

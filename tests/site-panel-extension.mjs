@@ -116,6 +116,13 @@ async function resizeEdge(direction, dx, dy, source, label) {
   assert.equal(await page.locator('#meowlchess-resize-shield').count(), 0, `${label} removes input shield`);
   return box;
 }
+const gripFocus = direction => shadowValue(`.resize-handle[data-resize-direction="${direction}"]`, '({focused:this.getRootNode().activeElement===this,visible:this.matches(":focus-visible"),style:getComputedStyle(this).outlineStyle,width:getComputedStyle(this).outlineWidth})');
+async function noPointerResizeOutline(direction) {
+  await page.mouse.move(20, 20);
+  const state = await gripFocus(direction);
+  assert.equal(state.focused, true, `${direction} resize keeps its control focused.`);
+  assert(state.style === 'none' || state.width === '0px', `${direction} mouse resize leaves no outline after the pointer moves away: ${JSON.stringify(state)}`);
+}
 
 try {
   await cp(join(root, 'extension'), extension, { recursive: true });
@@ -164,6 +171,7 @@ try {
   await page.goto(chessUrl); await page.bringToFront();
   stage = 'waiting panel horizontal resize preserves height before game data arrives';
   await page.locator(`${HOST}[data-state="waiting"]`).waitFor();
+  assert.equal(await shadowValue('.loading-stage', 'this.textContent.trim()'), 'Finding game');
   const waitingBox = await hostBox();
   assert(waitingBox.height >= 220, 'Waiting panel already accommodates the minimum expanded height.');
   const waitingResized = await resizeEdge('w', -40, 0, 'chesscom', 'waiting-state width-only resize');
@@ -239,8 +247,17 @@ try {
   assert(handleState.every(grip => grip.width > 0 && grip.height > 0), 'All eight resize targets have visible hit areas.');
   assert.deepEqual(handleState.filter(grip => grip.tabIndex === 0).map(grip => grip.direction), ['se'], 'Resizing adds one keyboard tab stop.');
   for (const [direction, dx, dy] of [['e', 40, 0], ['s', 0, 30], ['w', -50, 0], ['n', 0, -40], ['ne', 25, -25], ['nw', -30, -20], ['sw', -25, 20], ['se', 20, 20]]) {
+    // Begin in keyboard modality: a prevented pointerdown must not inherit its ring.
+    await cdp.send('DOM.focus', { nodeId: await shadowNode('.brand') });
+    await page.keyboard.press('Tab'); await page.keyboard.press('Shift+Tab');
     await resizeEdge(direction, dx, dy, 'chesscom', `${direction} expands`);
+    await noPointerResizeOutline(direction);
+    if (direction === 'e') {
+      await mkdir(join(root, 'test-results'), { recursive: true });
+      await page.screenshot({ path: join(root, 'test-results', 'panel-grip-focus-after.png') });
+    }
     await resizeEdge(direction, -dx, -dy, 'chesscom', `${direction} shrinks across content`);
+    await noPointerResizeOutline(direction);
   }
   stage = 'top and left resize cancellation restores geometry and stored preference';
   for (const direction of ['n', 'w']) {
@@ -334,6 +351,9 @@ try {
   await page.mouse.move(grip.x, grip.y); await page.mouse.down(); await page.mouse.move(large.x + 100, large.y + 70, { steps: 8 }); await page.mouse.up();
   await poll(async () => Math.abs((await hostBox()).width - 280) <= 2 && Math.abs((await hostBox()).height - 220) <= 2, 'minimum panel dimensions');
   await cdp.send('DOM.focus', { nodeId: await shadowNode('.resize-handle') });
+  await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Tab');
+  const keyboardGrip = await gripFocus('se');
+  assert(keyboardGrip.focused && keyboardGrip.visible && keyboardGrip.style === 'solid' && keyboardGrip.width === '2px', 'Keyboard focus on the primary resize handle stays visible.');
   await page.keyboard.press('ArrowRight'); await page.keyboard.press('Shift+ArrowDown');
   await poll(async () => Math.abs((await hostBox()).width - 290) <= 2 && Math.abs((await hostBox()).height - 260) <= 2, 'keyboard resize');
   await page.keyboard.press('Home');

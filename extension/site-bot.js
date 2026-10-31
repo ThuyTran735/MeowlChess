@@ -67,7 +67,7 @@
   }
   function createImport({ submit, getExport }) {
     const box = document.createElement('div'); box.className = 'waiting bot-import';
-    const title = document.createElement('p'); title.textContent = 'Review your finished bot game';
+    const title = document.createElement('h2'); title.className = 'loading-stage'; title.textContent = 'Finding game';
     const detail = document.createElement('small');
     detail.textContent = 'Bot games are private. Open Share → PGN on Chess.com to review the finished game here.';
     const read = document.createElement('button'); read.type = 'button'; read.className = 'bot-action'; read.textContent = 'Get finished game';

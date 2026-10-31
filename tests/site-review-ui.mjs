@@ -15,6 +15,7 @@ const profile = await mkdtemp(join(temporaryRoot, 'meowlchess-site-test-'));
 const bundle = await mkdtemp(join(temporaryRoot, 'meowlchess-site-bundle-'));
 const extension = join(bundle, 'extension');
 const hostSelector = '#meowlchess-site-review';
+const launcherSelector = '#meowlchess-site-launcher';
 const stamp = Math.floor(Date.now() / 1000) - 3600;
 const chessUrl = 'https://www.chess.com/game/live/884400001';
 const nextChessUrl = 'https://www.chess.com/game/live/884400002';
@@ -57,7 +58,19 @@ try {
     return route.abort();
   });
   await context.addInitScript(() => {
-    const telemetry = window.__siteTest = { created: 0, terminated: 0, searches: 0, progressSeen: false, summarySeen: false, progressBeforeSummary: false, hostStates: [], workerErrors: [] };
+    const telemetry = window.__siteTest = { created: 0, terminated: 0, searches: 0, progressSeen: false, summarySeen: false, progressBeforeSummary: false, hostStates: [], stages: [], savePending: false, workerErrors: [] };
+    // Hold the actual storage request, not a timer or a fake completed review.
+    // The test releases it after inspecting the Saving state and empty library.
+    if (location.pathname.endsWith('/site-summary.html') && globalThis.chrome?.runtime?.sendMessage) {
+      const nativeSend = chrome.runtime.sendMessage.bind(chrome.runtime);
+      chrome.runtime.sendMessage = async (message, ...args) => {
+        if (message?.type === 'meowl:site-save-review') {
+          telemetry.savePending = true;
+          await new Promise(resolve => { window.__releaseSiteSave = () => { telemetry.savePending = false; resolve(); }; });
+        }
+        return nativeSend(message, ...args);
+      };
+    }
     const NativeWorker = window.Worker;
     window.Worker = class extends NativeWorker {
       constructor(...args) { super(...args); telemetry.created++; this.addEventListener('error', event => telemetry.workerErrors.push({ message: event.message, filename: event.filename, line: event.lineno })); }
@@ -68,6 +81,8 @@ try {
     new MutationObserver(() => {
       const hostState = document.querySelector('#meowlchess-site-review')?.dataset.state;
       if (hostState && telemetry.hostStates.at(-1) !== hostState) telemetry.hostStates.push(hostState);
+      const stage = document.querySelector('#summary-title')?.textContent.trim();
+      if (stage && telemetry.stages.at(-1) !== stage) telemetry.stages.push(stage);
       if (visible(document.querySelector('#summary-progress'))) telemetry.progressSeen = true;
       if (visible(document.querySelector('#summary-result')) && !telemetry.summarySeen) {
         telemetry.summarySeen = true;
@@ -109,6 +124,33 @@ try {
     page.on('console', message => { if (['error', 'warning'].includes(message.type())) browserDiagnostics.push(message.text()); });
     page.on('requestfailed', request => browserDiagnostics.push(`${request.url()}: ${request.failure()?.errorText}`));
   };
+  const withShadowControl = async (page, hostId, selector, action) => {
+    const cdp = await context.newCDPSession(page);
+    try {
+      const tree = await cdp.send('DOM.getDocument', { depth: -1, pierce: true });
+      const find = node => {
+        if (node.attributes?.some((value, index) => index % 2 === 0 && value === 'id' && node.attributes[index + 1] === hostId)) return node;
+        for (const child of [...(node.children || []), ...(node.shadowRoots || [])]) { const result = find(child); if (result) return result; }
+      };
+      const host = find(tree.root); assert(host?.shadowRoots?.length, `${hostId} closed shadow root exists.`);
+      const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: host.shadowRoots[0].nodeId, selector });
+      assert(nodeId, `Missing ${selector} in ${hostId}`);
+      return await action(cdp, nodeId);
+    } finally { await cdp.detach(); }
+  };
+  const clickShadow = (page, hostId, selector) => withShadowControl(page, hostId, selector, async (cdp, nodeId) => {
+    const { model } = await cdp.send('DOM.getBoxModel', { nodeId });
+    await page.mouse.click((model.content[0] + model.content[2]) / 2, (model.content[1] + model.content[5]) / 2);
+  });
+  const shadowHasFocus = (page, hostId, selector) => withShadowControl(page, hostId, selector, async (cdp, nodeId) => {
+    const { object } = await cdp.send('DOM.resolveNode', { nodeId });
+    return (await cdp.send('Runtime.callFunctionOn', { objectId: object.objectId, functionDeclaration: 'function(){return this.getRootNode().activeElement === this}', returnByValue: true })).result.value;
+  });
+  const reopen = async page => {
+    await page.locator(launcherSelector).waitFor({ state: 'visible' });
+    await clickShadow(page, 'meowlchess-site-launcher', 'button[aria-label="Open MeowlChess review"]');
+    await page.locator(launcherSelector).waitFor({ state: 'detached' });
+  };
   settings = await context.newPage(); watchErrors(settings); settings.setDefaultTimeout(15000);
   stage = 'open site-review settings';
   await settings.goto(`${extensionBase}review.html?siteSettings=1`); await closeLibrary(settings);
@@ -136,7 +178,7 @@ try {
     await page.waitForFunction(() => document.querySelector('#meowlchess-site-review'));
     const started = Date.now();
     while (Date.now() - started < 60000) {
-      const frame = page.frames().find(item => /\/site-summary\.html(?:[?#]|$)/.test(item.url()));
+      const frame = page.frames().find(item => !item.isDetached() && /\/site-summary\.html(?:[?#]|$)/.test(item.url()));
       if (frame) return frame;
       await new Promise(resolve => setTimeout(resolve, 50));
     }
@@ -160,8 +202,9 @@ try {
   }, page.url());
   const complete = async frame => {
     await poll(async () => {
-      const state = await frame.evaluate(() => ({ visible: !document.querySelector('#summary-result').hidden, error: document.querySelector('#summary-status').classList.contains('error'), message: document.querySelector('#summary-status').textContent, workerErrors: window.__siteTest.workerErrors }));
+      const state = await frame.evaluate(() => ({ visible: !document.querySelector('#summary-result').hidden, error: document.querySelector('#summary-status').classList.contains('error'), message: document.querySelector('#summary-status').textContent, workerErrors: window.__siteTest.workerErrors, savePending: window.__siteTest.savePending }));
       if (state.error) throw new Error(`Summary frame: ${state.message} ${JSON.stringify(state.workerErrors)}`);
+      if (state.savePending) await frame.evaluate(() => window.__releaseSiteSave());
       return state.visible;
     }, 'completed summary', 120000);
     await frame.locator('#summary-open-review').waitFor({ state: 'visible' });
@@ -178,6 +221,7 @@ try {
   await fixtures([chessGame(chessUrl, 'Unfinished fixture', 'sitecat', 'siteowl', false), chessGame('https://www.chess.com/game/live/884400000', 'Older fixture')]);
   await chess.goto(chessUrl.replace('/game/live/', '/game/'));
   assert.equal(await chess.locator(hostSelector).count(), 0);
+  assert.equal(await chess.locator(launcherSelector).count(), 0, 'Disabled review has no reopen button.');
   assert.equal((await worker.evaluate(() => chrome.scripting.getRegisteredContentScripts())).length, 0);
   stage = 'deny site permission through settings';
   await settings.bringToFront();
@@ -203,6 +247,19 @@ try {
   await enabled('chesscom', false); await enabled('chesscom', true);
   await chess.bringToFront();
   const chessFrame = await waitFrame(chess);
+  await poll(() => chessFrame.evaluate(() => window.__siteTest.savePending), 'real analysis reaches pending save', 120000);
+  assert.equal(await chessFrame.locator('#summary-title').innerText(), 'Saving');
+  assert.equal(await chessFrame.locator('main').getAttribute('data-stage'), 'saving');
+  assert.equal(await chessFrame.locator('#summary-progress').isVisible(), true);
+  assert.equal(await chessFrame.locator('#summary-progress').getAttribute('value'), null, 'Saving uses indeterminate progress.');
+  assert.equal(await chessFrame.locator('#summary-percent').isVisible(), false, 'Saving does not display a made-up percentage.');
+  assert.equal(await chessFrame.locator('#summary-result').isVisible(), false, 'Summary waits for the real save request.');
+  assert.equal((await records()).length, 0, 'The held save has not written a review.');
+  const pendingStages = await chessFrame.evaluate(() => window.__siteTest.stages);
+  assert(pendingStages.includes('Analyzing') && pendingStages.indexOf('Analyzing') < pendingStages.indexOf('Saving'), 'Analyzing precedes Saving.');
+  await mkdir(join(root, 'test-results'), { recursive: true });
+  await chess.screenshot({ path: join(root, 'test-results', 'site-review-saving.png') });
+  await chessFrame.evaluate(() => window.__releaseSiteSave());
   await complete(chessFrame);
   assert.equal(await chessFrame.locator('#summary-players').innerText(), 'sitecat vs siteowl', 'The short game URL must select the exact game, not the newest archive entry.');
   assert.equal((await records())[0].game.url, chessUrl, 'The requested historical game is saved, not one of the sixty newer matches.');
@@ -244,9 +301,25 @@ try {
   assert.match(fullReview.url(), /reviewId=game-[a-f0-9]{64}/);
   await fullReview.close();
 
+  stage = 'closed Chess.com summary reopens from its small button without reanalysis';
+  await chess.bringToFront(); await cachedFrame.locator('#summary-close').click();
+  await chess.locator(hostSelector).waitFor({ state: 'detached' });
+  await noFrame(chess);
+  await chess.locator(launcherSelector).waitFor({ state: 'visible' });
+  await chess.screenshot({ path: join(root, 'test-results', 'site-review-launcher.png') });
+  await reopen(chess);
+  const reopenedChessFrame = await waitFrame(chess); await complete(reopenedChessFrame);
+  assert.equal(await shadowHasFocus(chess, 'meowlchess-site-review', '.brand'), true, 'Reopening retains keyboard focus after the waiting panel becomes the asynchronous summary.');
+  assert.equal((await reopenedChessFrame.evaluate(() => window.__siteTest)).created, 0, 'Reopening a saved summary does not start an engine.');
+  assert.equal((await records()).length, 1);
+  await reopenedChessFrame.locator('#summary-close').click();
+  await chess.locator(launcherSelector).waitFor({ state: 'visible' });
+  await noFrame(chess);
+
   stage = 'SPA navigation removes stale results; disabling cancels a new review';
   await chess.evaluate(url => { history.pushState({}, '', url); document.querySelector('#round-result').textContent = 'New game'; }, nextChessUrl.replace('/game/live/', '/game/'));
   await chess.waitForFunction(() => document.querySelector('#meowlchess-site-review')?.dataset.state === 'waiting');
+  await chess.locator(launcherSelector).waitFor({ state: 'detached' });
   await noFrame(chess);
   console.log('SPA sender snapshots:', await worker.evaluate(() => globalThis.__siteSenders));
   await settings.bringToFront();
@@ -261,9 +334,20 @@ try {
   const cancelling = await waitFrame(cancellationPage);
   await cancelling.waitForFunction(() => window.__siteTest.searches > 0);
   assert.equal(await cancelling.locator('#summary-progress').isVisible(), true);
+  assert.equal(await cancelling.locator('#summary-title').innerText(), 'Analyzing');
+  await clickShadow(cancellationPage, 'meowlchess-site-review', 'button[aria-label="Close review"]');
+  await cancellationPage.locator(hostSelector).waitFor({ state: 'detached' });
+  await noFrame(cancellationPage);
+  await poll(() => cancellationPage.workers().length === 0, 'closing the panel stops active analysis');
+  assert.equal((await records()).length, 1, 'Closing an active review saves no partial result.');
+  await reopen(cancellationPage);
+  const restarted = await waitFrame(cancellationPage);
+  await restarted.waitForFunction(() => window.__siteTest.searches > 0);
+  assert.equal(await restarted.locator('#summary-title').innerText(), 'Analyzing', 'Reopening an interrupted review restarts analysis.');
   await enabled('chesscom', false);
   await cancellationPage.bringToFront();
   await cancellationPage.locator(hostSelector).waitFor({ state: 'detached' });
+  assert.equal(await cancellationPage.locator(launcherSelector).count(), 0, 'Disabling cannot leave a reopen button.');
   await cancellationPage.waitForTimeout(250);
   assert.equal(cancellationPage.workers().length, 0);
   await cancellationPage.close();
@@ -316,7 +400,15 @@ try {
   await lichess.screenshot({ path: join(root, 'test-results', 'site-review-lichess.png') });
   await lichessFrame.locator('#summary-close').click();
   await lichess.locator(hostSelector).waitFor({ state: 'detached' });
+  await noFrame(lichess);
+  await reopen(lichess);
+  const reopenedLichessFrame = await waitFrame(lichess); await complete(reopenedLichessFrame);
+  assert.equal((await reopenedLichessFrame.evaluate(() => window.__siteTest)).created, 0, 'Lichess reopens its saved summary without another engine.');
+  assert.equal(await reopenedLichessFrame.locator('#summary-players').innerText(), 'sitecat vs siteowl');
+  await reopenedLichessFrame.locator('#summary-close').click();
+  await lichess.locator(launcherSelector).waitFor({ state: 'visible' });
   await enabled('lichess', false);
+  await lichess.locator(launcherSelector).waitFor({ state: 'detached' });
   assert.equal((await worker.evaluate(() => chrome.scripting.getRegisteredContentScripts())).length, 0);
   console.log('Site review: Lichess progress/summary, account checks, private URL handling, local engine, and disable passed.');
 

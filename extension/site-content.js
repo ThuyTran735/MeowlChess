@@ -6,7 +6,8 @@
   const extensionOrigin = chrome.runtime.getURL('').replace(/\/$/, '');
   const tokenPattern = /^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i;
   let enabled = false, username = '', generation = 0, checking = false, timer, routeTimer, observer, debounce;
-  let route = pageKey(), host, shadow, body, frame, message, bar, token = null, gameUrl = null;
+  let route = pageKey(), host, shadow, body, frame, message, stageLabel, bar, launcher, token = null, gameUrl = null;
+  let panelRelease = Promise.resolve();
   let dismissed = null, baseline = null, completedUrl = null, baselineKnown = false, hint = false, hintSince = 0, nextCheck = 0;
   let interval = source === 'chesscom' ? 60000 : 30000;
   const bot = globalThis.__meowlChessBot;
@@ -30,22 +31,53 @@
     try { return Promise.resolve(chrome.runtime.sendMessage({ type, ...extra })); }
     catch (error) { return Promise.reject(error); } // An extension reload can invalidate this old page helper.
   }
-  function release(value) { if (value) void send('meowl:site-release', { token: value }).catch(() => {}); }
+  function release(value) { return value ? send('meowl:site-release', { token: value }).catch(() => {}) : Promise.resolve(); }
   function clearPanel() {
     panelMover?.destroy(); panelMover = botForm = null;
     frame?.remove(); frame = null;
-    host?.remove(); host = shadow = body = message = bar = null;
-    release(token); token = gameUrl = null;
+    host?.remove(); host = shadow = body = message = stageLabel = bar = null;
+    if (token) panelRelease = release(token);
+    token = gameUrl = null;
+  }
+  function clearLauncher() { launcher?.remove(); launcher = null; }
+  function showLauncher(focus = false) {
+    if (!enabled || document.hidden || !dismissed || launcher?.isConnected) return;
+    launcher = document.createElement('div'); launcher.id = 'meowlchess-site-launcher';
+    launcher.style.cssText = 'all:initial!important;position:fixed!important;right:16px!important;bottom:16px!important;z-index:2147483646!important;display:block!important;color-scheme:dark!important;';
+    const root = launcher.attachShadow({ mode: 'closed' });
+    const style = document.createElement('style');
+    style.textContent = 'button{display:flex;align-items:center;gap:8px;box-sizing:border-box;max-width:calc(100vw - 32px);padding:9px 12px;border:1px solid #65764f;border-radius:24px;background:#292b26;color:#f0efe8;box-shadow:0 4px 18px #0005;font:600 13px Arial,sans-serif;cursor:pointer}button:hover{background:#373d2d}button:focus-visible{outline:2px solid #b2cf8d;outline-offset:3px}img{display:block;width:24px;height:24px;flex:none;border-radius:5px;object-fit:cover}span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}';
+    const open = button('Open MeowlChess review', '', () => { void reopenPanel(); });
+    const icon = document.createElement('img'); icon.src = chrome.runtime.getURL('icons/icon48.png'); icon.alt = ''; icon.draggable = false;
+    const label = document.createElement('span'); label.textContent = 'MeowlChess'; open.append(icon, label);
+    root.append(style, open); document.documentElement.append(launcher);
+    if (focus) open.focus({ preventScroll: true });
   }
   function dismiss() {
     dismissed = gameUrl || 'waiting';
-    generation++; clearPanel();
+    generation++; clearTimeout(timer); clearPanel(); showLauncher(true);
+  }
+  async function reopenPanel() {
+    if (!enabled || document.hidden) return;
+    // A click just after navigation must not bring back the previous bot export.
+    inspectPage();
+    if (!dismissed) return;
+    const started = ++generation;
+    dismissed = null; nextCheck = 0; clearLauncher();
+    if (botPage()) { botExportAttempted = Boolean(botSavedPgn); botAttemptPgn = botSavedPgn; }
+    waiting();
+    shadow?.querySelector('.brand')?.focus({ preventScroll: true });
+    // Let the closed frame release its old handle before asking for a fresh one.
+    await panelRelease;
+    if (!enabled || document.hidden || started !== generation) return;
+    void check();
   }
   function button(label, text, action) {
     const element = document.createElement('button'); element.type = 'button'; element.textContent = text;
     element.title = label; element.setAttribute('aria-label', label); element.addEventListener('click', action); return element;
   }
   function ensurePanel() {
+    clearLauncher();
     if (host?.isConnected) return;
     host = document.createElement('div'); host.id = 'meowlchess-site-review'; host.dataset.collapsed = 'false';
     // Keep host dimensions out of the chess site's stylesheet.
@@ -76,7 +108,11 @@
       .resize-handle[data-resize-direction="se"]{right:0;bottom:0;width:20px;height:20px;z-index:3;cursor:nwse-resize;border-radius:0 0 9px 0}
       .resize-handle[data-resize-direction="se"]::after{content:'';position:absolute;right:4px;bottom:4px;width:10px;height:10px;background:repeating-linear-gradient(135deg,transparent 0 3px,#b7bca8 3px 5px,transparent 5px 7px);clip-path:polygon(100% 0,100% 100%,0 100%);opacity:.7}
       .resize-handle:hover::after,.resize-handle:focus-visible::after{opacity:1}
+      .resize-handle:focus{outline:none}
       .resize-handle:focus-visible{outline:2px solid #9dbb74;outline-offset:-3px}
+      .resize-handle[data-pointer-focus="true"]:focus{outline:none}
+      .waiting .loading-stage{font-size:15px;font-weight:650;line-height:1.3;margin:0 0 10px}
+      .brand:focus{outline:none}.brand:focus-visible{outline:2px solid #9dbb74;outline-offset:3px;border-radius:2px}.brand[data-pointer-focus="true"]:focus{outline:none}
     `;
     const panel = document.createElement('section'); panel.className = 'panel'; panel.setAttribute('aria-label', 'MeowlChess game review');
     const header = document.createElement('div'); header.className = 'head';
@@ -141,26 +177,30 @@
       else botForm?.feedback('Open Share → PGN, or use a PGN file below. Only finished games can be reviewed.');
     }).catch(error => { if (active()) botForm?.feedback(error.message); }).finally(() => { botExporting = false; });
   }
-  function waiting(text = 'Waiting for game data…', error = false) {
+  function waiting(text = 'Looking for this completed game.', error = false) {
     if (frame || dismissed) return;
     if (botPage()) { botPrompt(); if (error) botForm?.feedback(text); return; }
     ensurePanel(); host.dataset.state = error ? 'error' : 'waiting';
     if (!message) {
       const box = document.createElement('div'); box.className = 'waiting';
+      stageLabel = document.createElement('h2'); stageLabel.className = 'loading-stage';
       message = document.createElement('p'); message.setAttribute('role', 'status');
-      bar = document.createElement('progress'); bar.setAttribute('aria-label', 'Waiting for completed game data');
+      bar = document.createElement('progress'); bar.setAttribute('aria-label', 'Finding game');
       const detail = document.createElement('small'); detail.textContent = 'The summary appears here when the local review finishes.';
-      box.append(message, bar, detail); body.replaceChildren(box);
+      box.append(stageLabel, message, bar, detail); body.replaceChildren(box);
     }
+    stageLabel.textContent = error ? 'Game unavailable' : 'Finding game';
     message.textContent = text; bar.hidden = error;
   }
   function showReview(reply) {
     if (!tokenPattern.test(reply.token) || typeof reply.gameUrl !== 'string') return;
     if (token === reply.token && frame?.isConnected) return;
+    const keepFocus = Boolean(shadow?.activeElement);
     clearPanel(); token = reply.token; gameUrl = reply.gameUrl;
     ensurePanel(); host.dataset.state = 'review';
     frame = document.createElement('iframe'); frame.title = 'MeowlChess review progress and summary'; frame.referrerPolicy = 'origin';
     frame.src = chrome.runtime.getURL('site-summary.html') + '#' + token; frame.style.height = '270px'; body.replaceChildren(frame);
+    if (keepFocus) shadow.querySelector('.brand')?.focus({ preventScroll: true });
   }
   function visible(element) {
     if (!element || !element.getClientRects().length) return false;
@@ -179,20 +219,20 @@
     if (!enabled || document.hidden) return;
     const current = pageKey();
     if (current !== route) {
-      generation++; clearPanel(); route = current; dismissed = baseline = completedUrl = null; baselineKnown = false; hint = false; hintSince = 0; nextCheck = 0; botExportAttempted = false; botAttemptPgn = botSavedPgn = null;
+      generation++; clearPanel(); clearLauncher(); route = current; dismissed = baseline = completedUrl = null; baselineKnown = false; hint = false; hintSince = 0; nextCheck = 0; botExportAttempted = false; botAttemptPgn = botSavedPgn = null;
       void check();
     }
     const nextHint = finishedHint();
     if (botPage() && hint && !nextHint) {
       // The bot page reuses its URL for a rematch. Forget the previous result
       // when its final notice disappears rather than showing it as the new game.
-      generation++; clearPanel(); botAttemptPgn = botSavedPgn = null; botExportAttempted = false; dismissed = null; nextCheck = 0;
+      generation++; clearPanel(); clearLauncher(); botAttemptPgn = botSavedPgn = null; botExportAttempted = false; dismissed = null; nextCheck = 0;
     }
     if (nextHint && !hint) {
       if (botPage()) { botExportAttempted = false; botAttemptPgn = botSavedPgn = null; }
-      if ((liveLobby() || botPage()) && gameUrl) {
+      if (liveLobby() || botPage()) {
         // A new result notice on the play screen starts with progress, never the old summary.
-        baseline = gameUrl; completedUrl = null; generation++; clearPanel();
+        baseline = gameUrl || completedUrl || baseline; completedUrl = null; generation++; clearPanel(); clearLauncher();
       }
       hintSince = Date.now(); dismissed = null; waiting(); nextCheck = 0; void check();
       if (botPage() && body?.hidden) shadow.querySelector('button[aria-label="Expand review"]')?.click();
@@ -202,17 +242,18 @@
   }
   function schedule() {
     clearTimeout(timer);
-    if (enabled && !document.hidden) timer = setTimeout(() => { void check(); }, Math.max(1000, nextCheck - Date.now()));
+    if (enabled && !document.hidden && !dismissed) timer = setTimeout(() => { void check(); }, Math.max(1000, nextCheck - Date.now()));
   }
   async function check() {
-    if (!enabled || document.hidden || checking) return;
+    if (!enabled || document.hidden || checking || dismissed) return;
     if (Date.now() < nextCheck) { schedule(); return; }
     checking = true; const started = generation;
     try {
+      if (host && !frame && !botPage()) waiting();
       const reply = await send('meowl:site-check');
       if (!enabled || document.hidden || started !== generation) return;
       interval = Math.max(15000, Math.min(300000, Number(reply?.retryAfterMs) || interval)); nextCheck = Date.now() + interval;
-      if (reply?.status === 'disabled') { clearPanel(); return; }
+      if (reply?.status === 'disabled') { clearPanel(); clearLauncher(); return; }
       if (reply?.status === 'bot') {
         // Keep a small header available even if the site's end-notice layout changes.
         const first = !host; botPrompt();
@@ -247,7 +288,7 @@
     } finally { checking = false; schedule(); }
   }
   function stop() {
-    enabled = false; generation++; clearTimeout(timer); clearTimeout(debounce); clearInterval(routeTimer); observer?.disconnect(); observer = null; clearPanel();
+    enabled = false; generation++; clearTimeout(timer); clearTimeout(debounce); clearInterval(routeTimer); observer?.disconnect(); observer = null; clearPanel(); clearLauncher();
   }
   function configure(raw) {
     const config = raw?.[source], name = typeof config?.username === 'string' ? config.username.trim().toLowerCase() : '';
@@ -273,8 +314,8 @@
   });
   document.addEventListener('visibilitychange', () => {
     if (!enabled) return;
-    if (document.hidden) { generation++; clearTimeout(timer); clearPanel(); }
-    else { nextCheck = 0; if (botPage() && !botSavedPgn) botExportAttempted = false; inspectPage(); void check(); }
+    if (document.hidden) { generation++; clearTimeout(timer); clearPanel(); clearLauncher(); }
+    else { nextCheck = 0; if (botPage() && !botSavedPgn) botExportAttempted = false; inspectPage(); if (dismissed) showLauncher(); else void check(); }
   });
   window.addEventListener('pagehide', stop);
   window.addEventListener('pageshow', event => {

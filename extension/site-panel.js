@@ -119,6 +119,7 @@
       const grip = event.currentTarget, direction = directionFor(grip);
       resize = { id: event.pointerId, x: event.clientX, y: event.clientY, rect, grip, direction, previous: preferredSize, previousPosition: preferred, moved: false };
       preferred = { left: rect.left, top: rect.top }; changed = sizeChanged = true;
+      grip.dataset.pointerFocus = 'true';
       grip.focus({ preventScroll: true }); grip.setPointerCapture(event.pointerId);
       host.dataset.resizing = 'true';
       showShield(directions[direction][0], 'meowlchess-resize-shield');
@@ -154,6 +155,7 @@
       preferredSize = null; rememberSize(); place();
     }
     function resizeKey(event) {
+      delete event.currentTarget.dataset.pointerFocus;
       if (event.altKey || event.ctrlKey || event.metaKey || host.dataset.collapsed === 'true' || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home'].includes(event.key)) return;
       const direction = directionFor(event.currentTarget);
       if ((/Arrow(?:Left|Right)/.test(event.key) && !/[we]/.test(direction)) || (/Arrow(?:Up|Down)/.test(event.key) && !/[ns]/.test(direction))) return;
@@ -188,6 +190,7 @@
       if (destroyed || event.button !== 0 || !event.isPrimary || drag || resize || blockedTarget(event)) return;
       event.preventDefault(); event.stopPropagation();
       beginDrag(event.pointerId, event.clientX, event.clientY, false);
+      handle.dataset.pointerFocus = 'true';
       handle.focus({ preventScroll: true });
       surface.setPointerCapture(event.pointerId);
     }
@@ -266,6 +269,7 @@
     }
     function nativeDrag(event) { if (!blockedTarget(event)) event.preventDefault(); }
     function keyDown(event) {
+      if (event.target === handle) delete handle.dataset.pointerFocus;
       if (event.target !== handle || event.altKey || event.ctrlKey || event.metaKey) return;
       if (event.key === 'Escape' && drag) { event.preventDefault(); event.stopPropagation(); finishDrag(true); return; }
       if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home'].includes(event.key)) return;
@@ -278,8 +282,7 @@
       }
       remember();
     }
-    function focus() { handle.style.outline = '2px solid #9dbb74'; handle.style.outlineOffset = '3px'; handle.style.borderRadius = '2px'; }
-    function blur() { handle.style.outline = ''; handle.style.outlineOffset = ''; }
+    function clearPointerFocus(event) { delete event.currentTarget.dataset.pointerFocus; }
     surface.addEventListener('pointerdown', pointerDown);
     surface.addEventListener('pointermove', pointerMove);
     surface.addEventListener('pointerup', pointerUp);
@@ -287,9 +290,8 @@
     surface.addEventListener('lostpointercapture', lostCapture);
     surface.addEventListener('dragstart', nativeDrag);
     handle.addEventListener('keydown', keyDown);
-    handle.addEventListener('focus', focus);
-    handle.addEventListener('blur', blur);
-    for (const grip of resizeGrips) for (const [name, listener] of [['pointerdown', resizeDown], ['pointermove', resizeMove], ['pointerup', resizeUp], ['pointercancel', resizeUp], ['lostpointercapture', resizeLost], ['keydown', resizeKey], ['dblclick', resetSize]]) grip.addEventListener(name, listener);
+    handle.addEventListener('blur', clearPointerFocus);
+    for (const grip of resizeGrips) for (const [name, listener] of [['pointerdown', resizeDown], ['pointermove', resizeMove], ['pointerup', resizeUp], ['pointercancel', resizeUp], ['lostpointercapture', resizeLost], ['keydown', resizeKey], ['blur', clearPointerFocus], ['dblclick', resetSize]]) grip.addEventListener(name, listener);
     document.addEventListener('keydown', escape, true);
     for (const name of ['pointermove', 'pointerup', 'pointercancel']) document.addEventListener(name, parentPointer, true);
     window.addEventListener('blur', windowBlur);
@@ -328,9 +330,11 @@
         window.visualViewport?.removeEventListener('resize', queuePlace);
         window.visualViewport?.removeEventListener('scroll', queuePlace);
         for (const [name, listener] of [['pointerdown', pointerDown], ['pointermove', pointerMove], ['pointerup', pointerUp], ['pointercancel', pointerUp], ['lostpointercapture', lostCapture], ['dragstart', nativeDrag]]) surface.removeEventListener(name, listener);
-        for (const [name, listener] of [['keydown', keyDown], ['focus', focus], ['blur', blur]]) handle.removeEventListener(name, listener);
+        handle.removeEventListener('keydown', keyDown);
+        handle.removeEventListener('blur', clearPointerFocus); delete handle.dataset.pointerFocus;
         for (const grip of resizeGrips) {
-          for (const [name, listener] of [['pointerdown', resizeDown], ['pointermove', resizeMove], ['pointerup', resizeUp], ['pointercancel', resizeUp], ['lostpointercapture', resizeLost], ['keydown', resizeKey], ['dblclick', resetSize]]) grip.removeEventListener(name, listener);
+          for (const [name, listener] of [['pointerdown', resizeDown], ['pointermove', resizeMove], ['pointerup', resizeUp], ['pointercancel', resizeUp], ['lostpointercapture', resizeLost], ['keydown', resizeKey], ['blur', clearPointerFocus], ['dblclick', resetSize]]) grip.removeEventListener(name, listener);
+          delete grip.dataset.pointerFocus;
           for (const [name, value] of Object.entries(gripOriginal.get(grip))) { if (value === null) grip.removeAttribute(name); else grip.setAttribute(name, value); }
         }
         document.removeEventListener('keydown', escape, true);

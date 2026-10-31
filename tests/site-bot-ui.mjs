@@ -14,6 +14,7 @@ const bundle = await mkdtemp(join(temporaryRoot, 'meowlchess-bot-bundle-'));
 const extension = join(bundle, 'extension');
 const PAGE = 'https://www.chess.com/play/computer';
 const HOST = '#meowlchess-site-review';
+const LAUNCHER = '#meowlchess-site-launcher';
 const pgn = '[Event "Bot browser fixture"]\n[White "Guest"]\n[Black "Martin"]\n[Result "0-1"]\n\n1. f3 e5 2. g4 Qh4# 0-1';
 const promotionPgn = '[Event "Bot promotion fixture"]\n[White "Guest"]\n[Black "Martin"]\n[SetUp "1"]\n[FEN "8/P7/8/8/8/6k1/8/4K3 w - - 0 1"]\n[Result "1-0"]\n\n1. a8=Q 1-0';
 const pastePgn = '[Event "Bot paste fixture"]\n[White "Guest"]\n[Black "Martin"]\n[Result "1/2-1/2"]\n\n1. d4 d5 1/2-1/2';
@@ -27,10 +28,10 @@ async function poll(read, label, timeout = 30000) {
   while (Date.now() - start < timeout) { if (await read()) return; await new Promise(resolve => setTimeout(resolve, 60)); }
   throw new Error(`Timed out: ${label}`);
 }
-async function shadowNode(selector) {
+async function shadowNode(selector, hostId = 'meowlchess-site-review') {
   const tree = await cdp.send('DOM.getDocument', { depth: -1, pierce: true });
   const find = node => {
-    if (node.attributes?.some((value, index) => index % 2 === 0 && value === 'id' && node.attributes[index + 1] === 'meowlchess-site-review')) return node;
+    if (node.attributes?.some((value, index) => index % 2 === 0 && value === 'id' && node.attributes[index + 1] === hostId)) return node;
     for (const child of [...(node.children || []), ...(node.shadowRoots || [])]) { const result = find(child); if (result) return result; }
     return null;
   };
@@ -40,11 +41,11 @@ async function shadowNode(selector) {
   assert(result.nodeId, `Missing shadow control: ${selector}`);
   return result.nodeId;
 }
-async function shadowPoint(selector) {
-  const { model } = await cdp.send('DOM.getBoxModel', { nodeId: await shadowNode(selector) });
+async function shadowPoint(selector, hostId) {
+  const { model } = await cdp.send('DOM.getBoxModel', { nodeId: await shadowNode(selector, hostId) });
   return { x: (model.content[0] + model.content[2]) / 2, y: (model.content[1] + model.content[5]) / 2 };
 }
-async function shadowClick(selector) { await page.waitForTimeout(180); const point = await shadowPoint(selector); await page.mouse.click(point.x, point.y); }
+async function shadowClick(selector, hostId) { await page.waitForTimeout(180); const point = await shadowPoint(selector, hostId); await page.mouse.click(point.x, point.y); }
 async function shadowFill(selector, value) {
   await cdp.send('DOM.focus', { nodeId: await shadowNode(selector) });
   await page.keyboard.press('Control+A'); await page.keyboard.insertText(value);
@@ -161,6 +162,7 @@ try {
   assert.equal(await page.locator(HOST).getAttribute('data-collapsed'), 'true');
   await page.waitForTimeout(1200);
   assert.equal(page.frames().length, 1); assert.equal(await page.evaluate(() => window.__downloads), 0);
+  assert.equal(await page.locator(LAUNCHER).count(), 0, 'A reopen button only appears after explicitly closing a panel.');
   assert.deepEqual(await worker.evaluate(() => globalThis.__botFetches), []);
   const handle = await shadowPoint('.brand');
   await page.mouse.move(handle.x, handle.y); await page.mouse.down(); await page.mouse.move(140, 540, { steps: 12 }); await page.mouse.up();
@@ -217,10 +219,26 @@ try {
   assert((await records()).some(record => record.game.pgn === pastePgn));
   console.log('Bot UI: manual paste and incomplete-PGN rejection passed.');
 
-  stage = 'close dismissal and persisted panel placement after refresh';
+  stage = 'closed manual bot review reopens without another export or engine';
   await pastedFrame.locator('#summary-close').click();
   await page.locator(HOST).waitFor({ state: 'detached' });
   await page.waitForTimeout(1400); assert.equal(await page.locator(HOST).count(), 0);
+  await page.locator(LAUNCHER).waitFor({ state: 'visible' });
+  const exportsBeforeReopen = await page.evaluate(() => window.__downloads);
+  await shadowClick('button[aria-label="Open MeowlChess review"]', 'meowlchess-site-launcher');
+  await page.locator(LAUNCHER).waitFor({ state: 'detached' });
+  const reopenedBotFrame = await waitFrame();
+  const reopenedBotTelemetry = await complete(reopenedBotFrame);
+  assert.equal(reopenedBotTelemetry.workers, 0, 'The saved manually pasted bot review does not start another engine.');
+  assert.equal(await page.evaluate(() => window.__downloads), exportsBeforeReopen, 'Reopening uses the retained manual PGN without another export.');
+  assert.equal((await records()).length, 3);
+  assert.equal(await reopenedBotFrame.locator('#summary-players').innerText(), 'Guest vs Martin');
+  await reopenedBotFrame.locator('#summary-close').click();
+  await page.locator(LAUNCHER).waitFor({ state: 'visible' });
+  await restartRound();
+  await page.locator(LAUNCHER).waitFor({ state: 'detached' });
+  assert.equal(page.frames().length, 1, 'A new bot round cannot reopen the dismissed previous review.');
+  stage = 'persisted panel placement after refresh';
   await page.reload(); await installFixture();
   await page.waitForFunction(() => document.querySelector('#meowlchess-site-review')?.dataset.state === 'bot');
   await page.waitForTimeout(250);
@@ -276,6 +294,7 @@ try {
   await page.locator('#share-modal dialog').waitFor({ state: 'visible' });
   await worker.evaluate(async () => { await chrome.storage.local.set({ siteReviewSettings: { chesscom: { enabled: false, username: 'alice' } } }); });
   await page.locator(HOST).waitFor({ state: 'detached' });
+  assert.equal(await page.locator(LAUNCHER).count(), 0, 'Turning off bot review removes its reopen button.');
   await page.locator('#share-modal dialog').waitFor({ state: 'detached' });
   assert.equal(await page.evaluate(() => window.__shareCloses), 5);
   await poll(() => worker.evaluate(async () => !(await chrome.scripting.getRegisteredContentScripts()).some(script => script.id === 'meowl-site-chesscom')), 'disabled helper unregistered');
