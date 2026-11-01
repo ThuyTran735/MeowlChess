@@ -220,7 +220,7 @@ export function createReviewLibrary({ store = createIndexedDBReviewStore(), anal
       if (record.id !== id || await reviewIdForGame(record.game) !== id) throw new LibraryError('corrupt', 'This saved review has the wrong game identity.');
       return expose(record);
     },
-    async saveReview(game, result, settings, { preserveCurrent = false } = {}) {
+    async saveReview(game, result, settings, { preserveCurrent = false, reportOutcome = false } = {}) {
       const normalizedGame = normalizeGame(game);
       const { parsed } = parseCompletedPgn(normalizedGame.pgn);
       const normalizedResult = normalizeResult(result, parsed);
@@ -235,11 +235,11 @@ export function createReviewLibrary({ store = createIndexedDBReviewStore(), anal
           // The incoming identity was hashed before opening this synchronous transaction.
           // Compare the fully validated stored identity without awaiting inside IndexedDB.
           if (canonicalIdentity(old.result.game) !== canonicalIdentity(parsed)) throw new LibraryError('corrupt', 'This saved review has the wrong game identity.');
-          if (old.analysis.analysisVersion === analysisVersion) return { value: expose(clone(old)) };
+          if (old.analysis.analysisVersion === analysisVersion) return { value: reportOutcome ? { record: expose(clone(old)), savedFresh: false } : expose(clone(old)) };
         }
         const record = { schemaVersion: LIBRARY_SCHEMA_VERSION, id, game: normalizedGame, result: normalizedResult, analysis, bookmarks: old?.bookmarks || [], createdAt: old?.createdAt || timestamp, updatedAt: Math.max(timestamp, old?.updatedAt || 0) };
         capacity([...records.filter(item => item.id !== id), record]);
-        return { put: [record], value: expose(clone(record)) };
+        return { put: [record], value: reportOutcome ? { record: expose(clone(record)), savedFresh: true } : expose(clone(record)) };
       });
     },
     async deleteReview(id) { return call('transact', records => ({ remove: [id], value: records.some(record => record.id === id) })); },

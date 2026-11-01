@@ -261,3 +261,27 @@ test('automatic preservation replaces a valid stale analysis instead of keeping 
   assert.equal(current.stale, false);
   assert.equal(current.analysis.analysisVersion, 'test-v1');
 });
+
+test('atomic save outcomes distinguish fresh writes from concurrent preserved analysis without changing stored schema', async () => {
+  const store = memoryStore(), data = await fixture();
+  let time = 1000;
+  const library = create(store, { now: () => time });
+  const outcomes = await Promise.all([
+    library.saveReview(data.game, data.result, SETTINGS, { preserveCurrent: true, reportOutcome: true }),
+    library.saveReview(data.game, data.result, SETTINGS, { preserveCurrent: true, reportOutcome: true }),
+  ]);
+  assert.deepEqual(outcomes.map(outcome => outcome.savedFresh), [true, false]);
+  assert.equal(outcomes[0].record.id, outcomes[1].record.id);
+  assert.equal(outcomes[0].record.updatedAt, outcomes[1].record.updatedAt);
+  const stored = store.records.get(outcomes[0].record.id);
+  assert.equal('savedFresh' in stored, false);
+  assert.equal('reportOutcome' in stored, false);
+  time = 2000;
+  const regular = await library.saveReview(data.game, data.result, SETTINGS);
+  assert.equal(regular.id, outcomes[0].record.id);
+  assert.equal(regular.updatedAt, 2000);
+  assert.equal('record' in regular, false, 'Existing callers retain the original return contract.');
+  time = 3000;
+  const replaced = await library.saveReview(data.game, data.result, SETTINGS, { reportOutcome: true });
+  assert.equal(replaced.savedFresh, true); assert.equal(replaced.record.updatedAt, 3000);
+});

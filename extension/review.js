@@ -15,6 +15,8 @@ import { estimateGameRatings } from './lib/game-rating.js';
 import { getPhasePerformance } from './lib/game-performance.js';
 import { createSiteReviewSettings } from './lib/site-settings.js';
 import { createReviewLibrary, reviewIdForGame } from './lib/library.js';
+import { createSummaryShare } from './lib/summary-share.js';
+import { installCompletionAlertSetting, notifyReviewComplete } from './lib/completion-alerts.js';
 const reviewLibrary = createReviewLibrary({ analysisVersion: ANALYSIS_VERSION });
 
 const $ = (id) => document.getElementById(id);
@@ -25,6 +27,9 @@ const tutorial = createTutorial({
   onSaveError: message => { $('save-status').textContent = message; }
 });
 const siteSettings = createSiteReviewSettings();
+const completionAlertSetting = installCompletionAlertSetting($('completion-alerts'), $('completion-alert-status'));
+const summaryShare = createSummaryShare({ getSummary: () => state.result && state.selected ? { game: state.selected, result: state.result, analysis: state.recordMeta } : null });
+$('share-summary').addEventListener('click', () => { stopPlayback(); void summaryShare.open(); });
 const lineColors = ['#96bc4b', '#55a7d7', '#efa64a'];
 const badgeDescriptions = { Book: 'A recorded opening move without a detected tactical error', Brilliant: 'Sound sacrifice in the engine line', Great: 'Best reply after an opponent’s error', Best: 'The engine’s first choice', Excellent: 'Almost no estimated loss', Good: 'A reasonable move', Inaccuracy: 'A small missed opportunity', Mistake: 'A significant loss of chances', Blunder: 'A large loss of chances' };
 function makeBadge(label, extraClass = '') {
@@ -195,6 +200,7 @@ function updateControls() {
   $('games').classList.toggle('loading-games', state.loading);
   document.querySelector('.analysis-box').classList.toggle('is-analyzing', state.busy);
   document.querySelector('.engine-panel').classList.toggle('is-searching', !!state.positionController);
+  $('share-summary').disabled = !state.result || unavailable;
   $('analyze-button').disabled = !state.parsed || unavailable || !!state.retry;
   $('analyze-button').hidden = state.busy;
   $('cancel-button').hidden = !state.busy;
@@ -705,7 +711,7 @@ async function review() {
         $('progress-text').textContent = `${phase === 'recheck' ? `Rechecking key positions ${phaseCompleted} of ${phaseTotal}` : `First pass ${phaseCompleted ?? completed} of ${phaseTotal ?? total}`} · ${Math.floor((performance.now() - startedAt) / 1000)}s elapsed`;
       }
     });
-    state.result = result; state.opening = result.opening || state.opening;
+    state.result = result; state.recordMeta = analysis; state.opening = result.opening || state.opening;
     $('progress-area').hidden = true;
     $('review-status').textContent = 'Review complete.';
     $('analyze-button').textContent = 'Review again';
@@ -714,7 +720,8 @@ async function review() {
     $('engine-panel').open = false;
     setReviewTab('summary');
     renderBoard();
-    await persistReview(selected, result, analysis);
+    const savedRecord = await persistReview(selected, result, analysis);
+    if (savedRecord && !state.controller.signal.aborted) void notifyReviewComplete(savedRecord);
   } catch (error) {
     $('progress-area').hidden = true;
     if (error.name === 'AbortError' || state.controller.signal.aborted) $('review-status').textContent = 'Review canceled.';
@@ -960,7 +967,8 @@ async function persistReview(game, result, analysis) {
     unavailableSavedReviews.delete(record.id);
     if (state.selected === game && state.result === result) { state.reviewId = record.id; state.bookmarks = record.bookmarks || []; state.recordMeta = analysis; $('save-status').textContent = 'Saved on this device.'; updateControls(); }
     await refreshLibrary();
-  } catch (error) { if (state.selected === game) $('save-status').textContent = `Review kept open, but not saved: ${error.message}`; }
+    return record;
+  } catch (error) { if (state.selected === game) $('save-status').textContent = `Review kept open, but not saved: ${error.message}`; return null; }
 }
 async function openSavedReview(id, options = {}) {
   const { ply = 0, practice = false, fallbackGame = null } = options;
@@ -1162,7 +1170,7 @@ for (const label of MOVE_LABELS) {
   row.append(makeBadge(label), name, description); $('classification-legend').append(row);
 }
 document.addEventListener('keydown', event => {
-  if ($('support-dialog').open || $('tutorial-dialog').open || $('library-dialog').open || $('promotion-picker').open || answersHidden() || event.target.closest('#board') || ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName) || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (document.querySelector('dialog[open]') || answersHidden() || event.target.closest('#board') || ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName) || event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.key === 'ArrowLeft') { event.preventDefault(); navigatePosition(positionIndex() - 1); }
   if (event.key === 'ArrowRight') { event.preventDefault(); navigatePosition(positionIndex() + 1); }
   if (event.key === 'Home') { event.preventDefault(); navigatePosition(0); }

@@ -6,6 +6,8 @@ import { isCompletedGame } from './lib/archive.js';
 import { installFrameDrag } from './site-frame-drag.js';
 import { estimateGameRatings } from './lib/game-rating.js';
 import { getPhasePerformance } from './lib/game-performance.js';
+import { createSummaryShare } from './lib/summary-share.js';
+import { notifyReviewComplete } from './lib/completion-alerts.js';
 
 const $ = id => document.getElementById(id);
 const ORIGINS = { chesscom: ['https://www.chess.com', 'https://chess.com'], lichess: ['https://lichess.org'] };
@@ -13,8 +15,17 @@ const TOKEN = /^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i;
 const token = location.hash.slice(1);
 const controller = new AbortController();
 let source, username, payload, savedId = null, stopped = false, disposed = false, lastHeight = 0, frame = 0, percent = 0;
+let sharedSummary = null;
+const summaryShare = createSummaryShare({ getSummary: () => sharedSummary });
+$('summary-share').addEventListener('click', () => { void summaryShare.open(); });
 let parentOrigin = null;
 try { const origin = new URL(document.referrer).origin; if (Object.values(ORIGINS).flat().includes(origin)) parentOrigin = origin; } catch { /* A valid payload may supply a verified parent origin. */ }
+// A reloaded extension frame may have no referrer. Chromium still supplies its
+// actual parent origin; keep the same site allowlist for retry messages.
+if (!parentOrigin) {
+  const origin = location.ancestorOrigins?.[0];
+  if (Object.values(ORIGINS).flat().includes(origin)) parentOrigin = origin;
+}
 
 function sendParent(type, extra = {}) {
   if (parentOrigin && parent !== window && TOKEN.test(token)) parent.postMessage({ type, token, ...extra }, parentOrigin);
@@ -45,6 +56,7 @@ observer.observe(document.querySelector('footer'));
 function status(message = '', error = false) {
   $('summary-status').textContent = message;
   $('summary-status').classList.toggle('error', error);
+  if (error && parentOrigin) { $('summary-retry').hidden = false; $('summary-open-review').hidden = true; }
 }
 function showStage(stage, label, detail = '') {
   assertActive();
@@ -74,8 +86,9 @@ function finishStage(stage) {
   main.dataset.stage = stage;
   main.setAttribute('aria-busy', 'false');
   $('summary-progress-area').hidden = true;
+  $('summary-retry').hidden = !['error', 'stopped'].includes(stage);
 }
-function cancel(message = 'Review canceled. Close this panel, then select MeowlChess to start again.') {
+function cancel(message = 'Review canceled. Select Retry loading to start again.') {
   if (stopped) return;
   stopped = true; controller.abort();
   finishStage($('summary-result').hidden ? 'stopped' : 'summary');
@@ -103,7 +116,7 @@ async function checkEnabled() {
   }
 }
 function validatePayload(value) {
-  if (value?.status !== 'ready' || value.token !== token || !ORIGINS[value.source]) throw new Error(value?.status === 'expired' ? 'This panel has expired. Reload this page to try again.' : value?.message || 'This panel could not start. Reload this page to try again.');
+  if (value?.status !== 'ready' || value.token !== token || !ORIGINS[value.source]) throw new Error(value?.status === 'expired' ? 'This panel has expired. Select Retry loading to reconnect.' : value?.message || 'This panel could not start. Select Retry loading to try again.');
   const game = value.game;
   const bot = value.kind === 'bot';
   if (!game || game.rules !== 'chess' || !Number.isFinite(game.end_time) || game.end_time <= 0 || game.end_time > Date.now() / 1000) throw new Error('A finished game is not available yet.');
@@ -171,6 +184,8 @@ function renderPerformance(result) {
 function renderSummary(result, analysis, reused = false) {
   assertActive();
   finishStage('summary');
+  sharedSummary = { game: payload.game, result, analysis };
+  $('summary-share').hidden = false;
   $('summary-title').textContent = 'Summary';
   $('summary-result').hidden = false;
   $('summary-scores').replaceChildren(); $('summary-counts').replaceChildren();
@@ -237,7 +252,7 @@ function onProgress({ completed, total, phase, phaseCompleted, phaseTotal }) {
 async function readSaved(id) {
   const reply = await chrome.runtime.sendMessage({ type: 'meowl:site-load-review', token });
   assertActive();
-  if (reply?.status === 'expired' || reply?.status === 'disabled') throw new Error('This panel has expired. Reload this page to try again.');
+  if (reply?.status === 'expired' || reply?.status === 'disabled') throw new Error('This panel has expired. Select Retry loading to reconnect.');
   // A failed read need not prevent a local analysis. Saving reports its own error.
   if (reply?.status !== 'ready') return null;
   if (reply.record && reply.record.id !== id) throw new Error('The saved review does not match this game. Reload this page to try again.');
@@ -262,20 +277,22 @@ async function runReview(id) {
     savedId = newer.id; renderSummary(newer.result, newer.analysis, true); status('Saved review loaded.'); return;
   }
   let saveMessage = 'Review complete. Saved on this device.';
-  let displayedResult = result, displayedAnalysis = payload.analysis;
+  let displayedResult = result, displayedAnalysis = payload.analysis, completedRecord = null;
   try {
     showStage('saving', 'Saving on this device…', 'Analysis is complete.');
     const reply = await chrome.runtime.sendMessage({ type: 'meowl:site-save-review', token, result });
     assertActive();
-    if (reply?.status !== 'saved') throw new Error(reply?.status === 'expired' ? 'This panel has expired. Reload this page to try again.' : reply?.message || 'Saved reviews are unavailable. Reload this page to try again.');
+    if (reply?.status !== 'saved') throw new Error(reply?.status === 'expired' ? 'This panel has expired. Select Retry loading to reconnect.' : reply?.message || 'Saved reviews are unavailable. Reload this page to try again.');
     if (reply.record?.id !== id) throw new Error('The saved review does not match this game. Reload this page to try again.');
     savedId = reply.record.id;
     // A deeper review saved in another tab wins over this automatic pass.
     displayedResult = reply.record.result; displayedAnalysis = reply.record.analysis;
+    if (reply.savedFresh === true) completedRecord = reply.record;
   } catch (error) {
     assertActive(); saveMessage = `Review complete, but it could not be saved: ${error.message || 'Local storage is unavailable.'}`;
   }
   assertActive(); renderSummary(displayedResult, displayedAnalysis); status(saveMessage, !savedId);
+  if (completedRecord) void notifyReviewComplete(completedRecord, { token });
 }
 async function start() {
   try {
@@ -307,10 +324,11 @@ async function start() {
     if (stopped || disposed || error?.name === 'AbortError') return;
     finishStage('error');
     $('summary-title').textContent = 'Summary unavailable'; $('summary-close').hidden = false;
-    status(error?.message || 'This panel could not start. Reload this page to try again.', true);
+    status(error?.message || 'This panel could not start. Select Retry loading to try again.', true);
   }
 }
 
+$('summary-retry').addEventListener('click', () => { sendParent('meowl:site-frame-retry'); });
 $('summary-cancel').addEventListener('click', () => cancel());
 $('summary-close').addEventListener('click', () => sendParent('meowl:site-frame-close'));
 $('summary-open-review').addEventListener('click', async () => {
@@ -320,7 +338,7 @@ $('summary-open-review').addEventListener('click', async () => {
   $('summary-open-review').setAttribute('aria-busy', 'true');
   try {
     const result = await chrome.runtime.sendMessage({ type: 'meowl:site-open-review', token, reviewId: savedId });
-    if (result?.status !== 'opened') throw new Error(result?.status === 'expired' ? 'This panel has expired. Reload this page to open the saved review.' : result?.message || 'The full review could not be opened. Reload this page to try again.');
+    if (result?.status !== 'opened') throw new Error(result?.status === 'expired' ? 'This panel has expired. Select Retry loading to reconnect.' : result?.message || 'The full review could not be opened. Reload this page to try again.');
   } catch (error) { status(error.message || 'The full review could not be opened.', true); }
   finally {
     $('summary-open-review').disabled = !savedId || stopped;

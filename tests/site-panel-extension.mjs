@@ -220,6 +220,45 @@ try {
   await overviewTab.click(); await assertTab('overview');
   console.log('Panel extension: accessible summary tabs reuse analysis and do not drag the panel.');
 
+  stage = 'summary image sharing in the real extension frame';
+  const sharePosition = await hostBox(), shareSearches = await frame.evaluate(() => window.__panelEngineSearches);
+  const expectedScoreText = await frame.locator('.score-value').allTextContents();
+  await frame.evaluate(() => {
+    window.__shareText = [];
+    const fill = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function(value, ...args) { window.__shareText.push(String(value)); return fill.call(this, value, ...args); };
+  });
+  await frame.locator('#summary-share').click();
+  const shareDialog = frame.locator('#meowl-summary-share');
+  await poll(() => frame.locator('[data-share-save]').isEnabled(), 'real panel share preview ready');
+  assert.equal(await shareDialog.getAttribute('data-no-drag'), '');
+  const shareText = await frame.evaluate(() => window.__shareText);
+  assert(shareText.includes('sitecat') && shareText.includes('siteowl'), 'Export contains this game’s players.');
+  for (const value of expectedScoreText) assert(shareText.includes(value), 'Export contains the displayed study scores.');
+  assert(shareText.some(value => value.startsWith('0–1 · Black won')), 'Export contains the actual result.');
+  assert.equal(await shareDialog.locator('img').evaluate(image => image.naturalWidth), 1200);
+  const previewPoint = await shareDialog.locator('img').boundingBox();
+  await page.mouse.move(previewPoint.x + 35, previewPoint.y + 35); await page.mouse.down();
+  await page.mouse.move(previewPoint.x + 75, previewPoint.y + 50, { steps: 5 }); await page.mouse.up();
+  near((await hostBox()).x, sharePosition.x, 'share preview does not drag panel x'); near((await hostBox()).y, sharePosition.y, 'share preview does not drag panel y');
+  assert.equal(await page.locator('#meowlchess-drag-shield').count(), 0);
+  await frame.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { write: async () => { throw new Error('Clipboard blocked in frame fixture'); } } }));
+  await shareDialog.locator('[data-share-copy]').click();
+  await poll(() => shareDialog.locator('.summary-share-status').textContent().then(text => text.includes('Use Save image instead')), 'embedded clipboard fallback');
+  const shareDownload = page.waitForEvent('download'); await shareDialog.locator('[data-share-save]').click();
+  const downloaded = await shareDownload;
+  assert.equal(downloaded.suggestedFilename(), 'MeowlChess-sitecat-vs-siteowl.png');
+  const sharePng = await readFile(await downloaded.path());
+  assert.equal(sharePng.subarray(0, 8).toString('hex'), '89504e470d0a1a0a'); assert.equal(sharePng.readUInt32BE(16), 1200); assert.equal(sharePng.readUInt32BE(20), 1200);
+  await mkdir(join(root, 'test-results'), { recursive: true });
+  await writeFile(join(root, 'test-results', 'panel-share-summary.png'), sharePng);
+  await page.screenshot({ path: join(root, 'test-results', 'panel-share-dialog.png') });
+  await page.keyboard.press('Escape'); await shareDialog.waitFor({ state: 'hidden' });
+  assert.equal(await frame.locator('#summary-share').evaluate(element => element === document.activeElement), true, 'Closing share returns focus to its opener.');
+  assert.equal(await frame.evaluate(() => window.__panelEngineSearches), shareSearches, 'Sharing reuses analysis without engine searches.');
+  near((await hostBox()).x, sharePosition.x, 'share controls preserve panel x'); near((await hostBox()).y, sharePosition.y, 'share controls preserve panel y');
+  console.log('Panel extension: summary image matches the real game; preview, clipboard fallback, download, focus, and engine reuse passed.');
+
   stage = 'keyboard focus remains above sticky actions in a short panel';
   const automaticBox = await hostBox();
   await resizePanel(0, 320 - automaticBox.height, 'chesscom', 'short keyboard focus check');
@@ -321,6 +360,22 @@ try {
   const central = await hostBox();
   const minimum = await resizeEdge('nw', 350, 500, 'chesscom', 'north-west clamps to minimum across iframe');
   near(minimum.width, 280, 'north-west minimum width'); near(minimum.height, 220, 'north-west minimum height');
+  stage = 'share dialog fits the minimum panel size';
+  await frame.locator('#summary-share').click();
+  await poll(() => frame.locator('[data-share-save]').isEnabled(), 'minimum panel share ready');
+  const minimumDialog = frame.locator('#meowl-summary-share');
+  const minimumGeometry = await minimumDialog.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return { x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom, width: innerWidth, height: innerHeight, overflow: element.scrollWidth > element.clientWidth };
+  });
+  assert(!minimumGeometry.overflow && minimumGeometry.x >= 0 && minimumGeometry.y >= 0 && minimumGeometry.right <= minimumGeometry.width && minimumGeometry.bottom <= minimumGeometry.height, 'Share modal fits the 280×220 panel without horizontal overflow.');
+  await minimumDialog.locator('[data-share-save]').scrollIntoViewIfNeeded();
+  const minimumSave = await minimumDialog.locator('[data-share-save]').evaluate(element => { const rect = element.getBoundingClientRect(); return { top: rect.top, bottom: rect.bottom, height: innerHeight }; });
+  assert(minimumSave.top >= 0 && minimumSave.bottom <= minimumSave.height, 'Save image remains reachable in the minimum panel.');
+  await page.screenshot({ path: join(root, 'test-results', 'panel-share-minimum.png') });
+  await minimumDialog.locator('.summary-share-close').click(); await minimumDialog.waitFor({ state: 'hidden' });
+  assert.equal(await frame.locator('#summary-share').evaluate(element => element === document.activeElement), true);
+  near((await hostBox()).width, 280, 'sharing preserves minimum width'); near((await hostBox()).height, 220, 'sharing preserves minimum height');
   await resizeEdge('nw', central.x - minimum.x, central.y - minimum.y, 'chesscom', 'north-west restores central size');
   const northWest = await shadowPoint('.resize-handle[data-resize-direction="nw"]');
   const maxNorthWest = await resizeEdge('nw', -northWest.x, -northWest.y, 'chesscom', 'north-west clamps at top and left viewport edges');

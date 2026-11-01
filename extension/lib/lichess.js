@@ -48,11 +48,11 @@ async function responseText(response) {
   } finally { reader.releaseLock(); }
 }
 
-async function fetchExport(url, single) {
+async function fetchExport(url, single, revalidate) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
-    const response = await fetch(url, { credentials: 'omit', redirect: 'error', signal: controller.signal, headers: { Accept: single ? 'application/json' : 'application/x-ndjson' } });
+    const response = await fetch(url, { credentials: 'omit', redirect: 'error', signal: controller.signal, headers: { Accept: single ? 'application/json' : 'application/x-ndjson' }, ...(revalidate ? { cache: 'no-cache' } : {}) });
     if (response.status === 404) throw new Error('Lichess could not find that player or game. Check the username or game link.');
     if (response.status === 429) throw new Error('Lichess is receiving too many requests. Wait a minute before trying again.');
     if (!response.ok) throw new Error(`Lichess could not load games (HTTP ${response.status}). Please try again later.`);
@@ -70,7 +70,7 @@ async function fetchExport(url, single) {
 }
 
 /** Public finished-game exports only; no login, current-game, or live-stream access. */
-export async function fetchLichessGames(value) {
+export async function fetchLichessGames(value, { revalidate = false } = {}) {
   if (typeof value !== 'string') throw new Error('Enter a Lichess username or completed game link.');
   const input = value.trim();
   const gameUrl = safeOriginalGameUrl(input);
@@ -82,7 +82,7 @@ export async function fetchLichessGames(value) {
     params.set('max', '20'); params.set('ongoing', 'false'); params.set('finished', 'true');
     params.set('perfType', 'ultraBullet,bullet,blitz,rapid,classical,correspondence'); params.set('sort', 'dateDesc');
   }
-  const raw = await fetchExport(`${ORIGIN}${path}?${params}`, single);
+  const raw = await fetchExport(`${ORIGIN}${path}?${params}`, single, revalidate === true);
   const games = raw.map(normalizeLichessGame).filter(Boolean);
   if (single && !games.length) throw new Error('Only completed standard games can be reviewed. This game is unfinished, unsupported, or has no moves.');
   const unique = new Map(games.map(game => [game.url, game]));

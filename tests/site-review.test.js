@@ -473,6 +473,8 @@ test('library bridge is frame-bound and derives game identity and settings only 
   assert.deepEqual(await broker.handle(load, frame()), { status: 'ready', record: null });
   const saved = await broker.handle({ type: 'meowl:site-save-review', token, result: await finishedResult(), game: { pgn: 'malicious' }, reviewId: `game-${'f'.repeat(64)}`, analysis: { engineId: 'evil' } }, frame());
   assert.equal(saved.status, 'saved');
+  assert.equal(saved.savedFresh, true);
+  assert.equal(Object.hasOwn(saved.record, 'savedFresh'), false);
   assert.equal(saved.record.id, await reviewIdForGame(game()));
   assert.equal(saved.record.game.pgn, completedPgn);
   assert.equal(saved.record.analysis.engineId, 'stockfish');
@@ -501,6 +503,7 @@ test('automatic save reuses deeper current analysis and serializes simultaneous 
   const ready = await first.check();
   const reused = await first.broker.handle({ type: 'meowl:site-save-review', token: ready.token, result }, frame());
   assert.equal(reused.status, 'saved');
+  assert.equal(reused.savedFresh, false);
   assert.equal(reused.record.analysis.moveTimeMs, 3000);
   assert.equal(reused.record.updatedAt, deep.updatedAt);
   assert.equal(existing.writes(), 1);
@@ -513,6 +516,7 @@ test('automatic save reuses deeper current analysis and serializes simultaneous 
     second.broker.handle({ type: 'meowl:site-save-review', token: b.token, result }, frame(page, 6)),
   ]);
   assert.deepEqual(responses.map(value => value.status), ['saved', 'saved']);
+  assert.deepEqual(responses.map(value => value.savedFresh), [true, false]);
   assert.equal(responses[0].record.id, responses[1].record.id);
   assert.equal(simultaneous.writes(), 1);
 });

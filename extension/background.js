@@ -1,6 +1,7 @@
 import { fetchGames } from './lib/games.js';
 import { createReviewLibrary, reviewIdForGame } from './lib/library.js';
 import { ANALYSIS_VERSION } from './lib/review.js';
+import { createCompletionAlertService } from './lib/completion-alert-service.js';
 import { createSiteReviewBroker, createSiteReviewLibraryBridge, normalizeSiteSettings, normalizeSiteAnalysis, SITE_CONTENT_SCRIPT, SITE_PROVIDERS } from './lib/site-review.js';
 
 const SETTINGS_KEY = 'siteReviewSettings';
@@ -21,6 +22,53 @@ const broker = createSiteReviewBroker({
   readSession: async () => (await chrome.storage.session?.get('siteReviewSession'))?.siteReviewSession,
   writeSession: value => chrome.storage.session?.set({ siteReviewSession: value }),
 });
+
+const notificationLibrary = createReviewLibrary({ analysisVersion: ANALYSIS_VERSION });
+const alertsEnabled = async () => {
+  if ((await chrome.storage.local.get('completionAlerts')).completionAlerts !== true || !await chrome.permissions.contains({ permissions: ['notifications'] }) || !chrome.notifications) return false;
+  return new Promise(resolve => chrome.notifications.getPermissionLevel(level => resolve(!chrome.runtime.lastError && level === 'granted')));
+};
+const completionAlerts = createCompletionAlertService({
+  enabled: alertsEnabled,
+  authorize: async (message, sender) => {
+    if (sender?.documentLifecycle && sender.documentLifecycle !== 'active') return null;
+    if (broker.isSettingsSender(sender)) return notificationLibrary.loadReview(message.reviewId);
+    const reply = await broker.handle({ type: 'meowl:site-load-review', token: message.token }, sender);
+    return reply?.status === 'ready' ? reply.record : null;
+  },
+  loadReview: id => notificationLibrary.loadReview(id),
+  away: async sender => {
+    // The trusted extension page also reports document.hidden. Recheck a known
+    // tab just before showing the alert so returning to it suppresses the toast.
+    if (!Number.isInteger(sender?.tab?.id)) return true;
+    try {
+      const tab = await chrome.tabs.get(sender.tab.id);
+      if (!tab.active) return true;
+      return !(await chrome.windows.get(tab.windowId)).focused;
+    } catch { return false; }
+  },
+  create: (id, options) => new Promise((resolve, reject) => chrome.notifications.create(id, { ...options, iconUrl: chrome.runtime.getURL(options.iconUrl) }, result => {
+    const error = chrome.runtime.lastError; if (error) reject(new Error(error.message)); else resolve(result);
+  })),
+  clear: id => chrome.notifications ? new Promise(resolve => chrome.notifications.clear(id, () => { void chrome.runtime.lastError; resolve(); })) : Promise.resolve(),
+  openReview: id => chrome.tabs.create({ url: chrome.runtime.getURL(`review.html?reviewId=${encodeURIComponent(id)}`) }),
+  readHistory: async () => (await chrome.storage.session?.get('completionAlertHistory'))?.completionAlertHistory,
+  writeHistory: history => chrome.storage.session?.set({ completionAlertHistory: history }),
+});
+const notificationClicked = id => { void completionAlerts.click(id).catch(() => {}); };
+function registerNotificationClicks() {
+  if (!chrome.notifications?.onClicked) return;
+  chrome.notifications.onClicked.removeListener(notificationClicked);
+  chrome.notifications.onClicked.addListener(notificationClicked);
+}
+registerNotificationClicks();
+async function clearCompletionAlerts() {
+  if (!chrome.notifications) return;
+  chrome.notifications.getAll(items => {
+    if (chrome.runtime.lastError) return;
+    for (const id of Object.keys(items)) if (id.startsWith('meowl-review-')) chrome.notifications.clear(id, () => { void chrome.runtime.lastError; });
+  });
+}
 
 chrome.action.onClicked.addListener(() => {
   chrome.tabs.create({ url: chrome.runtime.getURL('review.html') });
@@ -77,6 +125,7 @@ chrome.runtime.onInstalled.addListener(() => { void scheduleReconcile({ inject: 
 chrome.runtime.onStartup.addListener(() => { void scheduleReconcile({ inject: true }).catch(() => {}); });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
+  if (changes.completionAlerts && changes.completionAlerts.newValue !== true) void clearCompletionAlerts();
   if (changes[SETTINGS_KEY]) {
     const before = normalizeSiteSettings(changes[SETTINGS_KEY].oldValue), after = normalizeSiteSettings(changes[SETTINGS_KEY].newValue);
     for (const source of Object.keys(SITE_PROVIDERS)) if (JSON.stringify(before[source]) !== JSON.stringify(after[source])) broker.invalidateSource(source);
@@ -86,10 +135,11 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
   if (changes[SETTINGS_KEY]) void scheduleReconcile({ inject: true }).catch(() => {});
 });
-chrome.permissions.onRemoved.addListener(() => {
+chrome.permissions.onRemoved.addListener(permissions => {
+  if (permissions?.permissions?.includes('notifications')) void chrome.storage.local.set({ completionAlerts: false }).catch(() => {});
   void scheduleReconcile({ inject: true }).catch(() => {});
 });
-chrome.permissions.onAdded.addListener(() => { void scheduleReconcile({ inject: true }).catch(() => {}); });
+chrome.permissions.onAdded.addListener(() => { registerNotificationClicks(); void scheduleReconcile({ inject: true }).catch(() => {}); });
 chrome.tabs.onRemoved.addListener(tabId => broker.invalidate(tabId));
 chrome.tabs.onUpdated.addListener((tabId, changes) => {
   if (changes.url) broker.pageChanged(tabId, changes.url);
@@ -97,6 +147,10 @@ chrome.tabs.onUpdated.addListener((tabId, changes) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === 'meowl:review-completed') {
+    completionAlerts.complete(message, sender).then(sendResponse, () => sendResponse({ status: 'unavailable' }));
+    return true;
+  }
   if (!['meowl:site-check', 'meowl:site-panel-state', 'meowl:site-bot-import', 'meowl:site-payload', 'meowl:site-load-review', 'meowl:site-save-review', 'meowl:site-release', 'meowl:site-open-review', 'meowl:site-open-settings', 'meowl:site-settings-changed'].includes(message?.type)) return false;
   const response = message.type === 'meowl:site-settings-changed'
     ? broker.isSettingsSender(sender) ? scheduleReconcile({ inject: true }).then(() => ({ status: 'ready' })) : Promise.resolve({ status: 'disabled' })

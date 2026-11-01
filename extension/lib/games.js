@@ -10,7 +10,7 @@ export async function fetchGames(source, value, options = {}) {
     if (gameUrl !== undefined && (typeof gameUrl !== 'string' || safeOriginalGameUrl(gameUrl) !== gameUrl || !/^https:\/\/lichess\.org\/[a-zA-Z0-9]{8}$/.test(gameUrl))) {
       throw new Error('Choose a canonical completed Lichess game link.');
     }
-    return fetchLichessGames(gameUrl === undefined ? value : gameUrl);
+    return fetchLichessGames(gameUrl === undefined ? value : gameUrl, { revalidate: options?.revalidate === true });
   }
   if (source === 'chesscom') {
     const request = { revalidate: options?.revalidate === true };

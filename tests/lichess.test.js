@@ -168,3 +168,22 @@ test('does not treat tag-looking text in comments or variations as game headers'
   // The trailing variation has no mainline result: its text cannot finish the game.
   assert.throws(() => importPgn('[Result "1-0"]\n\n1. e4 e5 (1... c5 { 1-0 })'), /Only completed/);
 });
+
+test('manual retrieval retries revalidate Lichess HTTP caches for exact games and recent lists', async t => {
+  const requests = [];
+  t.mock.method(globalThis, 'fetch', async (value, options) => {
+    const single = new URL(value).pathname.startsWith('/game/export/');
+    requests.push({ single, cache: options.cache, credentials: options.credentials });
+    return reply(single ? complete() : [complete()], single);
+  });
+  await fetchGames('lichess', 'Alice', { revalidate: true });
+  await fetchGames('lichess', 'Alice', { gameUrl: 'https://lichess.org/AbCd1234', revalidate: true });
+  await fetchGames('lichess', 'Alice');
+  await fetchLichessGames('https://lichess.org/AbCd1234', { revalidate: 'true' });
+  assert.deepEqual(requests, [
+    { single: false, cache: 'no-cache', credentials: 'omit' },
+    { single: true, cache: 'no-cache', credentials: 'omit' },
+    { single: false, cache: undefined, credentials: 'omit' },
+    { single: true, cache: undefined, credentials: 'omit' },
+  ]);
+});

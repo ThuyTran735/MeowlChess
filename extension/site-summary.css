@@ -117,3 +117,8 @@ footer:has(.summary-status:empty):not(:has(button:not([hidden]))) { display: non
   .primary-button { padding: 9px 7px; font-size: 11px; gap: 5px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+
+.heading-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; flex: none; max-width: 55%; }
+.heading-actions #summary-source { max-width: none; }
+.icon-button { display: grid; place-items: center; padding: 6px; width: 30px; height: 30px; border-radius: 6px; color: var(--muted); background: transparent; flex: none; }
+.icon-button:hover { background: #ffffff0a; color: var(--text); }

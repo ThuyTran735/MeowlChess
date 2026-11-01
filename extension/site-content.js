@@ -11,7 +11,8 @@
   let selection = null, panelState = 'open', stateRevision = 0, stateWrite = Promise.resolve(), freshSelection = null;
   let dismissed = null, baseline = null, completedUrl = null, baselineKnown = false, hint = false, hintSince = 0, nextCheck = 0;
   let interval = source === 'chesscom' ? 60000 : 30000;
-  let completionRefresh = null;
+  let completionRefresh = null, completionAlerts = false;
+  let retryButton, retryTimer, manualRetryUntil = 0, manualRetryPending = false;
   const bot = globalThis.__meowlChessBot;
   let panelMover, botForm, botSubmitting = false, botExporting = false, botExportAttempted = false, botAttemptPgn = null, botSavedPgn = null;
   const botPage = () => source === 'chesscom' && bot?.isPage() === true;
@@ -61,7 +62,8 @@
   function clearPanel() {
     panelMover?.destroy(); panelMover = botForm = null;
     frame?.remove(); frame = null;
-    host?.remove(); host = shadow = body = message = stageLabel = bar = null;
+    host?.remove(); host = shadow = body = message = stageLabel = bar = retryButton = null;
+    clearTimeout(retryTimer);
     token = gameUrl = null;
   }
   function clearLauncher() { launcher?.remove(); launcher = null; }
@@ -140,6 +142,8 @@
       .body{max-height:calc(100vh - 140px);overflow:auto;scrollbar-color:#66645d transparent;scrollbar-width:thin;overscroll-behavior:contain}
       .waiting{padding:20px}
       .waiting p{margin:0 0 16px;font-size:12px;line-height:1.65;color:#d3d0c6;overflow-wrap:anywhere}
+      .waiting .retry-loading{width:auto;height:auto;min-height:34px;padding:7px 11px;margin-top:14px;border:1px solid #ffffff26;color:#e0dfd5;font-size:11px;font-weight:600}
+      .waiting .retry-loading:disabled{opacity:.55;cursor:default}
       .waiting small{display:block;color:#99968b;margin-top:12px;font-size:11px;line-height:1.6}
       .loading-steps{display:flex;justify-content:space-between;gap:8px;padding:0;margin:0 0 23px;list-style:none}
       .loading-steps li{display:flex;align-items:center;gap:5px;color:#99968b;font-size:10px;white-space:nowrap}
@@ -278,10 +282,35 @@
         if (!index) step.setAttribute('aria-current', 'step');
         step.append(number, label); steps.append(step);
       }
-      box.append(steps, stageLabel, message, bar, detail); body.replaceChildren(box);
+      retryButton = button('Retry loading this game', 'Retry loading', () => { void retryLoading(); }); retryButton.className = 'retry-loading';
+      box.append(steps, stageLabel, message, bar, retryButton, detail); body.replaceChildren(box);
     }
     stageLabel.textContent = error ? 'Game unavailable' : 'Finding game';
-    message.textContent = text; bar.hidden = error;
+    message.textContent = text; bar.hidden = error; updateRetryButton();
+  }
+  function updateRetryButton() {
+    clearTimeout(retryTimer);
+    if (!retryButton) return;
+    const seconds = Math.max(0, Math.ceil((manualRetryUntil - Date.now()) / 1000));
+    retryButton.disabled = checking || seconds > 0;
+    retryButton.textContent = checking ? 'Checking…' : seconds ? `Retry in ${seconds}s` : 'Retry loading';
+    if (seconds && !document.hidden) retryTimer = setTimeout(updateRetryButton, 1000);
+  }
+  function resetRetry() {
+    manualRetryPending = false; manualRetryUntil = 0; clearTimeout(retryTimer);
+  }
+  async function retryLoading(fromFrame = false) {
+    if (!enabled || document.hidden || dismissed || (!fromFrame && (Date.now() < manualRetryUntil || checking))) return;
+    inspectPage();
+    const started = ++generation;
+    manualRetryUntil = Date.now() + 15000;
+    // Retire the failed iframe before a new one can use the same game handle.
+    if (fromFrame && selection) { await savePanelState('closed'); await savePanelState('open'); }
+    if (!enabled || document.hidden || started !== generation) return;
+    if (fromFrame) clearPanel();
+    manualRetryPending = true; nextCheck = 0;
+    waiting('Checking for this completed game again…'); updateRetryButton();
+    if (!checking) void check();
   }
   function showReview(reply) {
     if (!tokenPattern.test(reply.token) || typeof reply.gameUrl !== 'string') return;
@@ -332,7 +361,7 @@
     if (!enabled || document.hidden) return;
     const current = pageKey();
     if (current !== route) {
-      generation++; route = current; nextCheck = 0; completionRefresh = null;
+      generation++; route = current; nextCheck = 0; completionRefresh = null; resetRetry();
       const target = specificGameUrl();
       if (target && target !== selection?.gameUrl) {
         forgetSelection(); clearPanel(); clearLauncher(); dismissed = null;
@@ -351,7 +380,7 @@
     if (botPage() && hint && !nextHint) {
       // The bot page reuses its URL for a rematch. Forget the previous result
       // when its final notice disappears rather than showing it as the new game.
-      generation++; forgetSelection(); clearPanel(); clearLauncher(); botAttemptPgn = botSavedPgn = null; botExportAttempted = false; dismissed = null; nextCheck = 0;
+      generation++; forgetSelection(); clearPanel(); clearLauncher(); botAttemptPgn = botSavedPgn = null; botExportAttempted = false; dismissed = null; nextCheck = 0; resetRetry();
     }
     if (nextHint && !hint) {
       if (botPage()) { botExportAttempted = false; botAttemptPgn = botSavedPgn = null; }
@@ -361,7 +390,7 @@
         freshSelection = selection; selection = null; panelState = 'open'; stateRevision++;
         generation++; clearPanel(); clearLauncher();
       }
-      hintSince = Date.now(); refreshFinishedGame(); dismissed = null; waiting(); nextCheck = 0; void check();
+      resetRetry(); hintSince = Date.now(); refreshFinishedGame(); dismissed = null; waiting(); nextCheck = 0; void check();
       if (botPage() && body?.hidden) shadow.querySelector('button[aria-label="Expand review"]')?.click();
     }
     hint = nextHint;
@@ -375,7 +404,8 @@
     if (!enabled || document.hidden || checking || botSubmitting || (dismissed && !selection)) return;
     if (Date.now() < nextCheck) { schedule(); return; }
     if (completionRefresh && completionRefresh.until <= Date.now()) completionRefresh = null;
-    checking = true; const started = generation, revision = stateRevision, fresh = freshSelection, completion = completionRefresh;
+    checking = true; const started = generation, revision = stateRevision, fresh = freshSelection, completion = completionRefresh, manualRetry = manualRetryPending;
+    manualRetryPending = false; updateRetryButton();
     const checkedRoute = route, checkedUsername = username;
     // Cached selections normally return immediately. Show retrieval progress
     // only if there is still no review to restore after that brief handshake.
@@ -389,6 +419,7 @@
       const reply = await send('meowl:site-check', {
         ...(fresh ? { fresh: true, token: fresh.token, panelGeneration: fresh.panelGeneration } : {}),
         ...(completion ? { refreshCompleted: true } : {}),
+        ...(manualRetry ? { manualRetry: true } : {}),
       });
       if (enabled && started !== generation && completionRefresh && completionRefresh !== completion &&
           checkedRoute === route && checkedUsername === username && liveLobby() && reply?.status === 'ready') {
@@ -438,13 +469,13 @@
       clearTimeout(reveal); checking = false;
       // If the finish notice arrived during an older lookup, give it its own
       // fresh check instead of losing it to that lookup's normal poll timer.
-      if (completionRefresh && completionRefresh !== completion) nextCheck = 0;
-      inspectBot(); schedule();
+      if ((completionRefresh && completionRefresh !== completion) || manualRetryPending) nextCheck = 0;
+      updateRetryButton(); inspectBot(); schedule();
     }
   }
   function stop(preserve = false) {
     if (!preserve) forgetSelection();
-    completionRefresh = null; enabled = false; generation++; clearTimeout(timer); clearTimeout(debounce); clearInterval(routeTimer); observer?.disconnect(); observer = null; clearPanel(); clearLauncher();
+    resetRetry(); completionRefresh = null; enabled = false; generation++; clearTimeout(timer); clearTimeout(debounce); clearInterval(routeTimer); observer?.disconnect(); observer = null; clearPanel(); clearLauncher();
   }
   function configure(raw) {
     const config = raw?.[source], name = typeof config?.username === 'string' ? config.username.trim().toLowerCase() : '';
@@ -468,16 +499,29 @@
     }
     if (event.data.type === 'meowl:site-frame-size' && Number.isFinite(event.data.height)) frame.style.height = Math.max(180, Math.min(680, event.data.height)) + 'px';
     if (event.data.type === 'meowl:site-frame-close') dismiss();
+    if (event.data.type === 'meowl:site-frame-retry') void retryLoading(true);
   });
   document.addEventListener('visibilitychange', () => {
     if (!enabled) return;
-    if (document.hidden) { generation++; clearTimeout(timer); clearPanel(); clearLauncher(); }
+    if (document.hidden) {
+      clearTimeout(timer); clearTimeout(retryTimer);
+      // Only an already accepted completed game may continue for an opt-in alert.
+      if (!completionAlerts || !frame) { generation++; clearPanel(); }
+      clearLauncher();
+    }
     else { nextCheck = 0; if (botPage() && !botSavedPgn) botExportAttempted = false; inspectPage(); if (dismissed) showLauncher(); else void check(); }
   });
   window.addEventListener('pagehide', () => stop(true));
   window.addEventListener('pageshow', event => {
-    if (event.persisted) void chrome.storage.local.get('siteReviewSettings').then(values => configure(values.siteReviewSettings)).catch(() => {});
+    if (event.persisted) void chrome.storage.local.get(['siteReviewSettings', 'completionAlerts']).then(values => { completionAlerts = values.completionAlerts === true; configure(values.siteReviewSettings); }).catch(() => {});
   });
-  chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.siteReviewSettings) configure(changes.siteReviewSettings.newValue); });
-  void chrome.storage.local.get('siteReviewSettings').then(values => configure(values.siteReviewSettings)).catch(() => {});
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    if (changes.completionAlerts) {
+      completionAlerts = changes.completionAlerts.newValue === true;
+      if (!completionAlerts && document.hidden) { generation++; clearPanel(); }
+    }
+    if (changes.siteReviewSettings) configure(changes.siteReviewSettings.newValue);
+  });
+  void chrome.storage.local.get(['siteReviewSettings', 'completionAlerts']).then(values => { completionAlerts = values.completionAlerts === true; configure(values.siteReviewSettings); }).catch(() => {});
 })();

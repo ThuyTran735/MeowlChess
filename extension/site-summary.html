@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MeowlChess summary</title>
   <link rel="stylesheet" href="site-summary.css">
+  <link rel="stylesheet" href="summary-share.css">
 </head>
 <body>
 <main data-stage="finding-game" aria-busy="true">
-  <header class="summary-heading"><h1 id="summary-title">Finding game</h1><span id="summary-source"></span></header>
+  <header class="summary-heading"><h1 id="summary-title">Finding game</h1><div class="heading-actions"><span id="summary-source"></span><button id="summary-share" class="icon-button" type="button" aria-label="Share summary" title="Share summary" aria-haspopup="dialog" hidden><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3m-4 4 4-4 4 4M5 12v8h14v-8"/></svg></button></div></header>
   <p id="summary-players" class="game-players"></p>
   <p id="summary-game-detail" class="game-detail"></p>
 
@@ -54,6 +55,7 @@
     <p id="summary-status" class="summary-status" role="status"></p>
     <div class="footer-actions">
       <button id="summary-open-review" type="button" class="primary-button" disabled hidden><span id="summary-open-label">Open full review</span><svg class="button-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg></button>
+      <button id="summary-retry" type="button" class="primary-button" hidden>Retry loading</button>
       <button id="summary-close" type="button" class="quiet-button" hidden>Close panel</button>
     </div>
   </footer>

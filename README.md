@@ -5,7 +5,7 @@
   <p>Review completed games from Chess.com, Lichess, or a PGN file in Brave, Chrome, and Edge.</p>
   <p><sub>Meowl's cat likeness comes from <a href="https://weibo.com/melonpi">Melonpi Cat (瓜皮)</a>. <a href="THIRD_PARTY_NOTICES.md#meowl--melonpi-cat">Artwork credits</a></sub></p>
   <p>
-    <a href="https://github.com/ThuyTran735/MeowlChess/releases/latest/download/meowlchess.zip"><strong>Download ZIP</strong></a> ·
+    <a href="https://github.com/ThuyTran735/MeowlChess/releases/latest/download/MeowlChess.zip"><strong>Download ZIP</strong></a> ·
     <a href="#install">Install</a> ·
     <a href="#your-first-review">Get started</a> ·
     <a href="PRIVACY.md">Privacy</a> ·
@@ -13,9 +13,9 @@
   </p>
 </div>
 
-**Version 1.7.2** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.7.2) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
+**Version 1.8.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.8.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
 
-> New in 1.7.2: a refreshed on-site panel with Overview / Move ratings tabs, clearer loading stages, and a full-review button that stays within reach.
+> New in 1.8.0: retry loading without a page refresh, optional completion alerts, and shareable summary images from the review page and panel.
 
 MeowlChess runs Stockfish or Lozza on your device. No subscription, analysis-service account, or chess-site login is required. Once a game is loaded, its analysis works offline.
 
@@ -32,7 +32,7 @@ MeowlChess is independent of Chess.com and Lichess. Use it **only after a game i
 
 ## Install
 
-1. Download [**meowlchess.zip**](https://github.com/ThuyTran735/MeowlChess/releases/latest/download/meowlchess.zip) and extract it to a folder you will keep. See the [latest release](https://github.com/ThuyTran735/MeowlChess/releases/latest) for release notes.
+1. Download [**MeowlChess.zip**](https://github.com/ThuyTran735/MeowlChess/releases/latest/download/MeowlChess.zip) and extract it to a folder you will keep. See the [latest release](https://github.com/ThuyTran735/MeowlChess/releases/latest) for release notes.
 2. Open your browser's extensions page:
 
    | Browser | Address |
@@ -96,6 +96,8 @@ The panel shows each step clearly:
 
 **Finding game → Analyzing → Saving → Summary**
 
+If loading is waiting or fails, select **Retry loading** to check the current game again without refreshing the page. The button shows when another attempt is available; repeated clicks share the current request and respect the site's retry delay. An unfinished or unavailable game still waits for a confirmed completed record. Failed or stopped summary frames also offer Retry loading.
+
 A current saved review goes straight to Summary without another engine run or saving stage. New reviews use your saved engine settings, or **Fast / one line** until you save preferences. **Open full review** opens the saved game at move 0 on Summary.
 
 The panel keeps both study scores visible above **Overview** and **Move ratings**. Overview shows the game-rating estimates and performance by phase; Move ratings shows each player's counts. Switch tabs with a click or the arrow keys, and use Home / End to reach the first / last tab. **Open full review** stays within reach while scrolling a small panel.
@@ -109,7 +111,7 @@ The panel keeps both study scores visible above **Overview** and **Move ratings*
 | Double-click a resize edge or corner | Restore automatic sizing. |
 | Focus the name or bottom-right resize corner | Use arrow keys to move or resize; Shift takes larger steps, and Home resets that control. |
 
-Position and size are remembered separately for each site and kept within the window. Closing the panel, switching tabs, a full page load, leaving the site, or disabling it stops active analysis; partial reviews are not saved. Use the panel's **Settings** shortcut to turn it off and remove its panel and reopen button. You can also remove site access in the browser's extension settings.
+Position and size are remembered separately for each site and kept within the window. Closing the panel, a full page load, leaving the site, or disabling it stops active analysis; partial reviews are not saved. Switching tabs also stops it unless completion alerts are enabled, in which case an already-started review of a confirmed completed game can finish in the background. Use the panel's **Settings** shortcut to turn it off and remove its panel and reopen button. You can also remove site access in the browser's extension settings.
 
 **Browsing between pages:** Your current completed-game review keeps its open, collapsed, or closed state as you browse other pages on the same site, including profiles, home, play, and computer pages. Browsing without a full page load also keeps any active analysis of that completed game running. Opening a different specific game clears the old review immediately and looks up that game's completed record; unavailable or unfinished games stay waiting. A new finished round replaces the prior review, and starting a bot rematch clears it. Full page loads briefly recreate the panel; an already-saved review reopens without another engine run.
 
@@ -162,6 +164,14 @@ With rechecks enabled, the first pass is capped at 0.15 seconds per nonterminal 
 Fast automatically selects one line. For 100 nonterminal positions, its first pass uses about five seconds of engine time, plus startup and processing. Rechecks add time. Turn rechecks off to spend the full chosen time on every nonterminal position.
 
 </details>
+
+## Completion alerts and sharing
+
+In **Settings**, enable **Notify me when a review finishes** to request optional browser notification permission. It is off by default. A newly completed, successfully saved review can show a quiet desktop alert when you are away from its tab. Select the alert to open that exact saved game at move 0 on Summary. Reopening saved analysis, canceled reviews, and failed saves do not send an alert. Browser or operating-system notification settings may suppress alerts.
+
+With alerts enabled, an on-site review that has already started can finish after you switch tabs. MeowlChess does not start new game lookups or bot exports while that page is hidden. Closing the page or panel, changing the game, or turning the setting off while it is hidden stops that work.
+
+Use **Share summary** from the main Summary tab or the panel's share icon to preview a **1200 × 1200 PNG** with both study scores, estimated game ratings, phase performance, and move counts. **Copy image** puts it on your clipboard; **Save image** downloads it with a `MeowlChess-` filename. If the browser blocks clipboard access in the panel, use Save image. Images are created locally from the existing review; nothing is uploaded and no new analysis runs.
 
 ## Study the game
 
@@ -269,7 +279,7 @@ npm run package
 
 The build refreshes pinned chess.js and Stockfish assets. Lozza, artwork, and generated opening data are checked in. Regenerate openings from the bundled pinned TSV sources with `node scripts/build-openings.mjs`.
 
-Packaging writes **`dist/meowlchess.zip`** with the ready-to-load extension, project source, tests, notices, opening sources, and Stockfish's corresponding source and evaluation network. Dependencies, generated test results, and Git data are excluded.
+Packaging writes **`dist/MeowlChess.zip`** with the ready-to-load extension, project source, tests, notices, opening sources, and Stockfish's corresponding source and evaluation network. Dependencies, generated test results, and Git data are excluded.
 
 <details>
 <summary><strong>Browser checks</strong></summary>

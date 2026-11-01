@@ -73,5 +73,5 @@ end.writeUInt16LE(paths.length, 10);
 end.writeUInt32LE(centralSize, 12);
 end.writeUInt32LE(offset, 16);
 await mkdir(join(root, 'dist'), { recursive: true });
-await writeFile(join(root, 'dist', 'meowlchess.zip'), Buffer.concat([...localRecords, ...centralRecords, end]));
-console.log(`Created dist/meowlchess.zip (${paths.length} files; extension, project, and engine sources).`);
+await writeFile(join(root, 'dist', 'MeowlChess.zip'), Buffer.concat([...localRecords, ...centralRecords, end]));
+console.log(`Created dist/MeowlChess.zip (${paths.length} files; extension, project, and engine sources).`);
