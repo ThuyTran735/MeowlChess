@@ -119,7 +119,7 @@ function validatePayload(value) {
 }
 function showGame(game, parsed) {
   $('summary-source').textContent = payload.kind === 'bot' ? 'Chess.com · bot game' : source === 'chesscom' ? 'Chess.com' : 'Lichess';
-  $('summary-players').textContent = `${game.white.username} vs ${game.black.username}`;
+  $('summary-players').textContent = `${game.white.username} vs ${game.black.username}`; $('summary-players').title = $('summary-players').textContent;
   const result = parsed.result === '1/2-1/2' ? '½–½' : parsed.result.replace('-', '–');
   const date = new Date(game.end_time * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   $('summary-game-detail').textContent = `${result} · ${date}`;

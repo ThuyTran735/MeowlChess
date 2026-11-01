@@ -13,9 +13,9 @@
   </p>
 </div>
 
-**Version 1.7.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.7.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
+**Version 1.7.1** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.7.1) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
 
-> New in 1.7.0: a more interactive review screen, per-game rating estimates, and Opening / Middlegame / Endgame performance icons for both players.
+> New in 1.7.1: a new Meowl icon, Reviewed badges that open saved analysis directly, and full-player-name tooltips.
 
 MeowlChess runs Stockfish or Lozza on your device. No subscription, analysis-service account, or chess-site login is required. Once a game is loaded, its analysis works offline.
 
@@ -54,7 +54,7 @@ MeowlChess is distributed as an unpacked extension. It is not listed in the Chro
 2. Choose a completed game. Adjust the engine and speed in **Settings** if you want, then select **Review game**.
 3. The finished review opens at **move 0** on **Summary**. Switch to **Moves** to explore the game.
 
-Move notation uses small filled piece symbols for White and outlined symbols for Black, including promotions. Pawn moves and castling keep their usual notation.
+Move notation uses small filled piece symbols for White and outlined symbols for Black, including promotions. Pawn moves and castling keep their usual notation. Hover over shortened player names in the board header, score cards, game lists, or saved reviews to see the full names.
 
 The game picker remembers your entry separately for Chess.com and Lichess, including when you open Settings from the on-site panel. Edits are remembered when you leave the field or switch websites, and submitting an entry saves it even if the lookup fails. Clear the field to forget that entry.
 
@@ -174,7 +174,9 @@ The Moves tab shows the best engine arrow by default; Summary leaves the board c
 
 ## Saved reviews and practice
 
-Successful full reviews save automatically on your device. Search saved games by player or recognized opening, bookmark a position, or open **Practice** to revisit mistakes and bookmarks. Saved games open at move 0 on Summary; bookmarks and practice items open at their position. A saved mistake starts a fresh attempt with hints hidden.
+Successful full reviews save automatically on your device. Recent games and imported PGNs with matching saved analysis show a **Reviewed** badge; select the game to open its saved review directly at move 0 on Summary, without another engine run. **Reviewed · older** identifies saved analysis from an earlier analysis version. The game picker refreshes these badges when opened or brought back into focus. If a saved copy has been removed or cannot be opened, the original game remains available to review.
+
+Search saved games by player or recognized opening, bookmark a position, or open **Practice** to revisit mistakes and bookmarks. Saved games open at move 0 on Summary; bookmarks and practice items open at their position. A saved mistake starts a fresh attempt with hints hidden.
 
 Re-reviewing a game replaces its analysis and keeps its bookmarks. Older analysis is marked so you can choose to refresh it. Temporary variations, practice attempts, and extra position searches are not added to the saved full review.
 
@@ -278,6 +280,7 @@ npm run test:extension
 npm run test:features
 npm run test:ui
 npm run test:performance
+npm run test:reviewed
 npm run test:imports
 npm run test:tutorial
 npm run test:notation

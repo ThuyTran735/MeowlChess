@@ -14,7 +14,7 @@ import { createMoveNotation } from './lib/move-notation.js';
 import { estimateGameRatings } from './lib/game-rating.js';
 import { getPhasePerformance } from './lib/game-performance.js';
 import { createSiteReviewSettings } from './lib/site-settings.js';
-import { createReviewLibrary } from './lib/library.js';
+import { createReviewLibrary, reviewIdForGame } from './lib/library.js';
 const reviewLibrary = createReviewLibrary({ analysisVersion: ANALYSIS_VERSION });
 
 const $ = (id) => document.getElementById(id);
@@ -36,6 +36,44 @@ function pieceImage(color, type) {
   const image = document.createElement('img'); image.className = 'piece'; image.src = `pieces/${color}${type}.png`; image.alt = ''; image.draggable = false; return image;
 }
 let renderedBoard = null;
+const gameReviewIds = new WeakMap(), gameCardGames = new WeakMap();
+const unavailableSavedReviews = new Map();
+let savedReviewIndex = new Map(), libraryRefreshRevision = 0, savedReviewReadRevision = 0;
+function idForPickerGame(game) {
+  if (!gameReviewIds.has(game)) gameReviewIds.set(game, reviewIdForGame(game).catch(() => null));
+  return gameReviewIds.get(game);
+}
+async function syncReviewedCard(card) {
+  const game = gameCardGames.get(card);
+  if (!game) return;
+  const id = await idForPickerGame(game);
+  if (!card.isConnected || gameCardGames.get(card) !== game) return;
+  const record = id && savedReviewIndex.get(id);
+  let badge = card.querySelector('.reviewed-badge');
+  if (record) {
+    if (!badge) { badge = document.createElement('span'); badge.className = 'reviewed-badge'; card.querySelector('.game-meta').append(badge); }
+    badge.textContent = record.stale ? 'Reviewed · older' : 'Reviewed';
+    badge.classList.toggle('older-review', record.stale);
+    badge.title = record.stale ? 'Saved analysis from an older version. Open it or review again to update.' : 'Open saved analysis without running the engine again.';
+    card.dataset.reviewId = record.id;
+  } else { badge?.remove(); delete card.dataset.reviewId; }
+  card.title = `${savedTitle(game)}${record ? ` — ${record.stale ? 'Older saved review' : 'Open saved review'}` : ''}`;
+  card.setAttribute('aria-label', `${savedTitle(game)}${record ? `, ${record.stale ? 'Reviewed, older analysis' : 'Reviewed'}. Open saved review.` : '. Open game.'}`);
+  const selected = state.selected === game || !!id && state.reviewId === id;
+  card.classList.toggle('selected', selected); card.setAttribute('aria-pressed', String(selected));
+}
+function syncReviewedCards() {
+  for (const card of document.querySelectorAll('.game-card')) void syncReviewedCard(card);
+}
+function registerGameCard(card, game) { gameCardGames.set(card, game); void syncReviewedCard(card); }
+function forgetUnavailableReview(id) {
+  if (!id) return;
+  savedReviewReadRevision++;
+  const record = savedReviewIndex.get(id);
+  if (record) unavailableSavedReviews.set(id, record.updatedAt);
+  savedReviewIndex.delete(id);
+}
+function openPickerGame(game) { return openSavedReview(null, { fallbackGame: game }); }
 const savedUsernames = {};
 let usernameSource = 'chesscom', usernameSaveQueue = Promise.resolve();
 function rememberUsername(source, value) {
@@ -69,7 +107,7 @@ function syncSource() {
 }
 function setLibraryOpen(open) {
   const dialog = $('library-dialog');
-  if (open && !dialog.open) { stopPlayback(); updateControls(); dialog.showModal(); }
+  if (open && !dialog.open) { stopPlayback(); updateControls(); dialog.showModal(); void refreshLibrary(); }
   else if (!open && dialog.open) dialog.close();
   $('library-toggle').setAttribute('aria-expanded', String(dialog.open));
 }
@@ -185,7 +223,7 @@ function renderPlayers() {
   const white = state.selected?.white || { username: 'White' };
   const black = state.selected?.black || { username: 'Black' };
   for (const [place, player, color] of state.flipped ? [['top', white, 'w'], ['bottom', black, 'b']] : [['top', black, 'b'], ['bottom', white, 'w']]) {
-    $(`${place}-player`).textContent = player.username;
+    $(`${place}-player`).textContent = player.username; $(`${place}-player`).title = player.username;
     $(`${place}-rating`).textContent = player.rating ? `(${player.rating})` : '';
     const summary = state.result?.summary[color];
     $(`${place}-score`).textContent = summary && summary.accuracy != null ? `${summary.accuracy.toFixed(1)}% est.` : '';
@@ -381,7 +419,7 @@ function renderSummary() {
     const card = document.createElement('div'); card.className = `score-card score-${color}`;
     const value = document.createElement('span'); value.className = 'score-value'; value.textContent = state.result.summary[color].accuracy?.toFixed(1) ?? '—';
     const info = document.createElement('div'); info.className = 'score-info';
-    const name = document.createElement('strong'); name.textContent = state.selected[color === 'w' ? 'white' : 'black'].username;
+    const name = document.createElement('strong'); name.textContent = state.selected[color === 'w' ? 'white' : 'black'].username; name.title = name.textContent;
     const caption = document.createElement('small'); caption.textContent = 'Study score · est.';
     const side = document.createElement('span'); side.className = 'score-side'; side.textContent = color === 'w' ? 'White' : 'Black';
     info.append(name, caption); card.append(side, value, info); scores.append(card);
@@ -587,7 +625,7 @@ function selectGame(game) {
     const parsed = parseGame(game.pgn);
     state.selected = game; state.parsed = parsed; state.result = null; state.ply = 0; state.reviewId = null; state.bookmarks = []; state.recordMeta = null; state.opening = recognizeOpening(parsed);
     orientToPlayer(game); $('save-status').textContent = '';
-    $('game-title').textContent = `${game.white.username} vs ${game.black.username}`;
+    $('game-title').textContent = `${game.white.username} vs ${game.black.username}`; $('game-title').title = $('game-title').textContent;
     $('game-subtitle').replaceChildren();
     const subtitle = document.createElement('span'); subtitle.textContent = game.sample ? 'Sample · Fool’s mate · 0–1' : `${game.source === 'pgn' ? 'Imported PGN' : game.source === 'lichess' ? 'Lichess' : 'Chess.com'}${game.end_time ? ` · ${new Date(game.end_time * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : ''} · ${parsed.headers?.Result || 'Completed'} · `;
     $('game-subtitle').append(subtitle);
@@ -613,11 +651,11 @@ function renderGames() {
   state.games.forEach((game, index) => {
     const button = document.createElement('button'); button.type = 'button'; button.className = 'game-card'; button.dataset.index = String(index);
     button.setAttribute('aria-pressed', 'false');
-    const names = document.createElement('strong'); names.textContent = `${game.white.username} vs ${game.black.username}`;
+    const names = document.createElement('strong'); names.textContent = `${game.white.username} vs ${game.black.username}`; names.title = names.textContent;
     const meta = document.createElement('span'); meta.className = 'game-meta';
     const date = document.createElement('span'); date.textContent = `${new Date(game.end_time * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${game.time_class || 'chess'}`;
     const result = document.createElement('span'); result.className = 'game-result'; result.textContent = game.white.result === 'win' ? '1–0' : game.black.result === 'win' ? '0–1' : '½–½';
-    meta.append(date, result); button.append(names, meta); button.addEventListener('click', () => selectGame(game)); $('games').append(button);
+    meta.append(date, result); button.append(names, meta); button.addEventListener('click', () => openPickerGame(game)); $('games').append(button); registerGameCard(button, game);
   });
 }
 async function loadGames() {
@@ -628,16 +666,17 @@ async function loadGames() {
   stopPlayback(); cancelPositionSearch(); resetExploration(); state.positionAnalysis.clear(); state.branchAnalysis.clear(); state.selectedLine = null;
   state.loading = true; state.games = []; state.selected = null; state.parsed = null; state.result = null; state.ply = 0; state.opening = null; state.reviewId = null; state.bookmarks = [];
   showError(); renderGames(); renderMoves(); renderSummary(); renderBoard();
-  $('game-title').textContent = 'Loading games…'; $('game-subtitle').textContent = 'Looking up completed games in the public archive.'; $('game-kind').textContent = 'LOADING ARCHIVE';
+  $('game-title').title = ''; $('game-title').textContent = 'Loading games…'; $('game-subtitle').textContent = 'Looking up completed games in the public archive.'; $('game-kind').textContent = 'LOADING ARCHIVE';
   $('review-status').textContent = ''; $('progress-area').hidden = true;
   $('library-status').textContent = 'Finding your completed games…';
   try {
     state.games = await fetchGames(source, username);
+    await refreshLibrary();
     savePreferences();
     renderGames();
     $('library-status').textContent = state.games.length ? 'Choose a game to explore.' : 'No recent completed standard games found. Newly finished games may take time to appear.';
     state.loading = false;
-    if (state.games.length) selectGame(state.games[0]);
+    if (state.games.length) await openPickerGame(state.games[0]);
     else { $('game-title').textContent = 'No games found'; $('game-subtitle').textContent = 'Try another username or the sample game.'; $('game-kind').textContent = 'NO GAMES FOUND'; }
   } catch (error) {
     $('library-status').textContent = error.message || 'Could not load games. Please try again.';
@@ -884,12 +923,21 @@ function showConsequence() {
 
 function savedTitle(game) { return `${game?.white?.username || 'White'} vs ${game?.black?.username || 'Black'}`; }
 async function refreshLibrary() {
+  const revision = ++libraryRefreshRevision, readRevision = savedReviewReadRevision;
   try {
     const [reviews, practice, bookmarks] = await Promise.all([reviewLibrary.listReviews(), reviewLibrary.listPracticePositions(), reviewLibrary.listBookmarks()]);
+    if (revision !== libraryRefreshRevision) return;
+    // A card may have loaded a fresher record while this snapshot was pending.
+    if (readRevision !== savedReviewReadRevision) return refreshLibrary();
     state.savedReviews = reviews; state.practiceItems = practice; state.bookmarkItems = bookmarks;
+    savedReviewIndex = new Map(reviews.filter(record => !record.invalid && unavailableSavedReviews.get(record.id) !== record.updatedAt).map(record => [record.id, record]));
     $('saved-status').textContent = reviews.length ? 'Stored only on this device.' : 'Completed reviews will be saved here.';
-    renderSavedReviews(); renderNotebook();
-  } catch (error) { $('saved-status').textContent = error.message || 'Local review storage is unavailable.'; }
+    renderSavedReviews(); renderNotebook(); syncReviewedCards(); updateControls();
+  } catch (error) {
+    if (revision !== libraryRefreshRevision || readRevision !== savedReviewReadRevision) return;
+    savedReviewIndex.clear(); syncReviewedCards();
+    $('saved-status').textContent = error.message || 'Local review storage is unavailable.';
+  }
 }
 function renderSavedReviews() {
   $('saved-count').textContent = String(state.savedReviews.length);
@@ -898,7 +946,7 @@ function renderSavedReviews() {
   for (const record of state.savedReviews.filter(item => !query || `${savedTitle(item.game)} ${item.opening?.name || ''} ${item.game?.pgn || ''}`.toLowerCase().includes(query))) {
     const row = document.createElement('div'); row.className = 'saved-row';
     const open = document.createElement('button'); open.type = 'button'; open.className = 'saved-open'; open.dataset.reviewId = record.id; open.dataset.invalid = String(!!record.invalid); open.disabled = !!record.invalid || state.busy || state.loading;
-    const name = document.createElement('strong'); name.textContent = record.invalid ? 'Unreadable saved review' : savedTitle(record.game);
+    const name = document.createElement('strong'); name.textContent = record.invalid ? 'Unreadable saved review' : savedTitle(record.game); name.title = name.textContent;
     const detail = document.createElement('small'); detail.textContent = record.invalid ? 'Remove this record to free space.' : `${record.analysis?.engineName || 'Local review'}${record.stale ? ' · older analysis' : ''} · ${record.bookmarkCount || 0} saved positions`;
     open.append(name, detail); open.addEventListener('click', () => openSavedReview(record.id));
     const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'saved-delete'; remove.textContent = '×'; remove.title = 'Delete saved review'; remove.setAttribute('aria-label', `Delete saved review ${savedTitle(record.game)}`); remove.disabled = state.busy;
@@ -909,17 +957,26 @@ function renderSavedReviews() {
 async function persistReview(game, result, analysis) {
   try {
     const record = await reviewLibrary.saveReview(game, result, { ...analysis, analysisVersion: ANALYSIS_VERSION });
+    unavailableSavedReviews.delete(record.id);
     if (state.selected === game && state.result === result) { state.reviewId = record.id; state.bookmarks = record.bookmarks || []; state.recordMeta = analysis; $('save-status').textContent = 'Saved on this device.'; updateControls(); }
     await refreshLibrary();
   } catch (error) { if (state.selected === game) $('save-status').textContent = `Review kept open, but not saved: ${error.message}`; }
 }
 async function openSavedReview(id, options = {}) {
-  const { ply = 0, practice = false } = options;
-  if (state.busy || state.loading || state.libraryBusy || state.retry?.controller) return;
-  state.libraryBusy = true; updateControls();
+  const { ply = 0, practice = false, fallbackGame = null } = options;
+  if (state.busy || state.loading || state.libraryBusy || state.importing || state.positionController || state.retry?.controller) return false;
+  stopPlayback(); state.libraryBusy = true; updateControls();
   try {
-    const record = await reviewLibrary.loadReview(id);
-    if (!record) throw new Error('This saved review was removed.');
+    if (fallbackGame) id = await idForPickerGame(fallbackGame);
+    const record = id ? await reviewLibrary.loadReview(id) : null;
+    if (!record) {
+      forgetUnavailableReview(id);
+      if (fallbackGame) { selectGame(fallbackGame); return false; }
+      throw new Error('This saved review was removed.');
+    }
+    unavailableSavedReviews.delete(record.id);
+    savedReviewReadRevision++;
+    savedReviewIndex.set(record.id, { id: record.id, updatedAt: record.updatedAt, stale: record.stale });
     selectGame(record.game);
     if (state.selected !== record.game) return;
     state.result = record.result; state.opening = Object.hasOwn(record.result, 'opening') ? record.result.opening : state.opening; state.reviewEngine = record.analysis.engineName || record.analysis.engineId; state.reviewId = record.id; state.bookmarks = record.bookmarks || []; state.recordMeta = record.analysis;
@@ -927,8 +984,15 @@ async function openSavedReview(id, options = {}) {
     $('analyze-button').textContent = 'Review again'; $('review-status').textContent = record.stale ? 'Saved review from an older analysis version. Review again to update it.' : 'Saved review loaded.'; $('save-status').textContent = 'Stored on this device.';
     renderMoves(); renderSummary(); setReviewTab(Object.hasOwn(options, 'ply') ? 'moves' : 'summary'); renderBoard();
     if (practice) startRetry(ply);
-  } catch (error) { showError(error.message || 'The saved review could not be opened.'); }
-  finally { state.libraryBusy = false; renderBoard(); }
+    return true;
+  } catch (error) {
+    forgetUnavailableReview(id);
+    if (fallbackGame) {
+      selectGame(fallbackGame);
+      $('review-status').textContent = 'Saved analysis could not be opened. You can review this game again.';
+    } else showError(error.message || 'The saved review could not be opened.');
+    return false;
+  } finally { state.libraryBusy = false; renderBoard(); syncReviewedCards(); }
 }
 async function toggleBookmark() {
   if (!state.reviewId || state.study || state.retry || state.busy) return;
@@ -952,7 +1016,7 @@ function renderNotebook() {
     if (!entries.length) { const empty = document.createElement('p'); empty.className = 'notebook-empty'; empty.textContent = practice ? 'Review a game to collect mistakes for practice.' : 'Use Bookmark on any reviewed position.'; container.append(empty); }
     for (const entry of entries) {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'notebook-item'; button.dataset.ply = entry.ply; button.dataset.reviewId = entry.reviewId;
-      const name = document.createElement('strong'); name.textContent = savedTitle(entry.game);
+      const name = document.createElement('strong'); name.textContent = savedTitle(entry.game); name.title = name.textContent;
       const detail = document.createElement('span'); detail.textContent = `${entry.ply ? `Move ${Math.ceil(entry.ply / 2)}` : 'Starting position'} · ${practice ? entry.label : 'Bookmark'}${entry.stale ? ' · older review' : ''}`;
       button.append(name, detail); button.disabled = state.busy || state.loading; button.addEventListener('click', () => openSavedReview(entry.reviewId, { ply: entry.ply, practice })); container.append(button);
     }
@@ -974,7 +1038,7 @@ $('close-library').addEventListener('click', () => setLibraryOpen(false));
 $('library-dialog').addEventListener('close', () => $('library-toggle').setAttribute('aria-expanded', 'false'));
 $('username').addEventListener('change', () => { void rememberUsername(usernameSource, $('username').value); });
 $('username-form').addEventListener('submit', event => { event.preventDefault(); loadGames(); });
-$('demo-button').addEventListener('click', () => selectGame(sample));
+$('demo-button').addEventListener('click', () => openPickerGame(sample));
 $('analyze-button').addEventListener('click', review);
 $('cancel-button').addEventListener('click', () => state.controller?.abort());
 $('clear-rating-focus').addEventListener('click', () => { state.ratingFocus = null; updateControls(); $('moves-tab').focus({ preventScroll: true }); });
@@ -1002,10 +1066,10 @@ function renderImportedGames(collection) {
   $('import-errors').open = !collection.games.length;
   for (const [index, game] of collection.games.entries()) {
     const button = document.createElement('button'); button.type = 'button'; button.className = 'game-card import-game'; button.dataset.index = index;
-    const name = document.createElement('strong'); name.textContent = savedTitle(game);
+    const name = document.createElement('strong'); name.textContent = savedTitle(game); name.title = name.textContent;
     const detail = document.createElement('span'); detail.className = 'game-meta'; detail.textContent = game.white.result === 'win' ? '1–0' : game.black.result === 'win' ? '0–1' : '½–½';
-    button.append(name, detail); button.addEventListener('click', () => { if (!importUnavailable()) { selectGame(game); $('import-status').textContent = 'Game opened. Choose Review game when ready.'; } });
-    $('import-games').append(button);
+    button.append(name, detail); button.addEventListener('click', async () => { if (!importUnavailable()) { const saved = await openPickerGame(game); $('import-status').textContent = saved ? 'Saved review opened.' : 'Game opened. Choose Review game when ready.'; } });
+    $('import-games').append(button); registerGameCard(button, game);
   }
   for (const rejected of collection.rejected) {
     const item = document.createElement('li'); item.textContent = `Game ${rejected.index}: ${rejected.message}`; $('import-error-list').append(item);
@@ -1013,19 +1077,21 @@ function renderImportedGames(collection) {
   $('import-status').textContent = `${collection.games.length} ${collection.games.length === 1 ? 'game' : 'games'} ready${collection.rejected.length ? ` · ${collection.rejected.length} skipped` : ''}. Choose a game to open.`;
   if (!collection.games.length) $('import-status').textContent = 'No completed games could be opened. See the skipped games below.';
 }
-function openImportedGames(pgn, files = false) {
+async function openImportedGames(pgn, files = false) {
   if (importUnavailable()) return;
-  showError();
+  showError(); state.importing = true; updateControls();
   try {
     const collection = files ? importPgnFiles(pgn) : importPgnCollection(pgn);
+    await refreshLibrary();
     renderImportedGames(collection);
+    state.importing = false;
     if (collection.games.length === 1 && !collection.rejected.length) {
-      selectGame(collection.games[0]); $('import-status').textContent = 'Game opened. The PGN stays on your device.';
+      const saved = await openPickerGame(collection.games[0]); $('import-status').textContent = saved ? 'Saved review opened.' : 'Game opened. The PGN stays on your device.';
     }
   } catch (error) {
     renderImportedGames({ games: [], rejected: [] });
     $('import-status').textContent = error.message || 'Could not read this PGN.';
-  }
+  } finally { state.importing = false; updateControls(); }
 }
 async function readPgnFiles(files) {
   if (importUnavailable() || !files.length) return;
@@ -1036,7 +1102,7 @@ async function readPgnFiles(files) {
   try {
     const texts = await Promise.all(files.map(file => file.text()));
     state.importing = false;
-    openImportedGames(texts, true);
+    await openImportedGames(texts, true);
   } catch { $('import-status').textContent = 'Could not read this file. Try pasting its PGN instead.'; }
   finally { state.importing = false; $('pgn-file').value = ''; updateControls(); }
 }
@@ -1103,6 +1169,7 @@ document.addEventListener('keydown', event => {
   if (event.key === 'End') { event.preventDefault(); navigatePosition(positionCount()); }
   if (event.target.closest('.chart-hit') && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) document.querySelector('.chart-hit button.active')?.focus({ preventScroll: true });
 });
+window.addEventListener('focus', () => { if ($('library-dialog').open) void refreshLibrary(); });
 window.addEventListener('beforeunload', () => { state.controller?.abort(); cancelPositionSearch(); cancelRetry(); stopPlayback(); reviewLibrary.close().catch(() => {}); });
 syncEngine(); syncSource(); renderBoard(); refreshLibrary();
 async function initializeReview() {
