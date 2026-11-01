@@ -13,9 +13,9 @@
   </p>
 </div>
 
-**Version 1.7.1** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.7.1) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
+**Version 1.7.2** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.7.2) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
 
-> New in 1.7.1: a new Meowl icon, Reviewed badges that open saved analysis directly, and full-player-name tooltips.
+> New in 1.7.2: a refreshed on-site panel with Overview / Move ratings tabs, clearer loading stages, and a full-review button that stays within reach.
 
 MeowlChess runs Stockfish or Lozza on your device. No subscription, analysis-service account, or chess-site login is required. Once a game is loaded, its analysis works offline.
 
@@ -97,6 +97,8 @@ The panel shows each step clearly:
 **Finding game → Analyzing → Saving → Summary**
 
 A current saved review goes straight to Summary without another engine run or saving stage. New reviews use your saved engine settings, or **Fast / one line** until you save preferences. **Open full review** opens the saved game at move 0 on Summary.
+
+The panel keeps both study scores visible above **Overview** and **Move ratings**. Overview shows the game-rating estimates and performance by phase; Move ratings shows each player's counts. Switch tabs with a click or the arrow keys, and use Home / End to reach the first / last tab. **Open full review** stays within reach while scrolling a small panel.
 
 | Panel control | Action |
 | --- | --- |

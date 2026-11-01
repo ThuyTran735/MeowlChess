@@ -139,6 +139,12 @@ try {
   });
   context.setDefaultTimeout(20000);
   await context.addInitScript(() => {
+    window.__panelEngineSearches = 0;
+    const nativePost = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function(message, ...args) {
+      if (typeof message === 'string' && /^go\b/.test(message)) window.__panelEngineSearches++;
+      return nativePost.call(this, message, ...args);
+    };
     window.__panelEvents = [];
     const log = value => { window.__panelEvents.push(value); if (window.__panelEvents.length > 24) window.__panelEvents.shift(); };
     for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'lostpointercapture']) document.addEventListener(type, event => log({ type, target: event.target.tagName, id: event.target.id, pointerId: event.pointerId, x: event.clientX, y: event.clientY, screenX: event.screenX, screenY: event.screenY, trusted: event.isTrusted, primary: event.isPrimary }), true);
@@ -189,12 +195,51 @@ try {
   stage = 'icon decoding under restrictive host CSP';
   await poll(() => shadowValue('.brand-icon', 'this.complete && this.naturalWidth === 48'), 'header icon decoded');
   assert.equal(await shadowValue('.brand-icon', 'this.draggable'), false);
-  near(await shadowValue('.brand-icon', 'this.getBoundingClientRect().width'), 24, 'icon size');
+  near(await shadowValue('.brand-icon', 'this.getBoundingClientRect().width'), 28, 'icon size');
+
+  stage = 'summary tabs switch views without moving the panel or restarting analysis';
+  const tabPosition = await hostBox(), initialSearches = await frame.evaluate(() => window.__panelEngineSearches);
+  const overviewTab = frame.locator('#summary-overview-tab'), ratingsTab = frame.locator('#summary-ratings-tab');
+  const assertTab = async expected => {
+    for (const name of ['overview', 'ratings']) {
+      assert.equal(await frame.locator(`#summary-${name}-tab`).getAttribute('aria-selected'), String(name === expected));
+      assert.equal(await frame.locator(`#summary-${name}`).isVisible(), name === expected);
+      assert.equal(await frame.locator(`#summary-${name}-tab`).evaluate(element => element.tabIndex), name === expected ? 0 : -1);
+    }
+    near((await hostBox()).x, tabPosition.x, 'tabs preserve horizontal position');
+    near((await hostBox()).y, tabPosition.y, 'tabs preserve vertical position');
+    assert.equal(await page.locator('#meowlchess-drag-shield').count(), 0, 'Tab clicks never start panel dragging.');
+    assert.equal(await frame.evaluate(() => window.__panelEngineSearches), initialSearches, 'Tabs reuse the completed review.');
+  };
+  await assertTab('overview');
+  await ratingsTab.click(); await assertTab('ratings');
+  await page.keyboard.press('ArrowLeft'); await assertTab('overview');
+  await page.keyboard.press('ArrowRight'); await assertTab('ratings');
+  await page.keyboard.press('Home'); await assertTab('overview');
+  await page.keyboard.press('End'); await assertTab('ratings');
+  await overviewTab.click(); await assertTab('overview');
+  console.log('Panel extension: accessible summary tabs reuse analysis and do not drag the panel.');
+
+  stage = 'keyboard focus remains above sticky actions in a short panel';
+  const automaticBox = await hostBox();
+  await resizePanel(0, 320 - automaticBox.height, 'chesscom', 'short keyboard focus check');
+  await overviewTab.focus(); await page.keyboard.press('Tab'); await page.keyboard.press('Tab');
+  const focusClearance = await frame.evaluate(() => ({
+    focused: document.activeElement === document.querySelector('.estimate-note summary'),
+    bottom: document.activeElement.getBoundingClientRect().bottom,
+    footerTop: document.querySelector('footer').getBoundingClientRect().top,
+  }));
+  assert(focusClearance.focused && focusClearance.bottom <= focusClearance.footerTop + 1, 'About estimates stays visible above sticky actions when reached by keyboard.');
+  await cdp.send('DOM.focus', { nodeId: await shadowNode('.resize-handle') }); await page.keyboard.press('Home');
+  await poll(async () => Math.abs((await hostBox()).height - automaticBox.height) <= 2 && !await storedSize('chesscom'), 'restore automatic panel after focus check');
+  await frame.evaluate(() => window.scrollTo(0, 0));
 
   stage = 'summary text, card, and icon drag without coordinate drift';
   await dragLocator(frame.locator('#summary-title'), -600, 60, 'summary title drag');
   await dragLocator(frame.locator('.score-card').first(), 90, 45, 'score card drag');
+  await frame.locator('#summary-ratings-tab').click();
   await dragLocator(frame.locator('.count-row img').first(), -150, 40, 'move icon drag');
+  await frame.locator('#summary-overview-tab').click();
   await dragPoint(await shadowPoint('.brand-icon'), -100, -75, 'header icon drag');
   console.log('Panel extension: decoded header icon; actual iframe text/card/icon and native icon dragging passed.');
 
@@ -291,6 +336,7 @@ try {
   console.log('Panel extension: all eight edges/corners, opposite anchors, iframe crossing, Escape, minimum sizes, and viewport limits passed.');
 
   stage = 'wheel and scrollbar retain scrolling';
+  await frame.locator('#summary-ratings-tab').click();
   await page.setViewportSize({ width: 1100, height: 600 }); await page.waitForTimeout(250);
   const scrolledHost = await hostBox(), iframeBox = await frame.locator('#summary-title').boundingBox();
   await page.mouse.move(iframeBox.x + 50, iframeBox.y + 30); await page.mouse.wheel(0, 700);

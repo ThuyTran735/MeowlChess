@@ -2,7 +2,7 @@
 // parent's temporary drag surface so it continues outside this frame.
 export function installFrameDrag({ send, active = () => true }) {
   const root = document.documentElement;
-  const controls = 'button,a,input,select,textarea,summary,label,[contenteditable]:not([contenteditable="false"]),[role="button"],[role="link"],[role="slider"],[role="scrollbar"],[role="checkbox"],[role="switch"],[role="textbox"],[role="combobox"],[tabindex]:not([tabindex="-1"]),[data-no-drag]';
+  const controls = 'button,a,input,select,textarea,summary,label,[contenteditable]:not([contenteditable="false"]),[role="button"],[role="link"],[role="slider"],[role="scrollbar"],[role="checkbox"],[role="switch"],[role="textbox"],[role="combobox"],[tabindex]:not([tabindex="-1"]):not([role="tabpanel"]),[data-no-drag]';
   let pointer = null, destroyed = false;
   function scrollbar(event) {
     if (event.clientX >= root.clientWidth || event.clientY >= root.clientHeight) return true;

@@ -25,32 +25,37 @@
   </section>
 
   <section id="summary-result" aria-label="Completed game summary" hidden>
+    <div class="scores-heading"><h2>Study scores</h2><span>Estimated accuracy</span></div>
     <div id="summary-scores" class="scores"></div>
-    <p class="scores-caption">Estimated study scores</p>
-    <table class="game-performance-table" aria-label="Estimated game performance by player">
-      <thead><tr><th scope="col">This game</th><th scope="col">White</th><th scope="col">Black</th></tr></thead>
-      <tbody>
-        <tr class="game-rating-row"><th scope="row">Game rating</th><td id="summary-rating-w">—</td><td id="summary-rating-b">—</td></tr>
-      </tbody>
-      <tbody id="summary-phase-performance"></tbody>
-    </table>
-    <details class="estimate-note">
-      <summary>About these estimates</summary>
-      <p>Game rating is a rough, uncalibrated estimate of this game's moves, not an account Elo. It needs at least eight non-book decisions with a choice of moves in competitive positions.</p>
-      <p>Opening covers up to the first 10 moves by each side from the normal starting position. Endgame begins when little non-pawn material remains; the rest is Middlegame. Custom starting positions begin in Middlegame or Endgame. Icons summarize move quality in each phase.</p>
-    </details>
-    <div class="counts-heading"><span>Move ratings</span><span>White</span><span></span><span>Black</span></div>
-    <div id="summary-counts" class="counts"></div>
+    <div class="summary-tabs" role="tablist" aria-label="Review details">
+      <button id="summary-overview-tab" type="button" role="tab" aria-selected="true" aria-controls="summary-overview">Overview</button>
+      <button id="summary-ratings-tab" type="button" role="tab" aria-selected="false" aria-controls="summary-ratings" tabindex="-1">Move ratings</button>
+    </div>
+    <section id="summary-overview" class="result-pane" role="tabpanel" aria-labelledby="summary-overview-tab" tabindex="0">
+      <table class="game-performance-table" aria-label="Estimated game performance by player">
+        <thead><tr><th scope="col">This game</th><th scope="col">White</th><th scope="col">Black</th></tr></thead>
+        <tbody><tr class="game-rating-row"><th scope="row">Game rating</th><td id="summary-rating-w">—</td><td id="summary-rating-b">—</td></tr></tbody>
+        <tbody id="summary-phase-performance"></tbody>
+      </table>
+      <details class="estimate-note">
+        <summary>About these estimates</summary>
+        <p>Game rating is a rough, uncalibrated estimate of this game's moves, not an account Elo. It needs at least eight non-book decisions with a choice of moves in competitive positions.</p>
+        <p>Opening covers up to the first 10 moves by each side from the normal starting position. Endgame begins when little non-pawn material remains; the rest is Middlegame. Custom starting positions begin in Middlegame or Endgame. Icons summarize move quality in each phase.</p>
+      </details>
+    </section>
+    <section id="summary-ratings" class="result-pane" role="tabpanel" aria-labelledby="summary-ratings-tab" tabindex="0" hidden>
+      <div class="counts-heading"><span>Move ratings</span><span>White</span><span></span><span>Black</span></div>
+      <div id="summary-counts" class="counts"></div>
+    </section>
     <p id="summary-engine" class="engine-caption"></p>
   </section>
 
-  <p id="summary-status" class="summary-status" role="status"></p>
   <footer>
+    <p id="summary-status" class="summary-status" role="status"></p>
     <div class="footer-actions">
-      <button id="summary-open-review" type="button" class="primary-button" disabled hidden><span id="summary-open-label">Open full review</span><span class="button-arrow" aria-hidden="true">↗</span></button>
+      <button id="summary-open-review" type="button" class="primary-button" disabled hidden><span id="summary-open-label">Open full review</span><svg class="button-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg></button>
       <button id="summary-close" type="button" class="quiet-button" hidden>Close panel</button>
     </div>
-    <p class="independent">MeowlChess · independent, local analysis</p>
   </footer>
 </main>
 <script type="module" src="site-summary.js"></script>

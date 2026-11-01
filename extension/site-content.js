@@ -54,7 +54,8 @@
     if (!host || !body) return;
     body.hidden = value; host.dataset.collapsed = String(value);
     const toggle = shadow.querySelector('button[aria-expanded]');
-    toggle.textContent = value ? '⌄' : '⌃'; toggle.setAttribute('aria-label', value ? 'Expand review' : 'Collapse review');
+    toggle.replaceChildren(controlIcon(value ? 'expand' : 'collapse')); toggle.setAttribute('aria-label', value ? 'Expand review' : 'Collapse review');
+    toggle.title = value ? 'Expand review' : 'Collapse review';
     toggle.setAttribute('aria-expanded', String(!value));
   }
   function clearPanel() {
@@ -70,7 +71,7 @@
     launcher.style.cssText = 'all:initial!important;position:fixed!important;right:16px!important;bottom:16px!important;z-index:2147483646!important;display:block!important;color-scheme:dark!important;';
     const root = launcher.attachShadow({ mode: 'closed' });
     const style = document.createElement('style');
-    style.textContent = 'button{display:flex;align-items:center;gap:8px;box-sizing:border-box;max-width:calc(100vw - 32px);padding:9px 12px;border:1px solid #65764f;border-radius:24px;background:#292b26;color:#f0efe8;box-shadow:0 4px 18px #0005;font:600 13px Arial,sans-serif;cursor:pointer}button:hover{background:#373d2d}button:focus-visible{outline:2px solid #b2cf8d;outline-offset:3px}img{display:block;width:24px;height:24px;flex:none;border-radius:5px;object-fit:cover}span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}';
+    style.textContent = `button{display:flex;align-items:center;gap:9px;box-sizing:border-box;max-width:calc(100vw - 32px);padding:8px 13px 8px 8px;border:1px solid #ffffff26;border-radius:28px;background:#2c2b27;color:#f1f0e9;box-shadow:0 4px 20px #0005;font:600 13px/1.4 'Segoe UI',Arial,sans-serif;cursor:pointer;transition:background-color .16s,border-color .16s}button:hover{background:#393832;border-color:#ffffff40}button:focus-visible{outline:2px solid #a4ce77;outline-offset:3px}button:focus:not(:focus-visible){outline:none}img{display:block;width:28px;height:28px;flex:none;border-radius:50%;object-fit:cover}span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(prefers-reduced-motion:reduce){button{transition:none}}`;
     const open = button('Open MeowlChess review', '', () => { void reopenPanel(); });
     const icon = document.createElement('img'); icon.src = chrome.runtime.getURL('icons/icon48.png'); icon.alt = ''; icon.draggable = false;
     const label = document.createElement('span'); label.textContent = 'MeowlChess'; open.append(icon, label);
@@ -97,6 +98,19 @@
     else { waiting(); shadow?.querySelector('.brand')?.focus({ preventScroll: true }); }
     void check();
   }
+  function controlIcon(name) {
+    const paths = {
+      settings: ['M4 3v6m0 4v8M12 3v11m0 4v3M20 3v3m0 4v11', 'M1 9h6M9 14h6M17 6h6'],
+      collapse: ['m6 15 6-6 6 6'], expand: ['m6 9 6 6 6-6'], close: ['m6 6 12 12M6 18 18 6'],
+    };
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('class', 'control-icon');
+    svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('focusable', 'false');
+    svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.8'); svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('stroke-linejoin', 'round');
+    for (const value of paths[name]) { const path = document.createElementNS(svg.namespaceURI, 'path'); path.setAttribute('d', value); svg.append(path); }
+    return svg;
+  }
   function button(label, text, action) {
     const element = document.createElement('button'); element.type = 'button'; element.textContent = text;
     element.title = label; element.setAttribute('aria-label', label); element.addEventListener('click', action); return element;
@@ -110,8 +124,51 @@
     host.style.cssText = 'all:initial!important;position:fixed!important;top:76px!important;right:16px!important;width:min(360px,calc(100vw - 24px))!important;z-index:2147483646!important;display:block!important;color-scheme:dark!important;';
     shadow = host.attachShadow({ mode: 'closed' });
     const style = document.createElement('style');
-    style.textContent = `:host{font-family:Arial,sans-serif;color:#f0efe8}.panel{background:#292b26;border:1px solid #55594b;border-radius:10px;box-shadow:0 10px 36px #0006;overflow:hidden;font:13px/1.5 Arial,sans-serif;color:#f0efe8}.head{display:flex;align-items:center;gap:7px;padding:9px 10px;border-bottom:1px solid #ffffff14}.brand-icon{width:24px;height:24px;flex:none;border-radius:5px;object-fit:cover;user-select:none;-webkit-user-drag:none}.brand{font-weight:700;flex:1;letter-spacing:-.2px}.brand span{color:#acc880}button{border:0;border-radius:4px;background:transparent;color:#c9ccbf;font:18px Arial,sans-serif;cursor:pointer;width:28px;height:28px}button:hover,button:focus-visible{background:#ffffff14;color:white;outline:2px solid #9dbb74}button.settings{font-size:12px;width:auto;padding:0 7px}.body{max-height:calc(100vh - 140px);overflow:auto}.waiting{padding:18px 16px 20px}.waiting p{margin:0 0 12px;font-size:13px}.waiting small{display:block;color:#aeb3a2;margin-top:10px;font-size:11px}progress{display:block;width:100%;height:7px;accent-color:#a3bf75}iframe{display:block;width:100%;border:0;background:#292b26;min-height:0;max-height:calc(100vh - 140px)} [hidden]{display:none!important}@media(prefers-reduced-motion:no-preference){.panel{animation:appear .18s ease-out}@keyframes appear{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}}`;
-    style.textContent += '.bot-import .bot-action{display:block;width:100%;height:auto;padding:9px 12px;margin-top:12px;background:#a3bf75;color:#20241b;font:600 13px Arial,sans-serif}.bot-import details{margin-top:14px}.bot-import summary{cursor:pointer;color:#d0d3c7;font-size:12px}.bot-import textarea,.bot-import input{box-sizing:border-box;width:100%;margin-top:10px;font:12px Arial,sans-serif;color:#eee}.bot-import textarea{resize:vertical;max-height:180px;background:#20221e;border:1px solid #55594b;border-radius:4px;padding:8px}.bot-import .bot-feedback{font-size:12px;margin:12px 0 0;color:#cbd5b9}.bot-feedback:empty{display:none}.bot-import button:disabled{opacity:.6;cursor:wait}';
+    style.textContent = `
+      :host{font-family:'Segoe UI',Arial,sans-serif;color:#f1f0e9}
+      .panel{background:#2c2b27;border:1px solid #ffffff26;border-radius:12px;box-shadow:0 12px 40px #0005,0 2px 7px #0003;overflow:hidden;font:13px/1.5 'Segoe UI',Arial,sans-serif;color:#f1f0e9;-webkit-font-smoothing:antialiased}
+      .head{display:flex;align-items:center;gap:8px;padding:11px 12px;background:#252420;border-bottom:1px solid #ffffff12}
+      .brand-icon{width:28px;height:28px;flex:none;border-radius:7px;object-fit:cover;user-select:none;-webkit-user-drag:none}
+      .brand{font-size:14px;font-weight:650;flex:1;min-width:0;letter-spacing:-.25px;white-space:nowrap}
+      .brand span{color:#a4c580}
+      button{display:inline-flex;align-items:center;justify-content:center;flex:none;border:0;border-radius:6px;background:transparent;color:#b2afa5;font:inherit;cursor:pointer;width:28px;height:28px;padding:0;transition:background-color .16s,color .16s}
+      button:hover{background:#ffffff0c;color:#f1f0e9}
+      button:focus-visible{outline:2px solid #a4ce77;outline-offset:2px;background:#ffffff0c;color:#f1f0e9}
+      button:focus:not(:focus-visible){outline:none}
+      .control-icon{display:block;width:16px;height:16px;pointer-events:none;flex:none}
+      button.settings{margin-right:2px}
+      .body{max-height:calc(100vh - 140px);overflow:auto;scrollbar-color:#66645d transparent;scrollbar-width:thin;overscroll-behavior:contain}
+      .waiting{padding:20px}
+      .waiting p{margin:0 0 16px;font-size:12px;line-height:1.65;color:#d3d0c6;overflow-wrap:anywhere}
+      .waiting small{display:block;color:#99968b;margin-top:12px;font-size:11px;line-height:1.6}
+      .loading-steps{display:flex;justify-content:space-between;gap:8px;padding:0;margin:0 0 23px;list-style:none}
+      .loading-steps li{display:flex;align-items:center;gap:5px;color:#99968b;font-size:10px;white-space:nowrap}
+      .loading-steps .step-number{display:grid;place-items:center;box-sizing:border-box;width:20px;height:20px;border:1px solid #ffffff20;border-radius:50%;font-size:9px;font-weight:600}
+      .loading-steps [aria-current]{color:#f1f0e9}
+      .loading-steps [aria-current] .step-number{background:#a1c97b;border-color:#a1c97b;color:#18220e}
+      :host([data-state="error"]) .loading-steps{display:none}
+      :host([data-state="error"]) .waiting p{color:#eab98f}
+      progress{display:block;width:100%;height:6px;border:0;border-radius:6px;overflow:hidden;accent-color:#81b64c;background:#1e1e1b}
+      progress::-webkit-progress-bar{background:#1e1e1b;border-radius:6px}
+      progress::-webkit-progress-value{background:#81b64c;border-radius:6px}
+      iframe{display:block;width:100%;border:0;background:#2c2b27;min-height:0;max-height:calc(100vh - 140px)}
+      [hidden]{display:none!important}
+      .bot-import .bot-action{display:flex;width:100%;height:auto;min-height:38px;padding:9px 12px;margin-top:12px;background:#81b64c;color:#17210d;font:650 12px/1.5 'Segoe UI',Arial,sans-serif}
+      .bot-import .bot-action:hover:enabled{background:#92c45e}
+      .bot-import details{margin-top:16px;padding-top:14px;border-top:1px solid #ffffff12}
+      .bot-import summary{cursor:pointer;color:#b2afa5;font-size:11px}
+      .bot-import summary:hover{color:#f1f0e9}
+      .bot-import textarea,.bot-import input{box-sizing:border-box;width:100%;margin-top:10px;font:12px/1.5 'Segoe UI',Arial,sans-serif;color:#f1f0e9}
+      .bot-import textarea{resize:vertical;max-height:180px;background:#252420;border:1px solid #ffffff26;border-radius:6px;padding:10px}
+      .bot-import input::file-selector-button{padding:7px 9px;margin-right:9px;border:1px solid #ffffff26;border-radius:5px;background:#34332f;color:#f1f0e9;font:inherit;cursor:pointer}
+      .bot-import :is(summary,textarea,input):focus-visible{outline:2px solid #a4ce77;outline-offset:3px}
+      .bot-import .bot-feedback{font-size:11px;margin:12px 0 0;color:#b7c7a5}
+      .bot-feedback:empty{display:none}
+      .bot-import button:disabled{opacity:.5;cursor:wait}
+      @media(max-width:340px){.head{gap:6px;padding:10px}.waiting{padding:16px}.loading-steps{gap:5px}.loading-steps li{font-size:9px}}
+      @media(prefers-reduced-motion:no-preference){.panel{animation:appear .18s ease-out}@keyframes appear{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}}
+      @media(prefers-reduced-motion:reduce){button{transition:none}}
+    `;
     style.textContent += `
       .panel{position:relative;display:flex;flex-direction:column;box-sizing:border-box;height:var(--meowl-panel-height,auto)}
       :host(:not([data-resized="true"]):not([data-collapsed="true"])) .panel{min-height:min(220px,calc(100vh - 16px))}
@@ -131,26 +188,27 @@
       .resize-handle[data-resize-direction="nw"]{top:-5px;left:-5px;cursor:nwse-resize}
       .resize-handle[data-resize-direction="ne"]{top:-5px;right:-5px;cursor:nesw-resize}
       .resize-handle[data-resize-direction="sw"]{bottom:-5px;left:-5px;cursor:nesw-resize}
-      .resize-handle[data-resize-direction="se"]{right:0;bottom:0;width:20px;height:20px;z-index:3;cursor:nwse-resize;border-radius:0 0 9px 0}
-      .resize-handle[data-resize-direction="se"]::after{content:'';position:absolute;right:4px;bottom:4px;width:10px;height:10px;background:repeating-linear-gradient(135deg,transparent 0 3px,#b7bca8 3px 5px,transparent 5px 7px);clip-path:polygon(100% 0,100% 100%,0 100%);opacity:.7}
+      .resize-handle[data-resize-direction="se"]{right:0;bottom:0;width:20px;height:20px;z-index:3;cursor:nwse-resize;border-radius:0 0 11px 0}
+      .resize-handle[data-resize-direction="se"]::after{content:'';position:absolute;right:4px;bottom:4px;width:10px;height:10px;background:repeating-linear-gradient(135deg,transparent 0 3px,#99968b 3px 5px,transparent 5px 7px);clip-path:polygon(100% 0,100% 100%,0 100%);opacity:.7}
       .resize-handle:hover::after,.resize-handle:focus-visible::after{opacity:1}
       .resize-handle:focus{outline:none}
-      .resize-handle:focus-visible{outline:2px solid #9dbb74;outline-offset:-3px}
+      .resize-handle:focus-visible{outline:2px solid #a4ce77;outline-offset:-3px}
       .resize-handle[data-pointer-focus="true"]:focus{outline:none}
-      .waiting .loading-stage{font-size:15px;font-weight:650;line-height:1.3;margin:0 0 10px}
-      .brand:focus{outline:none}.brand:focus-visible{outline:2px solid #9dbb74;outline-offset:3px;border-radius:2px}.brand[data-pointer-focus="true"]:focus{outline:none}
+      .waiting .loading-stage{font-size:19px;font-weight:650;letter-spacing:-.35px;line-height:1.3;margin:0 0 9px}
+      .brand:focus{outline:none}.brand:focus-visible{outline:2px solid #a4ce77;outline-offset:3px;border-radius:2px}.brand[data-pointer-focus="true"]:focus{outline:none}
       :host([data-restored="true"]) .panel{animation:none}
     `;
     const panel = document.createElement('section'); panel.className = 'panel'; panel.setAttribute('aria-label', 'MeowlChess game review');
     const header = document.createElement('div'); header.className = 'head';
-    const icon = document.createElement('img'); icon.className = 'brand-icon'; icon.src = chrome.runtime.getURL('icons/icon48.png'); icon.alt = ''; icon.setAttribute('aria-hidden', 'true'); icon.draggable = false; icon.width = icon.height = 24;
+    const icon = document.createElement('img'); icon.className = 'brand-icon'; icon.src = chrome.runtime.getURL('icons/icon48.png'); icon.alt = ''; icon.setAttribute('aria-hidden', 'true'); icon.draggable = false; icon.width = icon.height = 28;
     const brand = document.createElement('span'); brand.className = 'brand'; brand.textContent = 'Meowl';
     const chess = document.createElement('span'); chess.textContent = 'Chess'; brand.append(chess);
-    const settings = button('Page review settings', 'Settings', () => { void send('meowl:site-open-settings').catch(() => {}); }); settings.className = 'settings';
-    const collapse = button('Collapse review', '⌃', () => {
+    const settings = button('Page review settings', '', () => { void send('meowl:site-open-settings').catch(() => {}); }); settings.className = 'settings'; settings.append(controlIcon('settings'));
+    const collapse = button('Collapse review', '', () => {
       collapsed(!body.hidden); void savePanelState(body.hidden ? 'collapsed' : 'open');
-    }); collapse.setAttribute('aria-expanded', 'true');
-    header.append(icon, brand, settings, collapse, button('Close review', '×', dismiss));
+    }); collapse.setAttribute('aria-expanded', 'true'); collapse.append(controlIcon('collapse'));
+    const close = button('Close review', '', dismiss); close.append(controlIcon('close'));
+    header.append(icon, brand, settings, collapse, close);
     body = document.createElement('div'); body.className = 'body';
     const resizeHandles = ['se', 'n', 's', 'e', 'w', 'ne', 'nw', 'sw'].map(direction => {
       const grip = document.createElement('span'); grip.className = 'resize-handle'; grip.dataset.noDrag = ''; grip.dataset.resizeDirection = direction;
@@ -213,7 +271,14 @@
       message = document.createElement('p'); message.setAttribute('role', 'status');
       bar = document.createElement('progress'); bar.setAttribute('aria-label', 'Finding game');
       const detail = document.createElement('small'); detail.textContent = 'The summary appears here when the local review finishes.';
-      box.append(stageLabel, message, bar, detail); body.replaceChildren(box);
+      const steps = document.createElement('ol'); steps.className = 'loading-steps'; steps.setAttribute('aria-label', 'Review stages');
+      for (const [index, name] of ['Find game', 'Analyze', 'Save'].entries()) {
+        const step = document.createElement('li'), number = document.createElement('span'), label = document.createElement('span');
+        number.className = 'step-number'; number.textContent = String(index + 1); number.setAttribute('aria-hidden', 'true'); label.textContent = name;
+        if (!index) step.setAttribute('aria-current', 'step');
+        step.append(number, label); steps.append(step);
+      }
+      box.append(steps, stageLabel, message, bar, detail); body.replaceChildren(box);
     }
     stageLabel.textContent = error ? 'Game unavailable' : 'Finding game';
     message.textContent = text; bar.hidden = error;

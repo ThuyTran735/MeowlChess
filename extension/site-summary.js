@@ -29,6 +29,9 @@ window.addEventListener('unload', () => panelDrag.destroy());
 function reportSize() {
   cancelAnimationFrame(frame);
   frame = requestAnimationFrame(() => {
+    // Keep keyboard-focused content above the sticky actions at every panel size.
+    const footerHeight = Math.ceil(document.querySelector('footer').getBoundingClientRect().height);
+    document.documentElement.style.setProperty('--footer-clearance', `${footerHeight + 12}px`);
     const height = Math.max(180, Math.min(680, Math.ceil(document.querySelector('main').getBoundingClientRect().height)));
     if (Math.abs(height - lastHeight) < 2) return;
     lastHeight = height;
@@ -37,6 +40,7 @@ function reportSize() {
 }
 const observer = new ResizeObserver(reportSize);
 observer.observe(document.querySelector('main'));
+observer.observe(document.querySelector('footer'));
 
 function status(message = '', error = false) {
   $('summary-status').textContent = message;
@@ -194,6 +198,33 @@ function renderSummary(result, analysis, reused = false) {
   $('summary-open-review').disabled = !savedId;
   $('summary-close').hidden = false;
   reportSize();
+}
+function selectSummaryTab(id, focus = false) {
+  const tabs = [...document.querySelectorAll('.summary-tabs [role="tab"]')];
+  const selected = tabs.find(tab => tab.id === id);
+  if (!selected) return;
+  for (const tab of tabs) {
+    const active = tab === selected;
+    tab.setAttribute('aria-selected', String(active));
+    tab.tabIndex = active ? 0 : -1;
+    $(tab.getAttribute('aria-controls')).hidden = !active;
+  }
+  if (focus) selected.focus({ preventScroll: true });
+  reportSize();
+}
+for (const tab of document.querySelectorAll('.summary-tabs [role="tab"]')) {
+  tab.addEventListener('click', () => selectSummaryTab(tab.id));
+  tab.addEventListener('keydown', event => {
+    const tabs = [...document.querySelectorAll('.summary-tabs [role="tab"]')];
+    let next;
+    if (event.key === 'ArrowRight') next = (tabs.indexOf(tab) + 1) % tabs.length;
+    else if (event.key === 'ArrowLeft') next = (tabs.indexOf(tab) - 1 + tabs.length) % tabs.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    selectSummaryTab(tabs[next].id, true);
+  });
 }
 function onProgress({ completed, total, phase, phaseCompleted, phaseTotal }) {
   if (stopped || disposed) return;
