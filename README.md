@@ -13,9 +13,9 @@
   </p>
 </div>
 
-**Version 1.6.3** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.6.3) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
+**Version 1.6.4** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.6.4) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
 
-> New in 1.6.3: piece symbols in move notation and more reliable username memory across the review page and panel settings.
+> New in 1.6.4: finished Chess.com games trigger a fresh archive check, with faster retries while the result is being published.
 
 MeowlChess runs Stockfish or Lozza on your device. No subscription, analysis-service account, or chess-site login is required. Once a game is loaded, its analysis works offline.
 
@@ -127,7 +127,7 @@ Bot reviews are saved as PGN imports. Their result comes from the export and can
 
 On Chess.com's multiplayer play screen, MeowlChess watches for a finished-game notice and a new archive entry. On other supported pages, it can show the latest completed game. A visible result notice only opens the waiting panel: a matching completed archive game is still required before analysis starts. The panel contains no board, engine lines, or move suggestions.
 
-Public archive delays mean a review may not start at the last move. While the page is visible, completed-game checks are cached for **60 seconds on Chess.com** and **30 seconds on Lichess**. Cached games and temporary review handles use browser session storage, capped at **700 KB** and cleared when the browser restarts. This lets an open summary survive an extension background restart.
+Public archive delays mean a review may not start at the last move. When Chess.com shows a finished-game notice, MeowlChess refreshes that lookup immediately and retries every **15 seconds for up to two minutes** while waiting for the completed game. Normal checks use a **60-second interval on Chess.com** and **30 seconds on Lichess**; connection errors keep the normal retry delay. Cached games and temporary review handles use browser session storage, capped at **700 KB** and cleared when the browser restarts. This lets an open summary survive an extension background restart.
 
 The page helper reads the URL, visible game-end notices, and completed bot-game PGN exports. It does not read live board positions or make moves. Public API requests omit login cookies and private Lichess player keys. Disabling a site removes its panel and prevents future helper injection.
 

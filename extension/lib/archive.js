@@ -37,11 +37,11 @@ function validateArchiveUrl(value, username) {
   } catch { return false; }
 }
 
-async function fetchJson(url, { timeoutMs = 15000, timeoutMessage } = {}) {
+async function fetchJson(url, { timeoutMs = 15000, timeoutMessage, revalidate = false } = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, { credentials: 'omit', signal: controller.signal, redirect: 'error' });
+    const response = await fetch(url, { credentials: 'omit', signal: controller.signal, redirect: 'error', ...(revalidate ? { cache: 'no-cache' } : {}) });
     if (response.status === 404) throw new Error('Chess.com could not find that player or game archive. Check the username and try again.');
     if (response.status === 429) throw new Error('Chess.com is receiving too many requests. Wait a minute before trying again.');
     if (!response.ok) throw new Error(`Chess.com could not load the archive (HTTP ${response.status}). Please try again later.`);
@@ -55,19 +55,19 @@ async function fetchJson(url, { timeoutMs = 15000, timeoutMessage } = {}) {
 }
 
 /** Read completed archives only; no live-game endpoints or Chess.com page access. */
-export async function fetchRecentGames(value) {
+export async function fetchRecentGames(value, { revalidate = false } = {}) {
   if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{2,50}$/.test(value.trim())) {
     throw new Error('Enter a Chess.com username with 2–50 letters, numbers, underscores, or hyphens.');
   }
   const username = value.trim().toLowerCase();
-  const listing = await fetchJson(`${API_ORIGIN}/pub/player/${encodeURIComponent(username)}/games/archives`);
+  const listing = await fetchJson(`${API_ORIGIN}/pub/player/${encodeURIComponent(username)}/games/archives`, { revalidate });
   if (!Array.isArray(listing?.archives) || listing.archives.some(url => !validateArchiveUrl(url, username))) {
     throw new Error('Chess.com returned an invalid archive list. Please try again later.');
   }
   const archives = [...new Set(listing.archives)].sort().reverse().slice(0, 3);
   const games = [];
   for (const archive of archives) {
-    const data = await fetchJson(archive);
+    const data = await fetchJson(archive, { revalidate });
     if (!Array.isArray(data?.games)) throw new Error('Chess.com returned an invalid game archive. Please try again later.');
     games.push(...data.games.filter(isCompletedGame));
     if (games.length >= 20) break;
@@ -77,7 +77,7 @@ export async function fetchRecentGames(value) {
 }
 
 /** Find one game in the complete public archive, without the recent-picker limits. */
-export async function fetchGameFromArchives(value, canonicalGameUrl) {
+export async function fetchGameFromArchives(value, canonicalGameUrl, { revalidate = false } = {}) {
   if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{2,50}$/.test(value.trim())) {
     throw new Error('Enter a Chess.com username with 2–50 letters, numbers, underscores, or hyphens.');
   }
@@ -90,7 +90,7 @@ export async function fetchGameFromArchives(value, canonicalGameUrl) {
   const load = async url => {
     const remaining = deadline - performance.now();
     if (remaining <= 0) throw new Error(timedOut);
-    const data = await fetchJson(url, { timeoutMs: Math.min(15000, remaining), ...(remaining <= 15000 ? { timeoutMessage: timedOut } : {}) });
+    const data = await fetchJson(url, { revalidate, timeoutMs: Math.min(15000, remaining), ...(remaining <= 15000 ? { timeoutMessage: timedOut } : {}) });
     if (performance.now() >= deadline) throw new Error(timedOut);
     return data;
   };

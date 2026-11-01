@@ -99,6 +99,7 @@ try {
   await worker.evaluate(() => {
     globalThis.__siteFixtures = { chess: [], lichess: [] };
     globalThis.__siteFetches = [];
+    globalThis.__siteOriginalDateNow = Date.now.bind(Date);
     globalThis.__siteSenders = [];
     chrome.runtime.onMessage.addListener((message, sender) => { if (message?.type === 'meowl:site-check') globalThis.__siteSenders.push({ url: sender.url, tabUrl: sender.tab?.url, frameId: sender.frameId }); });
     globalThis.fetch = async input => {
@@ -230,6 +231,7 @@ try {
     assert(await frame.locator('#summary-counts').innerText());
   };
 
+  if (process.env.SITE_FINISH_ONLY !== '1') {
   stage = 'disabled by default and permission denial';
   assert.equal(await settings.locator('#site-chesscom-enabled').isChecked(), false);
   assert.equal(await settings.locator('#site-lichess-enabled').isChecked(), false);
@@ -522,6 +524,97 @@ try {
   assert.equal((await records()).length, 4);
   await enabled('chesscom', false);
   console.log('Site review: next-round detection and progress-first play-page flow passed.');
+  }
+
+  // Prior cases exercise the normal one-minute poll with a test clock. These
+  // finish regressions must use real time and one active fixture tab instead.
+  for (const fixturePage of context.pages()) if (fixturePage !== settings) await fixturePage.close();
+  await worker.evaluate(() => { Date.now = globalThis.__siteOriginalDateNow; });
+  await enabled('chesscom', false);
+  await settings.bringToFront();
+  await mkdir(join(root, 'test-results'), { recursive: true });
+  await context.addInitScript(() => document.addEventListener('DOMContentLoaded', () => document.querySelector('#round-result')?.setAttribute('hidden', '')));
+  await settings.locator('#site-chesscom-username').fill('sitecat');
+  await settings.evaluate(() => { chrome.permissions.request = async () => true; });
+  await settings.locator('#engine').selectOption('lozza'); await settings.locator('#depth').selectOption('50');
+  const results = [];
+  const observe = async (page, expected, name) => {
+    const begin = Date.now(); let frame;
+    while (Date.now() - begin < 12000) {
+      frame = page.frames().find(item => !item.isDetached() && /\/site-summary\.html/.test(item.url()));
+      if (frame) break;
+      await page.waitForTimeout(50);
+    }
+    assert(frame, name + ': a newly finished game must refresh the warm archive cache without navigation or a one-minute wait.');
+    if (frame) {
+      await complete(frame);
+      assert.equal(await frame.locator('#summary-players').innerText(), 'sitecat vs ' + expected.black.username, 'A finish must never show the older unrelated match.');
+      assert.equal((await checkCurrentPage(page)).gameUrl, expected.url);
+    }
+    const result = { case: name, started: Boolean(frame), elapsedMs: Date.now() - begin, state: await page.locator(hostSelector).getAttribute('data-state').catch(() => null), fetches: (await worker.evaluate(() => globalThis.__siteFetches)).length };
+    results.push(result); console.log('Site finish regression:', JSON.stringify(result));
+    await page.close(); await enabled('chesscom', false);
+  };
+  const old = chessGame('https://www.chess.com/game/live/12345000', 'Older unrelated', 'sitecat', 'olderowl');
+  const current = (id, opponent) => ({ ...chessGame('https://www.chess.com/game/live/' + id, 'Fresh finish', 'sitecat', opponent), end_time: Math.floor(Date.now() / 1000) - 1 });
+  const cached = key => poll(async () => worker.evaluate(async key => (await chrome.storage.session.get('siteReviewSession')).siteReviewSession?.cache?.some(entry => entry.key === key), key), 'warm archive cache');
+
+  stage = 'warm exact-game miss then finish notice';
+  const exact = current('12345001', 'exactowl');
+  await fixtures([old]); await enabled('chesscom', true);
+  const exactPage = await context.newPage(); watchErrors(exactPage); await exactPage.goto(exact.url.replace('/game/live/', '/game/')); await exactPage.bringToFront();
+  await cached('chesscom:sitecat:' + encodeURIComponent(exact.url)); await noFrame(exactPage);
+  await fixtures([exact, old]);
+  await exactPage.evaluate(() => { document.querySelector('#round-result').hidden = false; });
+  await observe(exactPage, exact, 'exact cached miss');
+
+  stage = 'warm play-page previous match then finish notice';
+  const latest = current('12345002', 'latestowl');
+  await fixtures([old]); await enabled('chesscom', true);
+  const lobby = await context.newPage(); watchErrors(lobby); await lobby.goto('https://www.chess.com/play/online'); await lobby.bringToFront();
+  await cached('chesscom:sitecat'); await noFrame(lobby);
+  await fixtures([latest, old]); await lobby.evaluate(() => { document.querySelector('#round-result').hidden = false; });
+  await observe(lobby, latest, 'latest cached older game');
+
+  stage = 'finish notice while initial exact archive request is pending';
+  const pending = current('12345003', 'pendingowl');
+  await fixtures([old]);
+  await worker.evaluate(() => {
+    const native = fetch;
+    globalThis.__heldMonth = false;
+    globalThis.fetch = async (...args) => {
+      const response = await native(...args);
+      if (!globalThis.__heldMonth && /\/games\/\d{4}\/\d{2}$/.test(String(args[0]))) {
+        globalThis.__heldMonth = true;
+        const snapshot = await response.json();
+        await new Promise(resolve => { globalThis.__releaseMonth = resolve; });
+        return { ...response, json: async () => snapshot };
+      }
+      return response;
+    };
+  });
+  await enabled('chesscom', true);
+  const pendingPage = await context.newPage(); watchErrors(pendingPage); await pendingPage.goto(pending.url.replace('/game/live/', '/game/')); await pendingPage.bringToFront();
+  await poll(() => worker.evaluate(() => globalThis.__heldMonth), 'held initial archive');
+  await fixtures([pending, old]); await pendingPage.evaluate(() => { document.querySelector('#round-result').hidden = false; });
+  await pendingPage.waitForTimeout(450);
+  await worker.evaluate(() => globalThis.__releaseMonth());
+  await observe(pendingPage, pending, 'finish while exact request pending');
+
+  stage = 'finish notice while initial play-page lookup will return an older match';
+  const pendingLatest = current('12345004', 'pendinglatestowl');
+  await fixtures([old]);
+  await worker.evaluate(() => { globalThis.__heldMonth = false; });
+  await enabled('chesscom', true);
+  const pendingLobby = await context.newPage(); watchErrors(pendingLobby); await pendingLobby.goto('https://www.chess.com/play/online'); await pendingLobby.bringToFront();
+  await poll(() => worker.evaluate(() => globalThis.__heldMonth), 'held initial latest-game archive');
+  await fixtures([pendingLatest, old]); await pendingLobby.evaluate(() => { document.querySelector('#round-result').hidden = false; });
+  await pendingLobby.waitForTimeout(450);
+  await worker.evaluate(() => globalThis.__releaseMonth());
+  await observe(pendingLobby, pendingLatest, 'finish while latest request pending');
+  assert.deepEqual(errors, []); assert.deepEqual(unexpectedRequests, []);
+  assert.equal(results.length, 4);
+  console.log('Site review: warm exact/latest caches and in-flight finish refreshes select the correct newly finished games.');
   assert.deepEqual(unexpectedRequests, [], 'No live network requests are allowed.');
   assert.deepEqual(errors, []);
   console.log('All site-review browser assertions passed. Native permission grant/revoke prompts require manual verification.');

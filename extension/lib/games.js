@@ -12,6 +12,9 @@ export async function fetchGames(source, value, options = {}) {
     }
     return fetchLichessGames(gameUrl === undefined ? value : gameUrl);
   }
-  if (source === 'chesscom') return (await (gameUrl === undefined ? fetchRecentGames(value) : fetchGameFromArchives(value, gameUrl))).map(game => ({ ...game, source: 'chesscom' }));
+  if (source === 'chesscom') {
+    const request = { revalidate: options?.revalidate === true };
+    return (await (gameUrl === undefined ? fetchRecentGames(value, request) : fetchGameFromArchives(value, gameUrl, request))).map(game => ({ ...game, source: 'chesscom' }));
+  }
   throw new Error('Choose Chess.com or Lichess to fetch completed games.');
 }

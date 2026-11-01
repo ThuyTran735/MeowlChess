@@ -13,6 +13,7 @@ export const SITE_PROVIDERS = Object.freeze({
 
 const LICHESS_ROUTES = new Set(['analysis', 'training', 'practice', 'features', 'insights', 'streamer', 'password', 'bookmark', 'timeline', 'settings', 'checkout', 'registration']);
 const JOB_LIFETIME = 10 * 60 * 1000;
+const COMPLETION_RETRY_MS = 15000;
 const MAX_JOBS = 100;
 const SESSION_BYTES = 700000;
 const TOKEN = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
@@ -228,7 +229,8 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
     };
     for (const job of [...jobs.values()].reverse().sort((a, b) => b.expiresAt - a.expiresAt).slice(0, MAX_JOBS)) add(snapshot.jobs, job);
     for (const [key, entry] of cache) {
-      if (!entry.pending && entry.expiresAt > now() && entry.value) add(snapshot.cache, { key, expiresAt: entry.expiresAt, value: entry.value });
+      if (!entry.pending && entry.expiresAt > now() && entry.value) add(snapshot.cache, { key, expiresAt: entry.expiresAt, value: entry.value,
+        ...(Number.isFinite(entry.completionRefreshAt) ? { completionRefreshAt: entry.completionRefreshAt } : {}) });
     }
     // Clone now so later mutations cannot change a queued write's snapshot.
     const value = structuredClone(snapshot);
@@ -305,7 +307,8 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
         let value;
         if (Array.isArray(item.value?.games)) value = { games: completedSiteGames(item.value.games, source, username, now()).filter(game => !target || game.url === target) };
         else if (typeof item.value?.error === 'string') value = { error: item.value.error.slice(0, 240) };
-        if (value) cache.set(item.key, { expiresAt: item.expiresAt, value });
+        const completionRefreshAt = source === 'chesscom' && Number.isFinite(item.completionRefreshAt) && item.completionRefreshAt <= now() && item.completionRefreshAt >= now() - SITE_PROVIDERS[source].retryAfterMs ? item.completionRefreshAt : undefined;
+        if (value) cache.set(item.key, { expiresAt: item.expiresAt, value, completionRefreshAt });
       }
     } catch { /* Session storage is optional; a fresh completed-game check can recover. */ }
     finally { restored = true; }
@@ -316,23 +319,36 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
     return restorePromise;
   }
 
-  async function archive(source, username, target = null) {
+  async function archive(source, username, target = null, refreshCompleted = false) {
     // A recent-game list must never satisfy an exact game-page lookup: that game
     // can be outside the picker limit or in an older monthly archive.
     const key = `${source}:${username}${target ? ':' + encodeURIComponent(target) : ''}`;
     let entry = cache.get(key);
-    if (entry && (entry.pending || entry.expiresAt > now())) return entry.pending || entry.value;
-    entry = { expiresAt: 0 };
+    if (entry?.pending) {
+      if (refreshCompleted && !entry.refreshingCompleted) {
+        // The game can finish while an earlier archive response is in flight.
+        // Wait for that request, then share one fresh completed-game lookup.
+        const startedGeneration = generation, startedSourceEpoch = sourceEpochs.get(source) || 0;
+        const value = await entry.pending;
+        if (generation !== startedGeneration || (sourceEpochs.get(source) || 0) !== startedSourceEpoch) return value;
+        return archive(source, username, target, true);
+      }
+      return entry.pending;
+    }
+    if (entry && entry.expiresAt > now() && (!refreshCompleted || entry.value?.error ||
+      (Number.isFinite(entry.completionRefreshAt) && now() - entry.completionRefreshAt < COMPLETION_RETRY_MS))) return entry.value;
+    entry = { expiresAt: 0, refreshingCompleted: refreshCompleted, ...(refreshCompleted ? { completionRefreshAt: now() } : {}) };
     entry.pending = (async () => {
       try {
-        const games = completedSiteGames(await fetchGames(source, username, target ? { gameUrl: target } : undefined), source, username, now());
+        const options = target || refreshCompleted ? { ...(target ? { gameUrl: target } : {}), ...(refreshCompleted ? { revalidate: true } : {}) } : undefined;
+        const games = completedSiteGames(await fetchGames(source, username, options), source, username, now());
         return { games: games.filter(game => !target || game.url === target) };
       } catch (error) {
         return { error: error instanceof Error ? error.message.slice(0, 240) : 'Could not load completed games. Try again shortly.' };
       }
     })().then(value => {
       entry.value = value;
-      entry.expiresAt = now() + SITE_PROVIDERS[source].retryAfterMs;
+      entry.expiresAt = now() + (refreshCompleted && !value.error ? COMPLETION_RETRY_MS : SITE_PROVIDERS[source].retryAfterMs);
       entry.pending = null;
       return value;
     });
@@ -382,9 +398,9 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
       (!job.documentId || documentId(sender) === job.documentId));
   }
 
-  function jobReady(job, resumed = false) {
+  function jobReady(job, resumed = false, retryAfterMs = SITE_PROVIDERS[job.source].retryAfterMs) {
     return { status: 'ready', token: job.token, gameUrl: job.kind === 'bot' ? job.gameKey : job.game.url, source: job.source,
-      endTime: job.game.end_time, retryAfterMs: SITE_PROVIDERS[job.source].retryAfterMs,
+      endTime: job.game.end_time, retryAfterMs,
       panelState: job.panelState, panelGeneration: job.panelGeneration, resumed,
       ...(job.kind === 'bot' ? { kind: 'bot', gameKey: job.gameKey } : {}) };
   }
@@ -406,7 +422,8 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
     if (!config) return disabled();
     if (startedGeneration !== generation || (tabEpochs.get(tabId) || 0) !== epoch || (sourceEpochs.get(source) || 0) !== sourceEpoch) return disabled();
     prune();
-    const retryAfterMs = SITE_PROVIDERS[source].retryAfterMs;
+    const refreshCompleted = source === 'chesscom' && message.refreshCompleted === true;
+    const retryAfterMs = refreshCompleted ? COMPLETION_RETRY_MS : SITE_PROVIDERS[source].retryAfterMs;
     const retained = tabJob(tabId);
     if (retained && retained.configKey === config.key && canCarryJob(retained, sender.tab.url)) {
       if (message.fresh === true && !ownsPanel(context, sender, message, retained)) return expired();
@@ -430,10 +447,10 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
       message: 'This game link could not be recognized. Open its full game link or import the finished PGN.',
     };
     const currentGame = gameUrlForPage(context.pageKey);
-    const data = await archive(source, config.username, currentGame);
+    const data = await archive(source, config.username, currentGame, refreshCompleted);
     const current = await configuration(source);
     if (!current || current.key !== config.key || startedGeneration !== generation || (tabEpochs.get(tabId) || 0) !== epoch || (sourceEpochs.get(source) || 0) !== sourceEpoch) return disabled();
-    if (data.error) return { status: 'error', source, message: data.error, retryAfterMs };
+    if (data.error) return { status: 'error', source, message: data.error, retryAfterMs: SITE_PROVIDERS[source].retryAfterMs };
     const game = currentGame ? data.games.find(item => item.url === currentGame) : data.games[0];
     if (!game) return {
       status: 'waiting', source, retryAfterMs,
@@ -448,7 +465,7 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
     }
     if (!claimDocument(job, sender)) return expired();
     job.expiresAt = now() + JOB_LIFETIME;
-    return jobReady(job);
+    return jobReady(job, false, retryAfterMs);
   }
 
   async function importBot(sender, pgn) {

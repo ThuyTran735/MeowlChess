@@ -183,3 +183,18 @@ test('game routing sends canonical Lichess targets to direct export and rejects 
   await assert.rejects(fetchGames('chesscom','alice',{gameUrl:'https://lichess.org/Abcdef12'}),/Chess.com game link/);
   assert.equal(calls.length,1);
 });
+
+test('completed-game refresh revalidates every public Chess.com request without changing URLs or credentials', async t => {
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    calls.push({ url, cache: options.cache });
+    assert.equal(options.credentials, 'omit'); assert.equal(options.redirect, 'error');
+    assert.equal(new URL(url).search, '');
+    return { ok: true, status: 200, json: async () => url.endsWith('/archives') ? { archives: [archive('10')] } : { games: [complete()] } };
+  });
+  await fetchGames('chesscom', 'alice', { gameUrl: complete().url, revalidate: true });
+  await fetchGames('chesscom', 'alice', { revalidate: true });
+  await fetchGames('chesscom', 'alice');
+  assert.deepEqual(calls.map(call => call.cache), ['no-cache', 'no-cache', 'no-cache', 'no-cache', undefined, undefined]);
+  assert.deepEqual(calls.map(call => call.url), Array(3).fill(['https://api.chess.com/pub/player/alice/games/archives', archive('10')]).flat());
+});

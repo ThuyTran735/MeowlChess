@@ -711,6 +711,120 @@ test('closing during a pending save prevents the old frame from committing after
   release(); assert.equal((await pending).status, 'error'); assert.equal(writes, 0);
 });
 
+test('a finished-game refresh replaces a warm exact miss immediately without accepting another game', async () => {
+  let published = false;
+  const calls = [];
+  const { check } = setup({ fetchGames: async (source, username, options) => {
+    calls.push(options); return published ? [game('999'), game()] : [game('999')];
+  } });
+  const sender = content('https://www.chess.com/game/123');
+  assert.equal((await check(sender)).status, 'waiting');
+  published = true;
+  assert.equal((await check(sender)).status, 'waiting');
+  for (const actor of [frame(game().url), { ...sender, id: 'other' }, { ...sender, frameId: 1 }]) {
+    assert.equal((await check(actor, { refreshCompleted: true })).status, 'disabled');
+  }
+  assert.equal((await check(sender, { refreshCompleted: 'true' })).status, 'waiting');
+  assert.equal(calls.length, 1);
+  const ready = await check(sender, { refreshCompleted: true });
+  assert.equal(ready.status, 'ready'); assert.equal(ready.gameUrl, game().url); assert.equal(ready.retryAfterMs, 15000);
+  assert.deepEqual(calls, [{ gameUrl: game().url }, { gameUrl: game().url, revalidate: true }]);
+});
+
+test('a completion refresh replaces the lobby cached older latest game after its baseline was released', async () => {
+  let entries = [game()]; const calls = [];
+  const { broker, check } = setup({ fetchGames: async (source, username, options) => { calls.push(options); return entries; } });
+  const lobby = content('https://www.chess.com/play/online');
+  const baseline = await check(lobby);
+  await broker.handle({ type: 'meowl:site-release', token: baseline.token, panelGeneration: baseline.panelGeneration }, lobby);
+  entries = [game('456', { end_time: 1700000001 })];
+  const latest = await check(lobby, { refreshCompleted: true });
+  assert.equal(latest.gameUrl, game('456').url); assert.equal(latest.retryAfterMs, 15000);
+  assert.deepEqual(calls, [undefined, { revalidate: true }]);
+});
+
+test('completion refreshes share a fifteen-second cooldown while the exact completed game is still unpublished', async () => {
+  let entries = []; const calls = [];
+  const { check, advance } = setup({ fetchGames: async (source, username, options) => { calls.push(options); return entries; } });
+  const sender = content(game().url), refresh = { refreshCompleted: true };
+  assert.equal((await check(sender)).status, 'waiting');
+  assert.equal((await check(sender, refresh)).retryAfterMs, 15000);
+  assert.equal((await check(content(game().url, 6), refresh)).status, 'waiting');
+  advance(14999); assert.equal((await check(sender, refresh)).status, 'waiting'); assert.equal(calls.length, 2);
+  advance(1); entries = [game('999'), game('123', { pgn: completedPgn.replace('1. e4 e5 1-0', '1. e4 e5 *') })];
+  assert.equal((await check(sender, refresh)).status, 'waiting'); assert.equal(calls.length, 3);
+  advance(15000); entries = [game()];
+  assert.equal((await check(sender, refresh)).gameUrl, game().url); assert.equal(calls.length, 4);
+});
+
+test('finishing during an ordinary pending lookup queues exactly one shared completed-game refresh', async () => {
+  const requests = [];
+  const { check } = setup({ fetchGames: (source, username, options) => new Promise(resolve => requests.push({ options, resolve })) });
+  const initial = check(content(game().url));
+  while (requests.length < 1) await new Promise(resolve => setImmediate(resolve));
+  const first = check(content(game().url), { refreshCompleted: true });
+  const second = check(content(game().url, 6), { refreshCompleted: true });
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(requests.length, 1);
+  requests[0].resolve([]);
+  while (requests.length < 2) await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(requests[1].options, { gameUrl: game().url, revalidate: true });
+  const third = check(content(game().url, 7), { refreshCompleted: true });
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(requests.length, 2);
+  requests[1].resolve([game()]);
+  assert.equal((await initial).status, 'waiting');
+  for (const result of await Promise.all([first, second, third])) assert.equal(result.gameUrl, game().url);
+  assert.equal(requests.length, 2);
+});
+
+test('completion-refresh cooldown survives service worker restoration', async () => {
+  let snapshot, clock = Date.now(), calls = 0;
+  const options = { now: () => clock, readSession: async () => structuredClone(snapshot), writeSession: async value => { snapshot = structuredClone(value); }, fetchGames: async () => { calls++; return []; } };
+  const first = setup(options), sender = content(game().url), refresh = { refreshCompleted: true };
+  assert.equal((await first.check(sender, refresh)).status, 'waiting'); assert.equal(calls, 1);
+  assert.equal(snapshot.cache[0].completionRefreshAt, clock);
+  clock += 1000;
+  const second = setup(options);
+  assert.equal((await second.check(sender, refresh)).status, 'waiting'); assert.equal(calls, 1);
+  clock += 14000;
+  assert.equal((await second.check(sender, refresh)).status, 'waiting'); assert.equal(calls, 2);
+});
+
+test('revoking a source while a completion refresh waits prevents its follow-up network request', async () => {
+  for (const revokeAll of [false, true]) {
+    let release, calls = 0;
+    const { broker, check } = setup({ fetchGames: () => { calls++; return new Promise(resolve => { release = resolve; }); } });
+    const initial = check(content(game().url));
+    while (!release) await new Promise(resolve => setImmediate(resolve));
+    const refresh = check(content(game().url), { refreshCompleted: true });
+    await new Promise(resolve => setImmediate(resolve));
+    if (revokeAll) broker.invalidate(); else broker.invalidateSource('chesscom');
+    release([]);
+    assert.deepEqual((await Promise.all([initial, refresh])).map(reply => reply.status), ['disabled', 'disabled']);
+    assert.equal(calls, 1, 'Revocation cannot start a new request after the pending one finishes.');
+  }
+});
+
+test('completion refresh never bypasses the existing sixty-second archive error backoff', async () => {
+  let calls = 0;
+  const { check, advance } = setup({ fetchGames: async () => { calls++; throw new Error('Chess.com is receiving too many requests. Wait a minute.'); } });
+  const sender = content(game().url), refresh = { refreshCompleted: true };
+  assert.equal((await check(sender)).retryAfterMs, 60000);
+  assert.equal((await check(sender, refresh)).retryAfterMs, 60000); assert.equal(calls, 1);
+  advance(59999); assert.equal((await check(sender, refresh)).status, 'error'); assert.equal(calls, 1);
+  advance(1); assert.equal((await check(sender, refresh)).retryAfterMs, 60000); assert.equal(calls, 2);
+  advance(15000); assert.equal((await check(sender, refresh)).status, 'error'); assert.equal(calls, 2);
+});
+
+test('completion-refresh flag leaves Lichess cache policy and direct-game routing unchanged', async () => {
+  const calls = [];
+  const { check, advance } = setup({ fetchGames: async (source, username, options) => { calls.push(options); return []; } });
+  const sender = content('https://lichess.org/Abcdef12'), refresh = { refreshCompleted: true };
+  assert.equal((await check(sender, refresh)).retryAfterMs, 30000);
+  advance(15000); assert.equal((await check(sender, refresh)).status, 'waiting'); assert.equal(calls.length, 1);
+  advance(15000); await check(sender, refresh); assert.equal(calls.length, 2);
+  assert.deepEqual(calls, [{ gameUrl: 'https://lichess.org/Abcdef12' }, { gameUrl: 'https://lichess.org/Abcdef12' }]);
+});
+
 test('background registers only opted-in permitted sites and disables a site after permission loss', async t => {
   const original = globalThis.chrome;
   const listeners = {}, scripts = new Map(), injected = [], opened = [];

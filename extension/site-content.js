@@ -11,6 +11,7 @@
   let selection = null, panelState = 'open', stateRevision = 0, stateWrite = Promise.resolve(), freshSelection = null;
   let dismissed = null, baseline = null, completedUrl = null, baselineKnown = false, hint = false, hintSince = 0, nextCheck = 0;
   let interval = source === 'chesscom' ? 60000 : 30000;
+  let completionRefresh = null;
   const bot = globalThis.__meowlChessBot;
   let panelMover, botForm, botSubmitting = false, botExporting = false, botExportAttempted = false, botAttemptPgn = null, botSavedPgn = null;
   const botPage = () => source === 'chesscom' && bot?.isPage() === true;
@@ -230,7 +231,7 @@
   }
   function acceptReview(reply, revision = stateRevision) {
     if (!tokenPattern.test(reply.token) || typeof reply.gameUrl !== 'string') return;
-    selection = reply;
+    selection = reply; completionRefresh = null;
     if (revision === stateRevision) panelState = ['open', 'collapsed', 'closed'].includes(reply.panelState) ? reply.panelState : 'open';
     else void savePanelState(panelState);
     if (panelState === 'closed') {
@@ -256,11 +257,17 @@
     const generic = source === 'chesscom' ? '[data-cy="game-result"],.game-result,.game-result-component' : '.round__app .status,.game__meta .status';
     return [...document.querySelectorAll(generic)].some(element => visible(element) && /(?:1\s*[-–]\s*0|0\s*[-–]\s*1|½\s*[-–]\s*½|1\/2|checkmate|stalemate|draw|resigned|won|wins|game over)/i.test(element.textContent));
   }
+  function refreshFinishedGame() {
+    // A finished-game notice must not reuse the lookup made while it was live.
+    // Keep publication retries brief and bounded; the broker still validates
+    // completed archive data and enforces its own request cooldown.
+    if (source === 'chesscom' && !botPage() && gamePage()) completionRefresh = { until: Date.now() + 120000 };
+  }
   function inspectPage() {
     if (!enabled || document.hidden) return;
     const current = pageKey();
     if (current !== route) {
-      generation++; route = current; nextCheck = 0;
+      generation++; route = current; nextCheck = 0; completionRefresh = null;
       const target = specificGameUrl();
       if (target && target !== selection?.gameUrl) {
         forgetSelection(); clearPanel(); clearLauncher(); dismissed = null;
@@ -269,11 +276,13 @@
       // A notice already present on the destination is not a newly finished
       // round. First let the broker restore the selected completed review.
       hint = finishedHint(); hintSince = hint ? Date.now() : 0;
+      if (hint) refreshFinishedGame();
       if (!selection) { botExportAttempted = false; botAttemptPgn = botSavedPgn = null; }
       void check();
       return;
     }
     const nextHint = finishedHint();
+    if (hint && !nextHint) completionRefresh = null;
     if (botPage() && hint && !nextHint) {
       // The bot page reuses its URL for a rematch. Forget the previous result
       // when its final notice disappears rather than showing it as the new game.
@@ -287,7 +296,7 @@
         freshSelection = selection; selection = null; panelState = 'open'; stateRevision++;
         generation++; clearPanel(); clearLauncher();
       }
-      hintSince = Date.now(); dismissed = null; waiting(); nextCheck = 0; void check();
+      hintSince = Date.now(); refreshFinishedGame(); dismissed = null; waiting(); nextCheck = 0; void check();
       if (botPage() && body?.hidden) shadow.querySelector('button[aria-label="Expand review"]')?.click();
     }
     hint = nextHint;
@@ -300,7 +309,9 @@
   async function check() {
     if (!enabled || document.hidden || checking || botSubmitting || (dismissed && !selection)) return;
     if (Date.now() < nextCheck) { schedule(); return; }
-    checking = true; const started = generation, revision = stateRevision, fresh = freshSelection;
+    if (completionRefresh && completionRefresh.until <= Date.now()) completionRefresh = null;
+    checking = true; const started = generation, revision = stateRevision, fresh = freshSelection, completion = completionRefresh;
+    const checkedRoute = route, checkedUsername = username;
     // Cached selections normally return immediately. Show retrieval progress
     // only if there is still no review to restore after that brief handshake.
     const reveal = setTimeout(() => {
@@ -310,7 +321,17 @@
       if (host && !frame && !botPage()) waiting();
       await stateWrite;
       if (!enabled || document.hidden || started !== generation) return;
-      const reply = await send('meowl:site-check', fresh ? { fresh: true, token: fresh.token, panelGeneration: fresh.panelGeneration } : {});
+      const reply = await send('meowl:site-check', {
+        ...(fresh ? { fresh: true, token: fresh.token, panelGeneration: fresh.panelGeneration } : {}),
+        ...(completion ? { refreshCompleted: true } : {}),
+      });
+      if (enabled && started !== generation && completionRefresh && completionRefresh !== completion &&
+          checkedRoute === route && checkedUsername === username && liveLobby() && reply?.status === 'ready') {
+        // The initial lobby lookup can create an older-game job after the new
+        // finish notice. Carry its issued handle into the queued fresh check
+        // so that job is replaced, rather than resumed as the new result.
+        freshSelection = reply;
+      }
       if (!enabled || document.hidden || started !== generation) return;
       if (freshSelection === fresh) freshSelection = null;
       interval = Math.max(15000, Math.min(300000, Number(reply?.retryAfterMs) || interval)); nextCheck = Date.now() + interval;
@@ -348,11 +369,17 @@
     } catch {
       nextCheck = Date.now() + interval;
       if (enabled && started === generation && (hint || host)) waiting('Could not connect to MeowlChess. Reload this page to reconnect.', true);
-    } finally { clearTimeout(reveal); checking = false; inspectBot(); schedule(); }
+    } finally {
+      clearTimeout(reveal); checking = false;
+      // If the finish notice arrived during an older lookup, give it its own
+      // fresh check instead of losing it to that lookup's normal poll timer.
+      if (completionRefresh && completionRefresh !== completion) nextCheck = 0;
+      inspectBot(); schedule();
+    }
   }
   function stop(preserve = false) {
     if (!preserve) forgetSelection();
-    enabled = false; generation++; clearTimeout(timer); clearTimeout(debounce); clearInterval(routeTimer); observer?.disconnect(); observer = null; clearPanel(); clearLauncher();
+    completionRefresh = null; enabled = false; generation++; clearTimeout(timer); clearTimeout(debounce); clearInterval(routeTimer); observer?.disconnect(); observer = null; clearPanel(); clearLauncher();
   }
   function configure(raw) {
     const config = raw?.[source], name = typeof config?.username === 'string' ? config.username.trim().toLowerCase() : '';
@@ -360,6 +387,7 @@
     stop(); username = name;
     if (config?.enabled !== true || !new RegExp(`^[a-z0-9_-]{2,${source === 'lichess' ? 30 : 50}}$`).test(name)) return;
     enabled = true; route = pageKey(); dismissed = baseline = completedUrl = null; baselineKnown = false; hint = finishedHint(); hintSince = hint ? Date.now() : 0; nextCheck = 0; botAttemptPgn = botSavedPgn = null; botExportAttempted = false;
+    if (hint) refreshFinishedGame();
     observer = new MutationObserver(() => { clearTimeout(debounce); debounce = setTimeout(inspectPage, 350); });
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });
     routeTimer = setInterval(inspectPage, 1000); void check();
