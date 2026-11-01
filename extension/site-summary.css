@@ -122,3 +122,7 @@ footer:has(.summary-status:empty):not(:has(button:not([hidden]))) { display: non
 .heading-actions #summary-source { max-width: none; }
 .icon-button { display: grid; place-items: center; padding: 6px; width: 30px; height: 30px; border-radius: 6px; color: var(--muted); background: transparent; flex: none; }
 .icon-button:hover { background: #ffffff0a; color: var(--text); }
+
+.progress-eta { margin: -3px 0 12px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+.review-duration { margin: 4px 0 0; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }

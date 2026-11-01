@@ -95,8 +95,10 @@ try {
   await page.locator(`${HOST}[data-state="waiting"]`).waitFor(); await retryReady();
   const position = await page.locator(HOST).boundingBox();
   await worker.evaluate(() => { retryFixture.hold = new Promise(resolve => { retryFixture.release = resolve; }); });
+  const beforeRetry = await worker.evaluate(() => retryFixture.calls);
   await clickRetry();
   await poll(() => shadow('.retry-loading', 'this.disabled && this.textContent === "Checking…"'), 'disabled while retry is in flight');
+  await poll(() => worker.evaluate(before => retryFixture.calls > before, beforeRetry), 'first held retry request started');
   const calls = await worker.evaluate(() => retryFixture.calls);
   await shadow('.retry-loading', '(this.click(), this.click(), true)');
   assert.equal(await worker.evaluate(() => retryFixture.calls), calls, 'Repeated clicks do not duplicate an in-flight retry.');

@@ -38,21 +38,24 @@ export function createIndexedDBReviewStore({ indexedDB = globalThis.indexedDB, d
   const open = () => {
     if (!indexedDB?.open) return Promise.reject(new LibraryError('unavailable', 'This browser cannot save reviews locally. Your current review is still available until you close it.'));
     if (connection) return connection;
-    connection = new Promise((resolve, reject) => {
+    const pending = new Promise((resolve, reject) => {
       let request, blocked = false;
       try { request = indexedDB.open(databaseName, 1); } catch (error) { reject(storageError(error)); return; }
       request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains('reviews')) request.result.createObjectStore('reviews', { keyPath: 'id' }); };
-      request.onerror = () => { connection = null; reject(storageError(request.error)); };
-      request.onblocked = () => { blocked = true; connection = null; reject(new LibraryError('unavailable', 'Close other MeowlChess review tabs, then try saving again.')); };
+      request.onerror = () => reject(storageError(request.error));
+      request.onblocked = () => { blocked = true; reject(new LibraryError('unavailable', 'Close other MeowlChess review tabs, then try saving again.')); };
       request.onsuccess = () => {
         const db = request.result;
         if (blocked) { db.close(); return; }
-        db.onversionchange = () => { db.close(); connection = null; };
-        db.onclose = () => { connection = null; };
+        db.onversionchange = () => { db.close(); if (connection === pending) connection = null; };
+        db.onclose = () => { if (connection === pending) connection = null; };
         resolve(db);
       };
     });
-    return connection;
+    connection = pending;
+    // Clear synchronous open failures too, without clearing a newer connection.
+    void pending.catch(() => { if (connection === pending) connection = null; });
+    return pending;
   };
   const read = async (id, all = false) => {
     const db = await open();
@@ -148,6 +151,7 @@ function normalizeResult(input, parsed, deep = true) {
   const result = jsonCopy(input);
   if (!plain(result) || !Array.isArray(result.positions) || result.positions.length !== parsed.positions.length || !Array.isArray(result.moves) || result.moves.length !== parsed.moves.length
     || JSON.stringify(result.game?.positions) !== JSON.stringify(parsed.positions)) invalid('This saved analysis belongs to a different game.');
+  if (result.analysis?.durationMs !== undefined && !integer(result.analysis.durationMs, 0, Number.MAX_SAFE_INTEGER)) invalid('The saved review duration is invalid.');
   result.positions.forEach((evaluation, ply) => validateEvaluation(evaluation, parsed.positions[ply], deep));
   result.moves = result.moves.map((move, index) => {
     const actual = parsed.moves[index];
@@ -230,7 +234,26 @@ export function createReviewLibrary({ store = createIndexedDBReviewStore(), anal
       const timestamp = now(); if (!number(timestamp, 1, Number.MAX_SAFE_INTEGER)) invalid('The system clock cannot timestamp this review.');
       return call('transact', records => {
         const previous = records.find(record => record.id === id);
-        const old = previous ? normalizeRecord(previous, preserveCurrent) : null;
+        let old = null;
+        if (previous) {
+          try {
+            old = normalizeRecord(previous, preserveCurrent);
+            if (canonicalIdentity(old.result.game) !== canonicalIdentity(parsed)) throw new LibraryError('corrupt', 'This saved review has the wrong game identity.');
+          } catch (error) {
+            // Only an explicit re-review may replace damaged data. Automatic
+            // saves and unknown schemas retain their strict preservation rules.
+            if (preserveCurrent || previous.schemaVersion !== LIBRARY_SCHEMA_VERSION) throw error;
+            old = null;
+            try {
+              const prior = parseCompletedPgn(previous.game?.pgn).parsed;
+              if (previous.id === id && canonicalIdentity(prior) === canonicalIdentity(parsed)) {
+                const createdAt = number(previous.createdAt, 1, Number.MAX_SAFE_INTEGER) ? previous.createdAt : timestamp;
+                old = { createdAt, updatedAt: number(previous.updatedAt, createdAt, Number.MAX_SAFE_INTEGER) ? previous.updatedAt : createdAt, bookmarks: [] };
+                try { old.bookmarks = normalizeBookmarks(previous.bookmarks, parsed.moves.length); } catch { /* Damaged bookmarks cannot be restored safely. */ }
+              }
+            } catch { /* A mismatched or unreadable identity contributes no metadata. */ }
+          }
+        }
         if (preserveCurrent && old) {
           // The incoming identity was hashed before opening this synchronous transaction.
           // Compare the fully validated stored identity without awaiting inside IndexedDB.

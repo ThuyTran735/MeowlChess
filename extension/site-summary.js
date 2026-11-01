@@ -1,5 +1,7 @@
 import { analyzeGame, ANALYSIS_VERSION, MOVE_LABELS } from './lib/review.js';
 import { createEngine, ENGINE_OPTIONS } from './lib/engine.js';
+import { createReviewProgressEstimator } from './lib/review-progress.js';
+import { formatReviewDuration } from './lib/review-duration.js';
 import { reviewIdForGame } from './lib/library.js';
 import { parseCompletedPgn, safeOriginalGameUrl } from './lib/pgn.js';
 import { isCompletedGame } from './lib/archive.js';
@@ -58,10 +60,13 @@ function status(message = '', error = false) {
   $('summary-status').classList.toggle('error', error);
   if (error && parentOrigin) { $('summary-retry').hidden = false; $('summary-open-review').hidden = true; }
 }
+let progressEstimator = null;
+function clearProgressEstimate() { $('summary-eta').hidden = true; $('summary-eta').textContent = ''; progressEstimator = null; }
 function showStage(stage, label, detail = '') {
   assertActive();
   const main = document.querySelector('main');
   main.dataset.stage = stage;
+  if (stage !== 'analyzing') clearProgressEstimate();
   main.setAttribute('aria-busy', 'true');
   const stages = ['finding-game', 'analyzing', 'saving'];
   for (const step of document.querySelectorAll('.review-steps [data-step]')) {
@@ -84,6 +89,7 @@ function showStage(stage, label, detail = '') {
 function finishStage(stage) {
   const main = document.querySelector('main');
   main.dataset.stage = stage;
+  if (stage !== 'analyzing') clearProgressEstimate();
   main.setAttribute('aria-busy', 'false');
   $('summary-progress-area').hidden = true;
   $('summary-retry').hidden = !['error', 'stopped'].includes(stage);
@@ -209,6 +215,9 @@ function renderSummary(result, analysis, reused = false) {
     row.append(name, white, icon, black); $('summary-counts').append(row);
   }
   $('summary-engine').textContent = `${analysis.engineName} · ${analysis.moveTimeMs / 1000}s per position${analysis.smartAnalysis ? ' · key mistakes rechecked' : ''}${reused ? ' · saved review' : ''}`;
+  const duration = formatReviewDuration(result.analysis?.durationMs);
+  $('summary-duration').textContent = duration ? `Reviewed in ${duration}` : '';
+  $('summary-duration').hidden = !duration;
   $('summary-open-review').hidden = false;
   $('summary-open-review').disabled = !savedId;
   $('summary-close').hidden = false;
@@ -241,8 +250,10 @@ for (const tab of document.querySelectorAll('.summary-tabs [role="tab"]')) {
     selectSummaryTab(tabs[next].id, true);
   });
 }
-function onProgress({ completed, total, phase, phaseCompleted, phaseTotal }) {
+function onProgress(progress) {
   if (stopped || disposed) return;
+  const { completed, total, phase, phaseCompleted, phaseTotal } = progress;
+  $('summary-eta').textContent = progressEstimator.update(progress).text;
   percent = Math.max(percent, Math.min(99, total > 0 ? completed / total * 100 : 0));
   $('summary-progress').value = percent;
   $('summary-percent').textContent = `${Math.round(percent)}%`;
@@ -267,6 +278,8 @@ async function runReview(id) {
     savedId = saved.id; renderSummary(saved.result, saved.analysis, true); status('Saved review loaded.'); return;
   }
   showStage('analyzing', 'Starting the local engine…', `${payload.analysis.engineName} · running on this device`);
+  progressEstimator = createReviewProgressEstimator(payload.analysis);
+  $('summary-eta').textContent = progressEstimator.update().text; $('summary-eta').hidden = false;
   const result = await analyzeGame(payload.game.pgn, { engineFactory: () => createEngine(payload.analysis.engineId), moveTimeMs: payload.analysis.moveTimeMs, multiPV: payload.analysis.multiPV, smartAnalysis: payload.analysis.smartAnalysis, signal: controller.signal, onProgress });
   showStage('saving', 'Checking for an existing review…', 'Analysis is complete.');
   await checkEnabled();

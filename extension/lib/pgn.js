@@ -34,7 +34,7 @@ function readHeaderResults(pgn) {
 
 /** Require a final movetext result as well as legal moves; a header alone is not completion. */
 export function parseCompletedPgn(pgn) {
-  if (typeof pgn !== 'string' || !pgn.trim() || pgn.length > 250000) throw new Error('Choose a PGN containing one completed game, up to 250 KB.');
+  if (typeof pgn !== 'string' || !pgn.trim() || pgn.length > 250000 || new TextEncoder().encode(pgn).byteLength > 250000) throw new Error('Choose a PGN containing one completed game, up to 250 KB.');
   const normalized = pgn.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim();
   const { results: headers, movetext } = readHeaderResults(normalized);
   const uncommented = movetext.replace(/\{[^}]*\}/g, '').replace(/;[^\n]*/g, '').trim();

@@ -3,6 +3,11 @@ import { fetchGames, safeOriginalGameUrl } from './lib/games.js';
 import { parseGame, analyzeGame, MOVE_LABELS, ANALYSIS_VERSION } from './lib/review.js';
 import { createEngine, ENGINE_OPTIONS } from './lib/engine.js';
 import { moveArrowPath } from './lib/board.js';
+import { summarizeMaterial } from './lib/material.js';
+import { createReviewProgressEstimator } from './lib/review-progress.js';
+import { formatReviewDuration } from './lib/review-duration.js';
+import { normalizeAccounts, accountUsername, rememberAccount, forgetAccount } from './lib/accounts.js';
+import { createMoveSounds } from './lib/move-sounds.js';
 import { recognizeOpening } from './lib/openings.js';
 import { createStudyLine } from './lib/study.js';
 import { gradeRetry } from './lib/practice.js';
@@ -30,6 +35,10 @@ const siteSettings = createSiteReviewSettings();
 const completionAlertSetting = installCompletionAlertSetting($('completion-alerts'), $('completion-alert-status'));
 const summaryShare = createSummaryShare({ getSummary: () => state.result && state.selected ? { game: state.selected, result: state.result, analysis: state.recordMeta } : null });
 $('share-summary').addEventListener('click', () => { stopPlayback(); void summaryShare.open(); });
+const moveSounds = createMoveSounds({ isEnabled: () => $('move-sounds').checked });
+function playPositionSound(before, move) {
+  if (!state.busy && !state.loading && before !== currentFen()) void moveSounds.play({ capture: !!move?.captured });
+}
 const lineColors = ['#96bc4b', '#55a7d7', '#efa64a'];
 const badgeDescriptions = { Book: 'A recorded opening move without a detected tactical error', Brilliant: 'Sound sacrifice in the engine line', Great: 'Best reply after an opponent’s error', Best: 'The engine’s first choice', Excellent: 'Almost no estimated loss', Good: 'A reasonable move', Inaccuracy: 'A small missed opportunity', Mistake: 'A significant loss of chances', Blunder: 'A large loss of chances' };
 function makeBadge(label, extraClass = '') {
@@ -81,20 +90,88 @@ function forgetUnavailableReview(id) {
 function openPickerGame(game) { return openSavedReview(null, { fallbackGame: game }); }
 const savedUsernames = {};
 let usernameSource = 'chesscom', usernameSaveQueue = Promise.resolve();
-function rememberUsername(source, value) {
+let savedAccounts = normalizeAccounts(), accountSaveQueue = Promise.resolve(), accountSaves = 0;
+function updateAccountControls() {
+  const disabled = state.starting || state.busy || state.loading || state.libraryBusy || state.importing || !!state.positionController || accountSaves > 0;
+  $('saved-account').disabled = disabled;
+  $('forget-account').disabled = disabled || !$('saved-account').value;
+}
+function syncAccountSelection() {
+  const source = $('game-source').value, name = $('username').value.trim().toLowerCase();
+  $('saved-account').value = savedAccounts[source].find(item => item.toLowerCase() === name) || '';
+  $('saved-account').title = $('saved-account').value;
+  updateAccountControls();
+}
+function renderSavedAccounts() {
+  const names = savedAccounts[$('game-source').value];
+  const select = $('saved-account'); select.replaceChildren();
+  const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Choose a saved account'; select.append(placeholder);
+  for (const name of names) {
+    const option = document.createElement('option'); option.value = name; option.textContent = name; select.append(option);
+  }
+  $('saved-account-row').hidden = !names.length;
+  syncAccountSelection();
+}
+function updateSavedAccounts(transform, { initial = false } = {}) {
+  accountSaves++; updateAccountControls();
+  const change = async () => {
+    const storage = globalThis.chrome?.storage?.local;
+    const stored = storage ? await storage.get('savedAccounts') : {};
+    const exists = Object.hasOwn(stored, 'savedAccounts');
+    const current = exists ? normalizeAccounts(stored.savedAccounts) : savedAccounts;
+    const next = initial && exists ? current : transform(current);
+    if (storage && !(initial && exists)) await storage.set({ savedAccounts: next });
+    savedAccounts = next; renderSavedAccounts();
+  };
+  accountSaveQueue = accountSaveQueue.then(() => navigator.locks?.request
+    ? navigator.locks.request('meowlchess-saved-accounts', change) : change())
+    .catch(() => { $('account-status').textContent = 'Could not save the account list. Please try again.'; })
+    .finally(() => { accountSaves--; updateAccountControls(); });
+  return accountSaveQueue;
+}
+$('saved-account').addEventListener('change', () => {
+  const name = $('saved-account').value;
+  if (!name) { updateAccountControls(); return; }
+  $('username').value = name; $('account-status').textContent = '';
+  void rememberUsername(usernameSource, name); syncAccountSelection();
+});
+$('forget-account').addEventListener('click', async () => {
+  const source = $('game-source').value, name = $('saved-account').value;
+  if (!name) return;
+  $('account-status').textContent = '';
+  await updateSavedAccounts(current => forgetAccount(current, source, name));
+  if (!savedAccounts[source].some(item => item.toLowerCase() === name.toLowerCase())) {
+    // Forget the matching draft too, so startup cannot immediately add it back.
+    if (savedUsernames[source]?.toLowerCase() === name.toLowerCase()) await rememberUsername(source, '', { ifCurrent: name });
+    if ($('game-source').value === source && $('username').value.trim().toLowerCase() === name.toLowerCase()) {
+      $('username').value = ''; syncAccountSelection();
+    }
+  }
+});
+$('username').addEventListener('input', syncAccountSelection);
+globalThis.chrome?.storage?.onChanged?.addListener((changes, area) => {
+  if (area === 'local' && changes.savedAccounts) {
+    savedAccounts = normalizeAccounts(changes.savedAccounts.newValue); renderSavedAccounts();
+  }
+});
+function rememberUsername(source, value, { ifCurrent } = {}) {
   const username = value.trim();
-  savedUsernames[source] = username;
+  if (ifCurrent === undefined || (savedUsernames[source] ?? '').toLowerCase() === ifCurrent.toLowerCase()) savedUsernames[source] = username;
   if (!globalThis.chrome?.storage?.local) return Promise.resolve();
-  // Merge the latest provider entries so another review tab's input is retained.
-  usernameSaveQueue = usernameSaveQueue.then(async () => {
+  const update = async () => {
     const stored = await chrome.storage.local.get(['username', 'usernames']);
     const usernames = {};
     if (stored.usernames && typeof stored.usernames === 'object') {
       for (const provider of ['chesscom', 'lichess']) if (typeof stored.usernames[provider] === 'string') usernames[provider] = stored.usernames[provider];
     } else if (typeof stored.username === 'string') usernames.chesscom = stored.username;
+    // A forgotten shortcut must not clear a newer entry from another tab.
+    if (ifCurrent !== undefined && (usernames[source] ?? '').trim().toLowerCase() !== ifCurrent.toLowerCase()) return;
     usernames[source] = username;
     await chrome.storage.local.set({ usernames, ...(source === 'chesscom' ? { username } : {}) });
-  }).catch(() => {});
+  };
+  // Read and merge inside the same lock used by all review tabs' input writes.
+  usernameSaveQueue = usernameSaveQueue.then(() => navigator.locks?.request
+    ? navigator.locks.request('meowlchess-username-preferences', update) : update()).catch(() => {});
   return usernameSaveQueue;
 }
 function selectedEngine() { return ENGINE_OPTIONS.find(engine => engine.id === $('engine').value) || ENGINE_OPTIONS[0]; }
@@ -174,6 +251,7 @@ function displayEvaluation(evaluation) {
 function updateControls() {
   const unavailable = state.starting || state.busy || state.loading || !!state.positionController || !!state.retry?.controller || state.libraryBusy || state.importing;
   siteSettings.setBusy(unavailable);
+  updateAccountControls();
   $('library-toggle').disabled = unavailable;
   $('open-tutorial').disabled = unavailable || !tutorial.ready || !!state.retry;
   $('summary-tab').disabled = !state.result || !!state.retry;
@@ -225,7 +303,33 @@ function updateControls() {
   const seconds = (state.parsed?.positions.length || 0) * ($('smart-analysis').checked ? Math.min(150, Number($('depth').value)) : Number($('depth').value)) / 1000;
   $('time-estimate').textContent = seconds ? `About ${seconds < 60 ? `${Math.ceil(seconds)} sec` : `${Math.ceil(seconds / 60)} min`} for the first pass.${$('smart-analysis').checked ? ' Key mistakes get extra thinking time.' : ' More lines split the search time.'}` : 'Choose a game to see the estimated review time.';
 }
+function renderCaptured(place, color, material) {
+  const row = $(`${place}-captured`);
+  row.dataset.color = color;
+  row.replaceChildren();
+  if (!material) { row.removeAttribute('aria-label'); row.removeAttribute('title'); return; }
+  const { captured, advantage } = material[color];
+  const pieces = document.createElement('span'); pieces.className = 'captured-pieces'; pieces.setAttribute('aria-hidden', 'true');
+  const enemy = color === 'w' ? 'b' : 'w';
+  for (const type of captured) {
+    const image = pieceImage(enemy, type); image.dataset.piece = `${enemy}${type}`; pieces.append(image);
+  }
+  row.append(pieces);
+  if (advantage > 0) {
+    const balance = document.createElement('span'); balance.className = 'material-advantage'; balance.textContent = `+${advantage}`; balance.setAttribute('aria-hidden', 'true'); row.append(balance);
+  }
+  const names = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen' };
+  const counts = Object.entries(names).flatMap(([type, name]) => {
+    const count = captured.filter(piece => piece === type).length;
+    return count ? [`${count} ${name}${count === 1 ? '' : 's'}`] : [];
+  });
+  const description = `${color === 'w' ? 'White' : 'Black'} captured ${counts.join(', ') || 'no pieces'}${advantage > 0 ? `; ahead by ${advantage} material point${advantage === 1 ? '' : 's'}` : ''}.`;
+  row.setAttribute('aria-label', description); row.title = description;
+}
 function renderPlayers() {
+  const line = state.study?.line;
+  const moves = line ? [...state.parsed.moves.slice(0, line.basePly), ...line.moves.slice(0, line.cursor)] : state.parsed?.moves.slice(0, state.ply);
+  const material = state.parsed ? summarizeMaterial({ fen: currentFen(), moves }) : null;
   const white = state.selected?.white || { username: 'White' };
   const black = state.selected?.black || { username: 'Black' };
   for (const [place, player, color] of state.flipped ? [['top', white, 'w'], ['bottom', black, 'b']] : [['top', black, 'b'], ['bottom', white, 'w']]) {
@@ -237,6 +341,7 @@ function renderPlayers() {
     const avatar = $(`${place}-player`).previousElementSibling;
     avatar.replaceChildren(pieceImage(color, 'k'));
     avatar.classList.toggle('white-avatar', color === 'w');
+    renderCaptured(place, color, material);
   }
 }
 function renderBoard() {
@@ -452,6 +557,9 @@ function renderSummary() {
     row.append(name, white, makeBadge(label), black); counts.append(row);
   }
   summary.append(counts);
+  const duration = formatReviewDuration(state.result.analysis?.durationMs);
+  const timing = document.createElement('p'); timing.id = 'review-duration'; timing.className = 'review-duration'; timing.hidden = !duration;
+  timing.textContent = duration ? `Reviewed in ${duration}` : ''; summary.append(timing);
 }
 function renderChart() {
   const chart = $('eval-chart'); chart.replaceChildren(); $('chart-readout').textContent = 'White’s advantage ↑';
@@ -598,6 +706,7 @@ function stopPlayback() {
 function startPlayback() {
   if (!state.parsed || state.busy || state.loading || state.positionController || answersHidden()) return;
   if (state.playTimer) { stopPlayback(); updateControls(); return; }
+  void moveSounds.unlock();
   if (positionIndex() >= positionCount()) navigatePosition(0);
   state.playTimer = setInterval(() => {
     if (!state.parsed || positionIndex() >= positionCount()) { stopPlayback(); updateControls(); return; }
@@ -606,22 +715,70 @@ function startPlayback() {
   }, Number($('play-speed').value));
   updateControls();
 }
+let boardSize = 'auto';
+function setBoardSize(value) {
+  boardSize = typeof value === 'number' && Number.isFinite(value) && value >= 320 && value <= 880
+    ? Math.round(value / 40) * 40 : 'auto';
+  const automatic = boardSize === 'auto';
+  document.documentElement.dataset.boardSize = automatic ? 'auto' : 'custom';
+  if (automatic) document.documentElement.style.removeProperty('--board-size');
+  else document.documentElement.style.setProperty('--board-size', `${boardSize}px`);
+  $('board-size').value = automatic ? '640' : String(boardSize);
+  $('board-size').setAttribute('aria-valuetext', automatic ? 'Automatic size' : `${boardSize} pixels`);
+  $('board-size-value').value = automatic ? 'Auto' : `${boardSize} px`;
+  $('board-size-auto').disabled = automatic;
+}
+$('board-size').addEventListener('input', () => setBoardSize(Number($('board-size').value)));
+$('board-size').addEventListener('change', savePreferences);
+$('board-size-auto').addEventListener('click', () => { setBoardSize('auto'); savePreferences(); });
+setBoardSize('auto');
+function currentPreferences() {
+  return { smart: $('smart-analysis').checked, autoOrient: $('auto-orient').checked, arrowMode: $('arrow-mode').value, engine: $('engine').value, source: $('game-source').value, time: $('depth').value, lines: $('multipv').value, arrows: $('show-arrows').checked, badges: $('show-badges').checked, coordinates: $('show-coordinates').checked, playback: $('play-speed').value, boardSize, moveSounds: $('move-sounds').checked };
+}
+let preferenceSnapshot = currentPreferences(), preferenceWrites = Promise.resolve(), unsavedPreferences = {};
 function savePreferences() {
-  const reviewSettings = { smart: $('smart-analysis').checked, autoOrient: $('auto-orient').checked, arrowMode: $('arrow-mode').value, engine: $('engine').value, source: $('game-source').value, time: $('depth').value, lines: $('multipv').value, arrows: $('show-arrows').checked, badges: $('show-badges').checked, coordinates: $('show-coordinates').checked, playback: $('play-speed').value };
-  globalThis.chrome?.storage?.local?.set({ reviewSettings }).catch(() => {});
+  const snapshot = currentPreferences();
+  const changed = Object.fromEntries(Object.entries(snapshot).filter(([key, value]) => value !== preferenceSnapshot[key]));
+  preferenceSnapshot = snapshot;
+  const storage = globalThis.chrome?.storage?.local;
+  if (!storage) return Promise.resolve();
+  const update = async () => {
+    // Apply only this tab's changes; an older tab must not undo other settings.
+    const patch = { ...unsavedPreferences, ...changed };
+    if (!Object.keys(patch).length) return;
+    try {
+      const stored = (await storage.get('reviewSettings')).reviewSettings;
+      const base = stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : snapshot;
+      await storage.set({ reviewSettings: { ...base, ...patch } });
+      unsavedPreferences = {}; $('preferences-status').textContent = '';
+    } catch {
+      unsavedPreferences = patch;
+      $('preferences-status').textContent = 'Settings could not be saved. Your choices still work in this tab; change a setting to try saving again.';
+    }
+  };
+  preferenceWrites = preferenceWrites.then(() => navigator.locks?.request
+    ? navigator.locks.request('meowlchess-review-preferences', update) : update()).catch(() => {
+      unsavedPreferences = { ...unsavedPreferences, ...changed };
+      $('preferences-status').textContent = 'Settings could not be saved. Change a setting to try again.';
+    });
+  return preferenceWrites;
 }
 function restorePreferences(settings) {
-  if (!settings || typeof settings !== 'object') return;
+  setBoardSize(settings?.boardSize);
+  if (!settings || typeof settings !== 'object') { preferenceSnapshot = currentPreferences(); return; }
   for (const [id, key] of [['arrow-mode', 'arrowMode'], ['engine', 'engine'], ['game-source', 'source'], ['depth', 'time'], ['multipv', 'lines'], ['play-speed', 'playback']]) {
     if ([...$(id).options].some(option => option.value === settings[key])) $(id).value = settings[key];
   }
-  for (const [id, key] of [['smart-analysis', 'smart'], ['auto-orient', 'autoOrient'], ['show-arrows', 'arrows'], ['show-badges', 'badges'], ['show-coordinates', 'coordinates']]) if (typeof settings[key] === 'boolean') $(id).checked = settings[key];
+  for (const [id, key] of [['smart-analysis', 'smart'], ['auto-orient', 'autoOrient'], ['show-arrows', 'arrows'], ['show-badges', 'badges'], ['show-coordinates', 'coordinates'], ['move-sounds', 'moveSounds']]) if (typeof settings[key] === 'boolean') $(id).checked = settings[key];
+  preferenceSnapshot = currentPreferences();
 }
 function goTo(ply, { playback = false } = {}) {
   if (!state.parsed) return;
+  const before = currentFen(), oldPly = state.study ? null : state.ply;
   if (!playback) stopPlayback();
   cancelPositionSearch(); resetExploration(); state.selectedLine = null;
   state.ply = Math.max(0, Math.min(state.parsed.moves.length, ply)); setReviewTab('moves'); renderBoard();
+  playPositionSound(before, oldPly !== null && state.ply > oldPly ? currentMove() : null);
 }
 function selectGame(game) {
   if (state.busy || state.loading) return;
@@ -640,7 +797,7 @@ function selectGame(game) {
     }
     $('game-kind').textContent = `${game.time_class || 'STANDARD'} · COMPLETED`;
     $('review-status').textContent = '';
-    $('progress-area').hidden = true;
+    $('progress-area').hidden = true; $('progress-eta').hidden = true; $('progress-eta').textContent = '';
     $('analyze-button').textContent = 'Review game';
     for (const button of document.querySelectorAll('.game-card')) {
       const selected = (button.classList.contains('import-game') ? state.importGames : state.games)[Number(button.dataset.index)] === game;
@@ -673,10 +830,11 @@ async function loadGames() {
   state.loading = true; state.games = []; state.selected = null; state.parsed = null; state.result = null; state.ply = 0; state.opening = null; state.reviewId = null; state.bookmarks = [];
   showError(); renderGames(); renderMoves(); renderSummary(); renderBoard();
   $('game-title').title = ''; $('game-title').textContent = 'Loading games…'; $('game-subtitle').textContent = 'Looking up completed games in the public archive.'; $('game-kind').textContent = 'LOADING ARCHIVE';
-  $('review-status').textContent = ''; $('progress-area').hidden = true;
+  $('review-status').textContent = ''; $('progress-area').hidden = true; $('progress-eta').hidden = true; $('progress-eta').textContent = '';
   $('library-status').textContent = 'Finding your completed games…';
   try {
     state.games = await fetchGames(source, username);
+    if (accountUsername(source, username)) await updateSavedAccounts(current => rememberAccount(current, source, username));
     await refreshLibrary();
     savePreferences();
     renderGames();
@@ -697,6 +855,8 @@ async function review() {
   const choice = selectedEngine(); state.reviewEngine = choice.label;
   const startedAt = performance.now();
   const analysis = { engineId: choice.id, engineName: choice.label, moveTimeMs: Number($('depth').value), multiPV: Number($('multipv').value), smartAnalysis: $('smart-analysis').checked };
+  const estimator = createReviewProgressEstimator(analysis);
+  $('progress-eta').textContent = estimator.update().text; $('progress-eta').hidden = false;
   $('save-status').textContent = '';
   state.busy = true; state.controller = new AbortController(); state.result = null;
   showError(); renderMoves(); renderSummary(); renderBoard();
@@ -704,7 +864,9 @@ async function review() {
   try {
     const result = await analyzeGame(selected.pgn, {
       engineFactory: () => createEngine(choice.id), smartAnalysis: analysis.smartAnalysis, moveTimeMs: Number($('depth').value), multiPV: Number($('multipv').value), signal: state.controller.signal,
-      onProgress: ({ completed, total, phase, phaseCompleted, phaseTotal }) => {
+      onProgress: (progress) => {
+        const { completed, total, phase, phaseCompleted, phaseTotal } = progress;
+        $('progress-eta').textContent = estimator.update(progress).text;
         $('progress').value = total ? completed / total * 100 : 0;
         $('progress-percent').textContent = `${Math.round($('progress').value)}%`;
         $('progress-stage').textContent = phase === 'recheck' ? 'Rechecking key moves' : 'Analyzing game';
@@ -712,7 +874,7 @@ async function review() {
       }
     });
     state.result = result; state.recordMeta = analysis; state.opening = result.opening || state.opening;
-    $('progress-area').hidden = true;
+    $('progress-area').hidden = true; $('progress-eta').hidden = true; $('progress-eta').textContent = '';
     $('review-status').textContent = 'Review complete.';
     $('analyze-button').textContent = 'Review again';
     renderMoves(); renderSummary();
@@ -723,7 +885,7 @@ async function review() {
     const savedRecord = await persistReview(selected, result, analysis);
     if (savedRecord && !state.controller.signal.aborted) void notifyReviewComplete(savedRecord);
   } catch (error) {
-    $('progress-area').hidden = true;
+    $('progress-area').hidden = true; $('progress-eta').hidden = true; $('progress-eta').textContent = '';
     if (error.name === 'AbortError' || state.controller.signal.aborted) $('review-status').textContent = 'Review canceled.';
     else { $('review-status').textContent = 'Review could not finish.'; showError(error.message || 'The local engine could not start. Please reload and try again.'); }
   } finally { state.busy = false; state.controller = null; renderBoard(); }
@@ -839,9 +1001,10 @@ async function playBoardMove(from, to, promotion) {
     stopPlayback(); state.pendingPromotion = null;
     $('promotion-picker').close(); state.hoverLine = null; state.selectedSquare = null; state.focusSquare = to;
     if (!state.study) state.study = { line: createStudyLine(state.selected.pgn, state.ply), returnPly: state.ply, kind: 'variation' };
+    const before = currentFen();
     const move = state.study.line.play({ from, to, ...(promotion ? { promotion } : {}) });
     state.study.message = '';
-    renderBoard();
+    renderBoard(); playPositionSound(before, move);
     if (state.retry) await checkRetry(move.uci);
   } catch (error) { showError(error.message || 'That move could not be played.'); }
 }
@@ -849,13 +1012,14 @@ function startVariation(candidate) {
   if (!state.parsed || state.busy || state.loading || state.retry) return;
   stopPlayback(); cancelPositionSearch(); state.selectedSquare = null; state.hoverLine = null; state.pendingPromotion = null;
   setReviewTab('moves');
+  const before = currentFen();
   const existing = state.study;
   const prefix = existing ? existing.line.moves.slice(0, existing.line.cursor).map(move => move.uci) : [];
   const line = candidate.pv?.[0] === candidate.bestMove ? candidate.pv : [candidate.bestMove];
   const study = createStudyLine(state.selected.pgn, existing?.line.basePly ?? state.ply, [...prefix, ...line]);
   study.goTo(Math.min(prefix.length + 1, study.moves.length));
   state.study = { line: study, returnPly: existing?.returnPly ?? state.ply, kind: 'variation', message: study.truncated ? 'The legal part of this engine line is shown.' : '' };
-  renderBoard();
+  renderBoard(); playPositionSound(before, currentMove());
 }
 function returnToGame() {
   const returnPly = state.retry?.targetPly ?? state.study?.returnPly ?? state.ply;
@@ -866,10 +1030,11 @@ function returnToGame() {
 function navigatePosition(ply, { playback = false } = {}) {
   if (!state.parsed || (state.retry && !state.retry.revealed)) return;
   if (!state.study) { goTo(ply, { playback }); return; }
+  const before = currentFen(), oldCursor = state.study.line.cursor;
   if (!playback) stopPlayback();
   cancelPositionSearch(); state.hoverLine = null; state.selectedSquare = null; state.pendingPromotion = null;
   state.study.line.goTo(Math.max(0, Math.min(state.study.line.moves.length, ply)));
-  renderBoard();
+  renderBoard(); playPositionSound(before, state.study.line.cursor > oldCursor ? currentMove() : null);
 }
 function nextMistakePly(after) { return state.result?.moves.find(move => move.ply > after && ['Inaccuracy', 'Mistake', 'Blunder'].includes(move.label))?.ply; }
 function startRetry(ply = state.ply) {
@@ -1060,9 +1225,11 @@ $('next-key').addEventListener('click', () => { const ply = keyPlies().find(p =>
 $('deepen-button').addEventListener('click', () => deepenPosition(false));
 $('quick-position').addEventListener('click', () => deepenPosition(true));
 $('game-source').addEventListener('change', () => {
-  void rememberUsername(usernameSource, $('username').value);
+  // An unchanged draft may be older than a username saved in another tab.
+  const value = $('username').value.trim();
+  if (value !== savedUsernames[usernameSource]) void rememberUsername(usernameSource, value, value === '' && savedUsernames[usernameSource] === undefined ? { ifCurrent: '' } : {});
   usernameSource = $('game-source').value;
-  syncSource(); $('username').value = savedUsernames[usernameSource] ?? ''; savePreferences();
+  syncSource(); $('username').value = savedUsernames[usernameSource] ?? ''; renderSavedAccounts(); savePreferences();
   $('library-status').textContent = 'Enter a username to find completed games.';
 });
 function importUnavailable() { return state.busy || state.loading || state.importing || state.libraryBusy || state.positionController || state.retry?.controller; }
@@ -1128,6 +1295,12 @@ $('pgn-dropzone').addEventListener('keydown', event => { if (event.target === $(
 for (const type of ['dragover', 'drop']) document.addEventListener(type, event => { if ([...event.dataTransfer.types].includes('Files')) event.preventDefault(); });
 $('stop-position').addEventListener('click', () => { cancelPositionSearch(); renderBoard(); });
 $('play-button').addEventListener('click', startPlayback);
+$('move-sounds').addEventListener('change', () => {
+  savePreferences();
+  if ($('move-sounds').checked) void moveSounds.unlock();
+  else moveSounds.stop();
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden) moveSounds.stop(); });
 for (const id of ['engine', 'depth', 'multipv', 'arrow-mode', 'smart-analysis', 'auto-orient', 'show-arrows', 'show-badges', 'show-coordinates', 'play-speed']) {
   $(id).addEventListener('change', () => {
     if (id === 'engine') syncEngine();
@@ -1178,21 +1351,27 @@ document.addEventListener('keydown', event => {
   if (event.target.closest('.chart-hit') && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) document.querySelector('.chart-hit button.active')?.focus({ preventScroll: true });
 });
 window.addEventListener('focus', () => { if ($('library-dialog').open) void refreshLibrary(); });
-window.addEventListener('beforeunload', () => { state.controller?.abort(); cancelPositionSearch(); cancelRetry(); stopPlayback(); reviewLibrary.close().catch(() => {}); });
+window.addEventListener('beforeunload', () => { moveSounds.dispose(); state.controller?.abort(); cancelPositionSearch(); cancelRetry(); stopPlayback(); reviewLibrary.close().catch(() => {}); });
 syncEngine(); syncSource(); renderBoard(); refreshLibrary();
 async function initializeReview() {
   let remembered;
   try {
     if (globalThis.chrome?.storage?.local) {
-      const { username, usernames, reviewSettings } = await chrome.storage.local.get(['username', 'usernames', 'reviewSettings']);
+      const stored = await chrome.storage.local.get(['username', 'usernames', 'reviewSettings', 'savedAccounts']);
+      const { username, usernames, reviewSettings } = stored;
       if (usernames && typeof usernames === 'object') for (const source of ['chesscom', 'lichess']) if (typeof usernames[source] === 'string') savedUsernames[source] = usernames[source];
       if (username && !savedUsernames.chesscom && !usernames) savedUsernames.chesscom = username;
       restorePreferences(reviewSettings);
+      if (Object.hasOwn(stored, 'savedAccounts')) savedAccounts = normalizeAccounts(stored.savedAccounts);
+      else await updateSavedAccounts(current => {
+        for (const source of ['chesscom', 'lichess']) current = rememberAccount(current, source, savedUsernames[source]);
+        return current;
+      }, { initial: true });
       remembered = savedUsernames[$('game-source').value];
     }
   } catch { /* The game picker remains usable when preferences are unavailable. */ }
   usernameSource = $('game-source').value;
-  $('username').value = remembered ?? '';
+  $('username').value = remembered ?? ''; renderSavedAccounts();
   syncEngine(); syncSource(); renderMoves(); renderBoard();
   // Finish the optional support prompt and guide before opening Games or fetching a remembered account.
   const query = new URLSearchParams(location.search);

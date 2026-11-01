@@ -285,3 +285,51 @@ test('atomic save outcomes distinguish fresh writes from concurrent preserved an
   const replaced = await library.saveReview(data.game, data.result, SETTINGS, { reportOutcome: true });
   assert.equal(replaced.savedFresh, true); assert.equal(replaced.record.updatedAt, 3000);
 });
+
+
+test('IndexedDB can recover after an initial synchronous open failure', async () => {
+  let opens = 0;
+  const db = {
+    close() {},
+    transaction() { return { objectStore() { return { getAll() {
+      const request = {};
+      queueMicrotask(() => { request.result = []; request.onsuccess(); });
+      return request;
+    } }; } }; },
+  };
+  const indexedDB = { open() {
+    if (++opens === 1) throw new DOMException('Temporarily denied', 'SecurityError');
+    const request = {};
+    queueMicrotask(() => { request.result = db; request.onsuccess(); });
+    return request;
+  } };
+  const store = createIndexedDBReviewStore({ indexedDB });
+  await assert.rejects(store.readAll(), error => error.code === 'unavailable');
+  assert.deepEqual(await store.readAll(), []);
+  assert.equal(opens, 2);
+  await store.close();
+});
+
+test('explicit re-review repairs damaged analysis while retaining valid matching bookmarks', async () => {
+  const store = memoryStore(), data = await fixture(), library = create(store, { now: () => 1000 });
+  const saved = await library.saveReview(data.game, data.result, SETTINGS);
+  await library.toggleBookmark(saved.id, 1, { note: 'Keep this study note' });
+  store.records.get(saved.id).result.summary.w.total = 999;
+  await assert.rejects(library.loadReview(saved.id), error => error.code === 'corrupt');
+  const repaired = await library.saveReview(data.game, data.result, SETTINGS);
+  assert.equal(repaired.bookmarks[0].note, 'Keep this study note');
+  assert.equal((await library.loadReview(saved.id)).result.summary.w.total, data.result.summary.w.total);
+});
+
+test('explicit replacement never carries bookmarks from a different game under a damaged key', async () => {
+  const store = memoryStore(), first = await fixture(), second = await fixture(PGN.replace('Alice', 'Carol'));
+  const library = create(store);
+  const saved = await library.saveReview(first.game, first.result, SETTINGS);
+  const unrelated = await library.saveReview(second.game, second.result, SETTINGS);
+  await library.toggleBookmark(unrelated.id, 1, { note: 'Different game note' });
+  store.records.set(saved.id, { ...copy(store.records.get(unrelated.id)), id: saved.id });
+  const repaired = await library.saveReview(first.game, first.result, SETTINGS);
+  assert.deepEqual(repaired.bookmarks, []);
+  assert.equal((await library.loadReview(saved.id)).game.white.username, 'Alice');
+  assert.equal((await library.loadReview(unrelated.id)).bookmarks[0].note, 'Different game note');
+});

@@ -45,7 +45,11 @@ async function shadowPoint(selector, hostId) {
   const { model } = await cdp.send('DOM.getBoxModel', { nodeId: await shadowNode(selector, hostId) });
   return { x: (model.content[0] + model.content[2]) / 2, y: (model.content[1] + model.content[5]) / 2 };
 }
-async function shadowClick(selector, hostId) { await page.waitForTimeout(180); const point = await shadowPoint(selector, hostId); await page.mouse.click(point.x, point.y); }
+async function shadowClick(selector, hostId) {
+  await cdp.send('DOM.scrollIntoViewIfNeeded', { nodeId: await shadowNode(selector, hostId) });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const point = await shadowPoint(selector, hostId); await page.mouse.click(point.x, point.y);
+}
 async function shadowFill(selector, value) {
   await cdp.send('DOM.focus', { nodeId: await shadowNode(selector) });
   await page.keyboard.press('Control+A'); await page.keyboard.insertText(value);
@@ -231,7 +235,7 @@ try {
   await shadowClick('.bot-import summary');
   await shadowFill('textarea[aria-label="Finished bot game PGN"]', unfinished);
   await shadowClick('.bot-import details .bot-action');
-  await poll(async () => /completed|finished/i.test(await shadowText('.bot-feedback')), 'unfinished import error');
+  await poll(async () => /Only completed games can be reviewed/i.test(await shadowText('.bot-feedback')), 'unfinished import error');
   assert.equal(page.frames().length, 1);
   await shadowFill('textarea[aria-label="Finished bot game PGN"]', pastePgn);
   await shadowClick('.bot-import details .bot-action');

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { importPgn, safeOriginalGameUrl } from '../extension/lib/pgn.js';
+import { importPgn, safeOriginalGameUrl, parseCompletedPgn } from '../extension/lib/pgn.js';
 import { parseGame } from '../extension/lib/review.js';
 import { importPgnCollection, importPgnFiles, PGN_IMPORT_MAX_BYTES, PGN_IMPORT_MAX_GAMES } from '../extension/lib/pgn-import.js';
 
@@ -193,4 +193,23 @@ test('file imports reject the aggregate UTF-8 byte limit before importing any fi
   assert.throws(() => importPgnFiles([half, half + ' ']), /5 MiB/);
   assert.throws(() => importPgnFiles([first, 'a'.repeat(PGN_IMPORT_MAX_BYTES)]), /5 MiB/);
   for (const input of [null, [], '1. e4 e5 1-0', [first, null]]) assert.throws(() => importPgnFiles(input), /PGN file/);
+});
+
+test('all single-game entry points enforce UTF-8 bytes before parsing or creating an engine', async () => {
+  const { analyzeGame } = await import('../extension/lib/review.js');
+  const base = '[Result "1-0"]\n1. e4 {PAD} e5 1-0';
+  const fixedBytes = new TextEncoder().encode(base.replace('PAD', '')).byteLength;
+  const room = 250000 - fixedBytes;
+  const exact = base.replace('PAD', 'é'.repeat(Math.floor(room / 2)) + (room % 2 ? 'x' : ''));
+  assert.equal(new TextEncoder().encode(exact).byteLength, 250000);
+  assert.equal(parseCompletedPgn(exact).parsed.moves.length, 2);
+  assert.equal(parseGame(exact).moves.length, 2);
+  const oversized = exact.replace('} e5', 'é} e5');
+  assert(oversized.length < 250000);
+  assert.throws(() => parseCompletedPgn(oversized), /250 KB/);
+  assert.throws(() => parseGame(oversized), /oversized PGN/);
+  assert.throws(() => importPgn(oversized), /250 KB/);
+  let created = false;
+  await assert.rejects(analyzeGame(oversized, { engineFactory: () => { created = true; throw new Error('Must not start'); } }), /oversized PGN/);
+  assert.equal(created, false);
 });

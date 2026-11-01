@@ -3,6 +3,7 @@ import { estimateGameRatings } from './game-rating.js';
 import { getPhasePerformance } from './game-performance.js';
 
 const WIDTH = 1200, HEIGHT = 1200;
+const PRIVACY_KEY = 'shareHidePlayerNames';
 const COLORS = { text: '#f1f0e9', muted: '#aaa89d', line: '#45443d', green: '#81b64c' };
 const LABEL_COLORS = { Brilliant: '#26c2a3', Great: '#749bbf', Best: '#81b64c', Excellent: '#81b64c', Good: '#95b776', Book: '#d5a47d', Inaccuracy: '#f7c631', Mistake: '#ffa459', Blunder: '#fa412d' };
 const clean = (value, limit = 180) => typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, limit) : '';
@@ -61,11 +62,12 @@ function score(value) { return Number.isFinite(value) && value >= 0 && value <= 
 function filenamePart(value, fallback) { return value.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 36) || fallback; }
 
 /** Render only the supplied, completed analysis. No engine, storage, or network API is used. */
-export async function renderSummaryImage({ game, result, analysis = {} } = {}) {
+export async function renderSummaryImage({ game, result, analysis = {}, hidePlayerNames = false } = {}) {
   const outcome = result?.game?.headers?.Result;
   if (!game || !result?.summary?.w || !result?.summary?.b || !['1-0', '0-1', '1/2-1/2'].includes(outcome)) throw new Error('Complete a game review before sharing its summary.');
-  const white = clean(game.white?.username || result.game.headers.White) || 'White';
-  const black = clean(game.black?.username || result.game.headers.Black) || 'Black';
+  const privateNames = hidePlayerNames === true;
+  const white = privateNames ? 'White' : clean(game.white?.username || result.game.headers.White) || 'White';
+  const black = privateNames ? 'Black' : clean(game.black?.username || result.game.headers.Black) || 'Black';
   const ratings = estimateGameRatings(result), phases = getPhasePerformance(result);
   const artwork = await assets();
   const canvas = document.createElement('canvas'); canvas.width = WIDTH; canvas.height = HEIGHT;
@@ -141,7 +143,7 @@ export async function renderSummaryImage({ game, result, analysis = {} } = {}) {
   text(ctx, 'Meowl likeness: Melonpi Cat (瓜皮)', 56, 1134, 16, COLORS.muted);
   text(ctx, 'github.com/ThuyTran735/MeowlChess', 1144, 1134, 16, COLORS.muted, 400, 'right');
   const blob = await new Promise((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('The summary image could not be created.')), 'image/png'));
-  return { blob, width: WIDTH, height: HEIGHT, filename: `MeowlChess-${filenamePart(white, 'white')}-vs-${filenamePart(black, 'black')}.png` };
+  return { blob, width: WIDTH, height: HEIGHT, filename: privateNames ? 'MeowlChess-summary.png' : `MeowlChess-${filenamePart(white, 'white')}-vs-${filenamePart(black, 'black')}.png` };
 }
 
 /** One locally generated preview per user action; nothing is uploaded or copied automatically. */
@@ -149,12 +151,24 @@ export function createSummaryShare({ getSummary }) {
   const dialog = document.createElement('dialog');
   dialog.id = 'meowl-summary-share'; dialog.className = 'summary-share-dialog'; dialog.dataset.noDrag = '';
   dialog.setAttribute('aria-labelledby', 'summary-share-title');
-  dialog.innerHTML = `<div class="summary-share-heading"><div><h2 id="summary-share-title">Share summary</h2><p>A PNG image, created on your device.</p></div><button class="summary-share-close" type="button" aria-label="Close share summary" autofocus>×</button></div><div class="summary-share-preview" aria-busy="true"><img alt="Game summary with player study scores, estimated game ratings, phase performance, and move counts" hidden></div><p class="summary-share-status" role="status" aria-live="polite">Preparing image…</p><div class="summary-share-actions"><button type="button" data-share-copy disabled>Copy image</button><button type="button" data-share-save disabled>Save image</button></div>`;
+  dialog.innerHTML = `<div class="summary-share-heading"><div><h2 id="summary-share-title">Share summary</h2><p>A PNG image, created on your device.</p></div><button class="summary-share-close" type="button" aria-label="Close share summary" autofocus>×</button></div><label class="summary-share-privacy"><input type="checkbox" data-share-private disabled> Hide player names<span>Use White and Black in the image.</span></label><div class="summary-share-preview" aria-busy="true"><img alt="Game summary with player study scores, estimated game ratings, phase performance, and move counts" hidden></div><p class="summary-share-status" role="status" aria-live="polite">Preparing image…</p><div class="summary-share-actions"><button type="button" data-share-copy disabled>Copy image</button><button type="button" data-share-save disabled>Save image</button></div>`;
   document.body.append(dialog);
   const preview = dialog.querySelector('img'), previewBox = dialog.querySelector('.summary-share-preview'), status = dialog.querySelector('.summary-share-status');
-  const copy = dialog.querySelector('[data-share-copy]'), save = dialog.querySelector('[data-share-save]');
+  const copy = dialog.querySelector('[data-share-copy]'), save = dialog.querySelector('[data-share-save]'), privacy = dialog.querySelector('[data-share-private]');
   preview.draggable = false;
-  let generation = 0, destroyed = false, item = null, url = null, opener = null;
+  let generation = 0, destroyed = false, item = null, url = null, opener = null, snapshot = null;
+  let preferenceWrites = Promise.resolve(), preferenceRevision = 0, preferenceNote = '';
+  const readPrivacy = async () => {
+    const storage = globalThis.chrome?.storage?.local;
+    if (storage) return (await storage.get(PRIVACY_KEY))[PRIVACY_KEY] === true;
+    return localStorage.getItem(PRIVACY_KEY) === 'true';
+  };
+  const writePrivacy = async value => {
+    const storage = globalThis.chrome?.storage?.local;
+    if (storage) await storage.set({ [PRIVACY_KEY]: value });
+    else localStorage.setItem(PRIVACY_KEY, String(value));
+  };
+  const readyStatus = () => { status.textContent = `Ready to copy or save. Nothing is uploaded.${preferenceNote ? ' ' + preferenceNote : ''}`; };
   const cleanup = () => {
     generation++; item = null;
     if (url) URL.revokeObjectURL(url);
@@ -164,24 +178,57 @@ export function createSummaryShare({ getSummary }) {
   const close = () => { cleanup(); if (dialog.open) dialog.close(); };
   dialog.querySelector('.summary-share-close').addEventListener('click', close);
   dialog.addEventListener('close', () => { if (dialog.open) return; cleanup(); opener?.isConnected && opener.focus({ preventScroll: true }); });
-  const open = async () => {
-    if (destroyed || dialog.open) return;
-    cleanup(); const job = generation; opener = document.activeElement;
+  const regenerate = async () => {
+    cleanup(); const job = generation;
     status.textContent = 'Preparing image…'; previewBox.setAttribute('aria-busy', 'true');
-    dialog.showModal();
     try {
-      const snapshot = structuredClone(getSummary());
-      const rendered = await renderSummaryImage(snapshot);
+      const rendered = await renderSummaryImage({ ...snapshot, hidePlayerNames: privacy.checked });
       if (destroyed || !dialog.open || job !== generation) return;
       item = rendered; url = URL.createObjectURL(rendered.blob); preview.src = url; preview.hidden = false;
       copy.disabled = save.disabled = false; previewBox.setAttribute('aria-busy', 'false');
-      status.textContent = 'Ready to copy or save. Nothing is uploaded.';
+      readyStatus();
     } catch (error) {
       if (!dialog.open || job !== generation) return;
       previewBox.setAttribute('aria-busy', 'false');
       status.textContent = error?.message || 'The summary could not be created. Close this window and try again.';
     }
   };
+  const open = async () => {
+    if (destroyed || dialog.open) return;
+    cleanup(); const job = generation; opener = document.activeElement; snapshot = null;
+    privacy.disabled = true; preferenceNote = '';
+    status.textContent = 'Preparing image…'; previewBox.setAttribute('aria-busy', 'true');
+    dialog.showModal();
+    try {
+      const nextSnapshot = structuredClone(getSummary());
+      await preferenceWrites;
+      let hideNames;
+      try { hideNames = await readPrivacy(); }
+      catch {
+        // Do not expose names when a previously saved preference cannot be read.
+        hideNames = true;
+        if (job === generation) preferenceNote = 'Your preference could not be loaded, so player names are hidden.';
+      }
+      if (destroyed || !dialog.open || job !== generation) return;
+      snapshot = nextSnapshot; privacy.checked = hideNames; privacy.disabled = false;
+      await regenerate();
+    } catch (error) {
+      if (!dialog.open || job !== generation) return;
+      previewBox.setAttribute('aria-busy', 'false');
+      status.textContent = error?.message || 'The summary could not be created. Close this window and try again.';
+    }
+  };
+  privacy.addEventListener('change', () => {
+    const value = privacy.checked, revision = ++preferenceRevision;
+    preferenceNote = '';
+    void regenerate();
+    // Serialize writes so rapid toggles cannot persist an older selection last.
+    preferenceWrites = preferenceWrites.then(() => writePrivacy(value)).catch(() => {
+      if (revision !== preferenceRevision || !dialog.open) return;
+      preferenceNote = 'This choice could not be saved for next time.';
+      if (item) readyStatus();
+    });
+  });
   copy.addEventListener('click', async () => {
     if (!item || copy.disabled) return;
     const job = generation, blob = item.blob; copy.disabled = true;

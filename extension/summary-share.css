@@ -8,7 +8,11 @@
 .summary-share-dialog button:focus-visible { outline: 2px solid #a4ce77; outline-offset: 3px; }
 .summary-share-dialog .summary-share-close { width: 30px; height: 30px; flex: none; padding: 0; margin: -3px -3px 0 0; color: #b2afa5; background: transparent; font-size: 24px; line-height: 1; }
 .summary-share-dialog .summary-share-close:hover { background: #ffffff0b; color: #fff; }
-.summary-share-preview { margin-top: 16px; min-height: 40px; }
+.summary-share-privacy { display: grid; grid-template-columns: 15px minmax(0, 1fr); align-items: center; gap: 2px 8px; margin: 15px 0 0; color: #e5e3da; font-size: 12px; font-weight: 400; cursor: pointer; }
+.summary-share-privacy input { width: 14px; height: 14px; margin: 0; accent-color: #81b64c; cursor: pointer; }
+.summary-share-privacy input:focus-visible { outline: 2px solid #a4ce77; outline-offset: 3px; }
+.summary-share-privacy span { grid-column: 2; color: #b2afa5; font-size: 11px; }
+.summary-share-preview { margin-top: 12px; min-height: 40px; }
 .summary-share-preview img { display: block; width: 100%; height: auto; border: 1px solid #ffffff12; border-radius: 8px; }
 .summary-share-preview img[hidden] { display: none; }
 .summary-share-status { margin: 11px 0; color: #b2afa5; font-size: 11px; overflow-wrap: anywhere; }

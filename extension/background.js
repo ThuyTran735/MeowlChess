@@ -77,18 +77,23 @@ chrome.action.onClicked.addListener(() => {
 let reconciliation = Promise.resolve();
 
 async function reconcile({ inject = false } = {}) {
-  const raw = await chrome.storage.local.get(SETTINGS_KEY);
-  const settings = normalizeSiteSettings(raw[SETTINGS_KEY]);
-  let disabled = false;
-  const enabled = [];
-  for (const source of Object.keys(SITE_PROVIDERS)) {
-    if (!settings[source].enabled) continue;
-    if (await hasPermission(source)) enabled.push(source);
-    else { settings[source].enabled = false; disabled = true; broker.invalidateSource(source); }
-  }
-  if (disabled) {
-    await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
-  }
+  const checkSettings = async () => {
+    const raw = await chrome.storage.local.get(SETTINGS_KEY);
+    const settings = normalizeSiteSettings(raw[SETTINGS_KEY]);
+    let disabled = false;
+    const enabled = [];
+    for (const source of Object.keys(SITE_PROVIDERS)) {
+      if (!settings[source].enabled) continue;
+      if (await hasPermission(source)) enabled.push(source);
+      else { settings[source].enabled = false; disabled = true; broker.invalidateSource(source); }
+    }
+    if (disabled) {
+      await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
+    }
+    return enabled;
+  };
+  const enabled = globalThis.navigator?.locks?.request
+    ? await navigator.locks.request('meowlchess-site-settings', checkSettings) : await checkSettings();
   // Optional permissions can remove access to chrome.scripting itself.
   if (!chrome.scripting) return;
   let registered;

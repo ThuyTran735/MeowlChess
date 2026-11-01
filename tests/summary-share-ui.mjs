@@ -13,7 +13,7 @@ import {parseGame,MOVE_LABELS} from '/lib/review.js';
 import {importPgn} from '/lib/pgn.js';
 const pgn='[White "White player"]\\n[Black "Black player"]\\n[Result "1/2-1/2"]\\n\\n1. e4 e5 2. Nf3 Nc6 3. d4 exd4 4. Nxd4 Nf6 5. Nc3 Bb4 6. Nxc6 bxc6 7. Bd3 d5 8. exd5 cxd5 9. O-O O-O 10. Bg5 c6 11. Qf3 Be7 12. Rfe1 Be6 13. Rad1 Qc7 14. Kh1 Kh8 15. Re2 Rfe8 1/2-1/2';
 const parsed=parseGame(pgn), game=importPgn(pgn);
-game.end_time=Date.UTC(2026,9,30)/1000;game.white.username='A very long player name that should wrap without crossing into the other card';game.black.username='Melonpi Cat';
+game.end_time=Date.UTC(2026,9,30)/1000;game.white.username='A very long player name that should wrap without crossing into the other card';game.black.username='PrivateOpponent123';
 const moves=parsed.moves.map((move,i)=>({...move,ply:i+1,label:MOVE_LABELS[i%MOVE_LABELS.length],probabilityLoss:.01}));
 const summary=Object.fromEntries(['w','b'].map(color=>[color,{accuracy:color==='w'?88.4:91.2,counts:Object.fromEntries(MOVE_LABELS.map(label=>[label,moves.filter(move=>move.color===color&&move.label===label).length]))}]));
 window.snapshot={game,result:{game:parsed,moves,positions:parsed.positions.map(()=>({cp:0})),summary,opening:{eco:'C45',name:'Scotch Game'}},analysis:{engineId:'stockfish',engineName:'Stockfish 18',moveTimeMs:50}};
@@ -60,7 +60,66 @@ try {
   await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{write:async items=>{window.copied={type:items[0].items['image/png'].type,size:items[0].items['image/png'].size};}}}));
   await copy.click();await page.waitForFunction(()=>document.querySelector('.summary-share-status').textContent.includes('Image copied'));
   assert.equal((await page.evaluate(()=>window.copied)).type,'image/png');
+  const privacy=dialog.locator('[data-share-private]');
+  assert.equal(await privacy.isChecked(),false,'Name privacy starts off.');
+  await page.evaluate(()=>{drawnText.length=0;});await privacy.check();
+  await page.waitForFunction(()=>!document.querySelector('[data-share-save]').disabled);
+  const privateText=await page.evaluate(()=>drawnText);
+  assert.deepEqual(privateText.filter(row=>row.y===238).map(row=>row.value),['White','Black']);
+  assert(!privateText.some(row=>/PrivateOpponent123|A very long player name|White player|Black player/.test(row.value)),'Private render contains no player names.');
+  assert(privateText.some(row=>row.value.includes('Melonpi Cat')),'Artwork attribution is retained.');
+  assert(!(await dialog.locator('img').getAttribute('alt')).includes('PrivateOpponent123'));
+  const privateEvent=page.waitForEvent('download');await save.click();const privateDownload=await privateEvent;
+  assert.equal(privateDownload.suggestedFilename(),'MeowlChess-summary.png');
+  const privatePng=await readFile(await privateDownload.path());
+  assert.equal(privatePng.readUInt32BE(16),1200);assert.equal(privatePng.readUInt32BE(20),1200);
+  await writeFile(join(root,'test-results','MeowlChess-private-summary.png'),privatePng);
+  await copy.click();await page.waitForFunction(()=>document.querySelector('.summary-share-status').textContent.includes('Image copied'));
+  assert.equal((await page.evaluate(()=>window.copied)).size,privatePng.length,'Copy and download use the same private image.');
+  assert.equal(await page.evaluate(()=>localStorage.getItem('shareHidePlayerNames')),'true');
+
+  // A completed older render must not replace the latest, private preview.
+  await page.evaluate(()=>{
+    window.pendingImages=[];window.originalToBlob=HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob=function(callback,...args){return originalToBlob.call(this,blob=>pendingImages.push(()=>callback(blob)),...args);};
+  });
+  await privacy.uncheck();await page.waitForFunction(()=>pendingImages.length===1);
+  assert.equal(await save.isDisabled(),true);assert.equal(await copy.isDisabled(),true);
+  assert.equal(await dialog.locator('img').getAttribute('src'),null,'Old preview is cleared immediately.');
+  await privacy.check();await page.waitForFunction(()=>pendingImages.length===2);
+  await page.evaluate(()=>pendingImages[1]());await page.waitForFunction(()=>!document.querySelector('[data-share-save]').disabled);
+  const privateUrl=await dialog.locator('img').getAttribute('src');
+  await page.evaluate(()=>pendingImages[0]());await page.waitForTimeout(50);
+  assert.equal(await dialog.locator('img').getAttribute('src'),privateUrl,'Late named render is discarded.');
+  assert.equal(await page.evaluate(()=>localStorage.getItem('shareHidePlayerNames')),'true','Latest toggle persists.');
+  await page.evaluate(()=>{HTMLCanvasElement.prototype.toBlob=originalToBlob;});
   await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});assert.equal(await page.locator('#open').evaluate(el=>el===document.activeElement),true);
+  await page.reload();await page.waitForFunction(()=>window.ready);await page.locator('#open').click();
+  await page.waitForFunction(()=>!document.querySelector('[data-share-save]').disabled);
+  assert.equal(await privacy.isChecked(),true,'Privacy choice survives reopening the page.');
+  assert.deepEqual((await page.evaluate(()=>drawnText)).filter(row=>row.y===238).map(row=>row.value),['White','Black']);
+  await privacy.uncheck();await page.waitForFunction(()=>!document.querySelector('[data-share-save]').disabled);
+  assert((await page.evaluate(()=>drawnText)).some(row=>row.value==='PrivateOpponent123'),'Unchecking restores player names.');
+  await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
+
+  // Both extension surfaces use the same chrome.storage.local preference.
+  await page.evaluate(()=>{
+    window.shareStore={shareHidePlayerNames:true};window.shareWrites=[];
+    globalThis.chrome??={};chrome.storage={local:{get:async key=>({[key]:shareStore[key]}),set:async value=>{shareWrites.push(value);Object.assign(shareStore,value);}}};
+    drawnText.length=0;
+  });
+  await page.locator('#open').click();await page.waitForFunction(()=>!document.querySelector('[data-share-save]').disabled);
+  assert.equal(await privacy.isChecked(),true);
+  assert.deepEqual((await page.evaluate(()=>drawnText)).filter(row=>row.y===238).map(row=>row.value),['White','Black']);
+  await privacy.uncheck();await page.waitForFunction(()=>shareWrites.length===1);
+  assert.deepEqual(await page.evaluate(()=>shareWrites),[{shareHidePlayerNames:false}]);
+  await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
+  await page.evaluate(()=>{chrome.storage.local.get=async()=>{throw new Error('Unavailable');};drawnText.length=0;});
+  await page.locator('#open').click();await page.waitForFunction(()=>!document.querySelector('[data-share-save]').disabled);
+  assert.equal(await privacy.isChecked(),true,'Failed preference read keeps names hidden.');
+  assert.match(await dialog.locator('.summary-share-status').textContent(),/preference could not be loaded/);
+  await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
+  await page.evaluate(()=>{delete chrome.storage;});
   assert.equal(await dialog.locator('img').getAttribute('src'),null);
   await page.setViewportSize({width:250,height:320});await page.locator('#open').click();await page.waitForFunction(()=>!document.querySelector('[data-share-save]').disabled);
   assert(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth));
@@ -74,5 +133,5 @@ try {
   await page.waitForFunction(()=>document.querySelector('.summary-share-status').textContent.includes('Complete a game review'));
   assert.equal(await save.isDisabled(),true);
   assert.deepEqual(external,[]);assert.deepEqual(errors,[]);
-  console.log('Summary sharing: local PNG contents/dimensions, download, clipboard success/fallback, small dialog, focus, and canceled generation passed.');
+  console.log('Summary sharing: local PNG/copy/download, private names and filename, saved preference, render races, storage failures, responsive dialog, focus and canceled generation passed.');
 } finally {await closeTestContext(context,profile,'meowlchess-share-test-');}

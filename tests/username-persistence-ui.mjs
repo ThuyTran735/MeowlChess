@@ -43,7 +43,17 @@ try {
   const ready = async () => page.waitForFunction(() => !document.querySelector('#open-tutorial').disabled && !document.querySelector('#username').disabled && !document.querySelector('#site-chesscom-enabled').disabled);
   const openGames = async () => { if (!await page.locator('#library-dialog').evaluate(el => el.open)) await page.locator('#library-toggle').click(); };
   const stored = async () => worker.evaluate(() => chrome.storage.local.get(['username', 'usernames', 'siteReviewSettings']));
-  const saved = async (provider, value) => page.waitForFunction(async ({ provider, value }) => (await chrome.storage.local.get('usernames')).usernames?.[provider] === value, { provider, value });
+  const saved = async (provider, value) => {
+    // Poll persisted state explicitly; an async waitForFunction predicate can
+    // produce a truthy Promise before the queued cross-tab storage write runs.
+    const started = Date.now();
+    while (Date.now() - started < 12000) {
+      const valueInStorage = await stored();
+      if (valueInStorage.usernames?.[provider] === value && (provider !== 'chesscom' || valueInStorage.username === value)) return;
+      await new Promise(resolve => setTimeout(resolve, 40));
+    }
+    assert.fail(`Timed out waiting for the persisted ${provider} username: ${value}`);
+  };
 
   console.log(stage = 'settings deep link restores remembered input without loading games');
   await page.goto(`${url}?siteSettings=1`); await ready();

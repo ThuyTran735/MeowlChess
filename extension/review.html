@@ -21,8 +21,10 @@
       <div class="board-layout">
         <div class="board-column">
           <div class="player-line"><span class="player-avatar" aria-hidden="true"></span><strong id="top-player">Black</strong><span id="top-rating"></span><span id="top-score" class="player-score"></span></div>
+          <div id="top-captured" class="captured-row" role="group"></div>
           <div class="board-with-eval"><div class="eval-bar" aria-label="Position evaluation"><div id="eval-white"></div><span id="eval-text">—</span></div><div id="board" class="board" role="grid" aria-label="Chess board in starting position"></div></div>
           <div class="player-line bottom-player"><span class="player-avatar white-avatar" aria-hidden="true"></span><strong id="bottom-player">White</strong><span id="bottom-rating"></span><span id="bottom-score" class="player-score"></span></div>
+          <div id="bottom-captured" class="captured-row" role="group"></div>
           <div class="board-controls">
             <button id="flip-button" class="nav-button flip-button" type="button" aria-label="Flip board" title="Flip board"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M7 19V5m-4 4 4-4 4 4m6-4v14m-4-4 4 4 4-4"/></svg></button>
             <span id="position-label" aria-live="polite" aria-atomic="true">Starting position</span>
@@ -36,14 +38,19 @@
             <div class="review-action-row"><button id="analyze-button" class="primary-button" type="button" disabled>Review game</button><button id="cancel-button" class="cancel-button" type="button" hidden>Cancel review</button></div>
             <details id="review-settings" class="review-settings">
               <summary>Settings</summary>
-              <div class="settings-body">
+              <div class="settings-body"><p id="preferences-status" class="helper" role="status"></p>
                 <div class="review-options"><label for="engine">Engine</label><select id="engine"><option value="stockfish">Stockfish 18 · stronger</option><option value="lozza">Lozza 9 · lightweight</option></select></div>
                 <p id="engine-help" class="settings-note"></p>
                 <div class="review-options"><label for="depth">Review speed</label><select id="depth"><option value="50">Fast · 0.05s / position</option><option value="150">Quick · 0.15s / position</option><option value="500" selected>Standard · 0.5s / position</option><option value="1500">Deep · 1.5s / position</option><option value="3000">Thorough · 3s / position</option></select></div>
                 <div class="review-options"><label for="multipv">Engine lines</label><select id="multipv"><option value="1">Best move only</option><option value="2">Top 2 moves</option><option value="3" selected>Top 3 moves</option></select></div>
                 <div class="review-options"><label for="arrow-mode">Board arrows</label><select id="arrow-mode"><option value="best" selected>Best move · hover for others</option><option value="all">All engine moves</option></select></div>
                 <div class="display-options"><label><input id="smart-analysis" type="checkbox" checked> Recheck key mistakes</label><label><input id="auto-orient" type="checkbox" checked> Face my side</label></div>
-                <div class="display-options"><label><input id="show-arrows" type="checkbox" checked> Engine arrows</label><label><input id="show-badges" type="checkbox" checked> Move badges</label><label><input id="show-coordinates" type="checkbox" checked> Coordinates</label></div>
+                <div class="display-options"><label><input id="show-arrows" type="checkbox" checked> Engine arrows</label><label><input id="show-badges" type="checkbox" checked> Move badges</label><label><input id="show-coordinates" type="checkbox" checked> Coordinates</label><label><input id="move-sounds" type="checkbox"> Move sounds</label></div>
+                <div class="board-size-setting">
+                  <div class="board-size-heading"><label for="board-size">Board size</label><output id="board-size-value" for="board-size">Auto</output><button id="board-size-auto" type="button" disabled>Auto</button></div>
+                  <input id="board-size" type="range" min="320" max="880" step="40" value="640" aria-describedby="board-size-help">
+                  <p id="board-size-help" class="settings-note">Fits smaller windows automatically.</p>
+                </div>
                 <div class="review-options"><label for="play-speed">Playback</label><select id="play-speed"><option value="700">Fast · 0.7s</option><option value="1200" selected>Normal · 1.2s</option><option value="2000">Slow · 2s</option></select></div>
                 <p id="time-estimate" class="settings-note"></p>
                 <div class="completion-alert-setting"><label><input id="completion-alerts" type="checkbox" disabled> Notify me when a review finishes</label><p class="settings-note">Only when you're away from its tab. Asks for notification permission.</p><p id="completion-alert-status" class="settings-note" role="status"></p></div>
@@ -58,7 +65,7 @@
               </div>
             </details>
             <p id="review-config" class="review-config">Stockfish 18 · Standard · 3 lines</p>
-            <div id="progress-area" hidden><div class="progress-heading"><span id="progress-stage">Analyzing game</span><span id="progress-percent" aria-hidden="true">0%</span></div><progress id="progress" max="100" value="0"></progress><p id="progress-text" role="status">Starting local engine…</p></div>
+            <div id="progress-area" hidden><div class="progress-heading"><span id="progress-stage">Analyzing game</span><span id="progress-percent" aria-hidden="true">0%</span></div><progress id="progress" max="100" value="0"></progress><p id="progress-text" role="status">Starting local engine…</p><p id="progress-eta" class="progress-eta" hidden></p></div>
             <div class="review-status-row"><p id="review-status" class="review-status" role="status"></p><p id="save-status" class="review-status" role="status"></p></div>
           </section>
 
@@ -91,7 +98,7 @@
       </div>
     </section>
   </section>
-  <footer><span>MeowlChess v1.8.0 · Local analysis · <button id="open-tutorial" class="footer-link" type="button" disabled aria-haspopup="dialog" aria-controls="tutorial-dialog">Tutorial</button></span><span>Completed games only · <a href="https://www.chess.com/legal/fair-play" target="_blank" rel="noopener noreferrer">Fair play</a></span></footer>
+  <footer><span>MeowlChess v1.9.0 · Local analysis · <button id="open-tutorial" class="footer-link" type="button" disabled aria-haspopup="dialog" aria-controls="tutorial-dialog">Tutorial</button></span><span>Completed games only · <a href="https://www.chess.com/legal/fair-play" target="_blank" rel="noopener noreferrer">Fair play</a></span></footer>
 </main>
 
 <dialog id="library-dialog" class="library-dialog" aria-labelledby="library-title">
@@ -100,6 +107,11 @@
     <div id="library-content" class="library-content">
       <section class="online-games" aria-label="Find completed games">
         <form id="username-form"><label for="game-source">Website</label><select id="game-source"><option value="chesscom">Chess.com</option><option value="lichess">Lichess</option></select><label id="username-label" for="username">Chess.com username</label><div class="input-group"><input id="username" name="username" placeholder="Username" autocomplete="username" maxlength="160" required><button id="load-button" type="submit" aria-label="Find completed games" title="Find completed games">→</button></div></form>
+        <div id="saved-account-row" class="saved-account-row" hidden>
+          <label for="saved-account">Saved accounts</label>
+          <div class="saved-account-controls"><select id="saved-account"><option value="">Choose a saved account</option></select><button id="forget-account" type="button" title="Remove this username from saved accounts" disabled>Forget</button></div>
+        </div>
+        <p id="account-status" class="helper" role="status"></p>
         <div class="library-heading recent-heading"><h3>Recent games</h3><span id="game-count">—</span></div><p id="library-status" class="muted" role="status">Enter a username to find your games.</p><div id="games" class="game-list" aria-label="Completed games"></div>
       </section>
       <section class="library-tools" aria-label="Saved games and PGN import">

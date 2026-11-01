@@ -11,7 +11,7 @@ const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 const abortCheck = (signal) => { if (signal?.aborted) throw new DOMException('Review cancelled.', 'AbortError'); };
 
 export function parseGame(pgn) {
-  if (typeof pgn !== 'string' || pgn.length > 250000) throw new Error('This game has an invalid or oversized PGN.');
+  if (typeof pgn !== 'string' || pgn.length > 250000 || new TextEncoder().encode(pgn).byteLength > 250000) throw new Error('This game has an invalid or oversized PGN.');
   const chess = new Chess();
   try { chess.loadPgn(pgn); } catch { throw new Error('The archived game contains an invalid PGN.'); }
   const headers = chess.getHeaders();
@@ -92,6 +92,7 @@ function explain(move, verdict, bestSan, after) {
 
 export async function analyzeGame(pgn, { moveTimeMs = 150, multiPV = 1, smartAnalysis = false, recognizeOpenings = true, onProgress = () => {}, signal, engineFactory = () => new StockfishEngine() } = {}) {
   abortCheck(signal);
+  const startedAt = performance.now();
   const game = parseGame(pgn);
   const opening = recognizeOpenings ? recognizeOpening(game) : null;
   const selectedTime = Math.max(50, Math.min(5000, Math.round(Number(moveTimeMs) || 150)));
@@ -187,6 +188,7 @@ export async function analyzeGame(pgn, { moveTimeMs = 150, multiPV = 1, smartAna
     game, positions, moves, summary, opening,
     analysis: {
       version: ANALYSIS_VERSION, schemaVersion: REVIEW_SCHEMA_VERSION,
+      durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
       smartAnalysis: !!smartAnalysis, scanTimeMs, recheckTimeMs,
       recheckedPlies: [...rechecked.keys()].sort((a, b) => a - b), recheckedMoves,
       recheckedPositionCount: rechecked.size, positionCount: positions.length,

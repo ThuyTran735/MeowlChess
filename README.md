@@ -13,9 +13,9 @@
   </p>
 </div>
 
-**Version 1.8.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.8.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
+**Version 1.9.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.9.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
 
-> New in 1.8.0: retry loading without a page refresh, optional completion alerts, and shareable summary images from the review page and panel.
+> New in 1.9.0: review time estimates, adjustable board size, captured-piece displays, saved-account switching, review durations, private sharing, and optional move sounds.
 
 MeowlChess runs Stockfish or Lozza on your device. No subscription, analysis-service account, or chess-site login is required. Once a game is loaded, its analysis works offline.
 
@@ -54,9 +54,15 @@ MeowlChess is distributed as an unpacked extension. It is not listed in the Chro
 2. Choose a completed game. Adjust the engine and speed in **Settings** if you want, then select **Review game**.
 3. The finished review opens at **move 0** on **Summary**. Switch to **Moves** to explore the game.
 
+**Settings → Board size** changes the board independently of the review controls. Choose a preferred size or select **Auto** to fit it to the window. Your choice is remembered, and larger boards still shrink to fit smaller screens.
+
+**Settings → Move sounds** enables quiet local sounds when you navigate moves, explore variations, or use Play. Sounds are off by default and stay silent in hidden tabs.
+
+Captured pieces appear beside each player and follow the position you are viewing, including variations. **+N** shows a material advantage using pawn 1, knight/bishop 3, rook 5, and queen 9; it is separate from the engine evaluation. Custom starting positions show only captures made during the game.
+
 Move notation uses small filled piece symbols for White and outlined symbols for Black, including promotions. Pawn moves and castling keep their usual notation. Hover over shortened player names in the board header, score cards, game lists, or saved reviews to see the full names.
 
-The game picker remembers your entry separately for Chess.com and Lichess, including when you open Settings from the on-site panel. Edits are remembered when you leave the field or switch websites, and submitting an entry saves it even if the lookup fails. Clear the field to forget that entry.
+The game picker remembers your entry separately for Chess.com and Lichess, including when you open Settings from the on-site panel. Edits are remembered when you leave the field or switch websites, and submitting an entry saves it even if the lookup fails. Clear the field to forget that entry. Successful username lookups also add a shortcut under **Saved accounts**, with up to 10 names per website. Choosing one fills the entry; select the arrow to find its games. **Forget** removes the shortcut and its matching remembered entry. Saved reviews and the separately configured on-site account stay in place.
 
 The game picker closes after selection. Move through the review with the move list, arrow keys, evaluation graph, key moments, or **Play**. Select a move-rating count on **Summary** to jump to that player’s matching moves, then use the matching-move arrows or **Clear** to return to normal navigation. Hover or focus the evaluation graph to preview a move’s evaluation before selecting it. **Engine lines** stays collapsed until you open it.
 
@@ -159,7 +165,7 @@ Both engines are bundled. Switching engines downloads nothing. Lozza is a weaker
 | Deep | 1.5 seconds | 0.15 seconds |
 | Thorough | 3 seconds | 0.15 seconds |
 
-With rechecks enabled, the first pass is capped at 0.15 seconds per nonterminal position. Rechecks search both sides of each selected move before assigning its final label, using the chosen time with a minimum of 0.5 seconds and maximum of 3 seconds per position. At most eight moves are revisited, fewer in short games; shared positions are searched once. Progress separates the two passes, and either can be canceled.
+With rechecks enabled, the first pass is capped at 0.15 seconds per nonterminal position. Rechecks search both sides of each selected move before assigning its final label, using the chosen time with a minimum of 0.5 seconds and maximum of 3 seconds per position. At most eight moves are revisited, fewer in short games; shared positions are searched once. Progress separates the two passes, and either can be canceled. The review page and on-site panel show an approximate time remaining based on actual progress. First-pass estimates exclude the later recheck, whose length is known only after key moves are selected; engine startup and saving have no countdown. After completion, **Reviewed in** shows the actual time spent on local analysis, including engine startup and rechecks, but excluding game retrieval and saving. The duration is retained with saved reviews; older reviews without a recorded duration omit it.
 
 Fast automatically selects one line. For 100 nonterminal positions, its first pass uses about five seconds of engine time, plus startup and processing. Rechecks add time. Turn rechecks off to spend the full chosen time on every nonterminal position.
 
@@ -171,7 +177,7 @@ In **Settings**, enable **Notify me when a review finishes** to request optional
 
 With alerts enabled, an on-site review that has already started can finish after you switch tabs. MeowlChess does not start new game lookups or bot exports while that page is hidden. Closing the page or panel, changing the game, or turning the setting off while it is hidden stops that work.
 
-Use **Share summary** from the main Summary tab or the panel's share icon to preview a **1200 × 1200 PNG** with both study scores, estimated game ratings, phase performance, and move counts. **Copy image** puts it on your clipboard; **Save image** downloads it with a `MeowlChess-` filename. If the browser blocks clipboard access in the panel, use Save image. Images are created locally from the existing review; nothing is uploaded and no new analysis runs.
+Use **Share summary** from the main Summary tab or the panel's share icon to preview a **1200 × 1200 PNG** with both study scores, estimated game ratings, phase performance, and move counts. **Copy image** puts it on your clipboard; **Save image** downloads it with a `MeowlChess-` filename. If the browser blocks clipboard access in the panel, use Save image. **Hide player names** replaces usernames with White and Black in the preview and exported image, and uses the filename `MeowlChess-summary.png`. The choice is remembered for both the main page and panel; the underlying saved game keeps its original names. Images are created locally from the existing review; nothing is uploaded and no new analysis runs.
 
 ## Study the game
 
@@ -301,6 +307,10 @@ npm run test:site-review
 npm run test:site-bot
 npm run test:site-panel
 npm run test:site-panel-extension
+npm run test:board-qol
+npm run test:accounts
+npm run test:sounds
+npm run test:sharing
 ```
 
 The site checks use controlled Chess.com/Lichess pages, local API fixtures, and real engines. They cover automatic review, bot exports and fallback, panel movement and resizing, scrolling, controls, and icons. Other checks cover study/library flows, multi-game imports and promotions, and tutorial behavior. These fixtures do not establish compatibility with every live site layout. Chrome compatibility has not been checked directly. Tests do not change your usual browser installation.

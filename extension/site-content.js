@@ -12,6 +12,7 @@
   let dismissed = null, baseline = null, completedUrl = null, baselineKnown = false, hint = false, hintSince = 0, nextCheck = 0;
   let interval = source === 'chesscom' ? 60000 : 30000;
   let completionRefresh = null, completionAlerts = false;
+  let configurationRead = 0, settingsRevision = 0, alertsRevision = 0;
   let retryButton, retryTimer, manualRetryUntil = 0, manualRetryPending = false;
   const bot = globalThis.__meowlChessBot;
   let panelMover, botForm, botSubmitting = false, botExporting = false, botExportAttempted = false, botAttemptPgn = null, botSavedPgn = null;
@@ -511,17 +512,26 @@
     }
     else { nextCheck = 0; if (botPage() && !botSavedPgn) botExportAttempted = false; inspectPage(); if (dismissed) showLauncher(); else void check(); }
   });
-  window.addEventListener('pagehide', () => stop(true));
-  window.addEventListener('pageshow', event => {
-    if (event.persisted) void chrome.storage.local.get(['siteReviewSettings', 'completionAlerts']).then(values => { completionAlerts = values.completionAlerts === true; configure(values.siteReviewSettings); }).catch(() => {});
-  });
+  function readConfiguration() {
+    const read = ++configurationRead, settingsAtStart = settingsRevision, alertsAtStart = alertsRevision;
+    try {
+      void Promise.resolve(chrome.storage.local.get(['siteReviewSettings', 'completionAlerts'])).then(values => {
+        if (read !== configurationRead) return;
+        if (alertsAtStart === alertsRevision) completionAlerts = values.completionAlerts === true;
+        if (settingsAtStart === settingsRevision) configure(values.siteReviewSettings);
+      }).catch(() => {});
+    } catch { /* An extension reload can invalidate a restored content script. */ }
+  }
+  window.addEventListener('pagehide', () => { configurationRead++; stop(true); });
+  window.addEventListener('pageshow', event => { if (event.persisted) readConfiguration(); });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     if (changes.completionAlerts) {
+      alertsRevision++;
       completionAlerts = changes.completionAlerts.newValue === true;
       if (!completionAlerts && document.hidden) { generation++; clearPanel(); }
     }
-    if (changes.siteReviewSettings) configure(changes.siteReviewSettings.newValue);
+    if (changes.siteReviewSettings) { settingsRevision++; configure(changes.siteReviewSettings.newValue); }
   });
-  void chrome.storage.local.get(['siteReviewSettings', 'completionAlerts']).then(values => { completionAlerts = values.completionAlerts === true; configure(values.siteReviewSettings); }).catch(() => {});
+  readConfiguration();
 })();
