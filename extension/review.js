@@ -11,12 +11,14 @@ import { importPgnCollection, importPgnFiles, PGN_IMPORT_MAX_BYTES } from './lib
 import { createTutorial } from './lib/tutorial.js';
 import { createSupportPrompt } from './lib/support-prompt.js';
 import { createMoveNotation } from './lib/move-notation.js';
+import { estimateGameRatings } from './lib/game-rating.js';
+import { getPhasePerformance } from './lib/game-performance.js';
 import { createSiteReviewSettings } from './lib/site-settings.js';
 import { createReviewLibrary } from './lib/library.js';
 const reviewLibrary = createReviewLibrary({ analysisVersion: ANALYSIS_VERSION });
 
 const $ = (id) => document.getElementById(id);
-const state = { starting: true, reviewTab: 'moves', importGames: [], importing: false, games: [], selected: null, parsed: null, result: null, ply: 0, flipped: false, busy: false, loading: false, controller: null, positionController: null, positionAnalysis: new Map(), selectedLine: null, playTimer: null, study: null, retry: null, selectedSquare: null, focusSquare: 'a8', pendingPromotion: null, hoverLine: null, reviewId: null, bookmarks: [], savedReviews: [], practiceItems: [], bookmarkItems: [], libraryBusy: false, branchAnalysis: new Map(), opening: null, recordMeta: null };
+const state = { starting: true, reviewTab: 'moves', ratingFocus: null, importGames: [], importing: false, games: [], selected: null, parsed: null, result: null, ply: 0, flipped: false, busy: false, loading: false, controller: null, positionController: null, positionAnalysis: new Map(), selectedLine: null, playTimer: null, study: null, retry: null, selectedSquare: null, focusSquare: 'a8', pendingPromotion: null, hoverLine: null, reviewId: null, bookmarks: [], savedReviews: [], practiceItems: [], bookmarkItems: [], libraryBusy: false, branchAnalysis: new Map(), opening: null, recordMeta: null };
 const supportPrompt = createSupportPrompt({ onSaveError: message => { $('save-status').textContent = message; } });
 const tutorial = createTutorial({
   onOpen: () => { stopPlayback(); updateControls(); },
@@ -71,7 +73,32 @@ function setLibraryOpen(open) {
   else if (!open && dialog.open) dialog.close();
   $('library-toggle').setAttribute('aria-expanded', String(dialog.open));
 }
-function keyPlies() { return state.result?.moves.filter(move => ['Brilliant', 'Great', 'Mistake', 'Blunder'].includes(move.label)).map(move => move.ply) || []; }
+function keyPlies() {
+  return state.result?.moves.filter(move => state.ratingFocus
+    ? move.label === state.ratingFocus.label && move.color === state.ratingFocus.color
+    : ['Brilliant', 'Great', 'Mistake', 'Blunder'].includes(move.label)).map(move => move.ply) || [];
+}
+function syncRatingFocus() {
+  const focus = state.result && state.ratingFocus;
+  $('rating-focus').hidden = !focus;
+  if (focus) $('rating-focus-label').textContent = `${focus.color === 'w' ? 'White' : 'Black'} · ${focus.label}`;
+  $('move-list').classList.toggle('has-rating-focus', !!focus);
+  for (const button of $('move-list').querySelectorAll('.move-button')) {
+    const move = state.result?.moves[Number(button.dataset.ply) - 1];
+    button.classList.toggle('rating-match', !!focus && move?.label === focus.label && move?.color === focus.color);
+  }
+  const plies = keyPlies(), index = plies.indexOf(state.ply);
+  $('key-moments-label').textContent = focus ? `${index < 0 ? '—' : index + 1} / ${plies.length} moves` : 'Key moments';
+  for (const [id, direction] of [['previous-key', 'Previous'], ['next-key', 'Next']]) $(id).setAttribute('aria-label', `${direction} ${focus ? 'matching move' : 'key moment'}`);
+}
+function focusRating(label, color) {
+  if (!state.result || state.busy || state.loading || state.libraryBusy || state.importing || state.positionController || state.retry) return;
+  const move = state.result.moves.find(item => item.label === label && item.color === color);
+  if (!move) return;
+  state.ratingFocus = { label, color };
+  goTo(move.ply);
+  $('moves-tab').focus({ preventScroll: true });
+}
 const sample = {
   pgn: '[Event "MeowlChess sample"]\n[Site "Local sample"]\n[Date "2026.01.01"]\n[White "White"]\n[Black "Black"]\n[Result "0-1"]\n\n1. f3 e5 2. g4 Qh4# 0-1',
   white: { username: 'White', result: 'checkmated' }, black: { username: 'Black', result: 'win' },
@@ -143,6 +170,9 @@ function updateControls() {
   $('previous-button').disabled = !state.parsed || positionIndex() === 0 || answersHidden();
   $('next-button').disabled = !state.parsed || positionIndex() >= positionCount() || answersHidden();
   $('last-button').disabled = !state.parsed || positionIndex() >= positionCount() || answersHidden();
+  syncRatingFocus();
+  for (const button of document.querySelectorAll('.rating-count')) button.disabled = unavailable || !!state.retry || button.dataset.count === '0';
+  document.querySelector('.online-games').setAttribute('aria-busy', String(state.loading));
   const keys = keyPlies();
   $('key-moments').hidden = !keys.length;
   $('previous-key').disabled = !keys.some(ply => ply < state.ply);
@@ -306,9 +336,44 @@ function renderMoves() {
     button.addEventListener('click', () => goTo(index + 1)); row.append(button);
   });
 }
+function renderGamePerformance() {
+  const ratings = estimateGameRatings(state.result), phases = getPhasePerformance(state.result);
+  const section = document.createElement('section'); section.className = 'game-performance'; section.setAttribute('aria-label', 'Performance in this game');
+  const table = document.createElement('table'); table.className = 'game-performance-table';
+  const head = table.createTHead().insertRow();
+  for (const text of ['This game', 'White', 'Black']) { const th = document.createElement('th'); th.scope = 'col'; th.textContent = text; head.append(th); }
+  const body = table.createTBody(), ratingRow = body.insertRow(); ratingRow.className = 'game-rating-row';
+  const ratingName = document.createElement('th'); ratingName.scope = 'row'; ratingName.textContent = 'Game rating';
+  const estimate = document.createElement('small'); estimate.textContent = 'estimate'; ratingName.append(estimate); ratingRow.append(ratingName);
+  for (const color of ['w', 'b']) {
+    const item = ratings[color], cell = ratingRow.insertCell();
+    const value = document.createElement('strong'); value.className = 'game-rating-value'; value.dataset.color = color;
+    value.textContent = item.rating === null ? '—' : `≈${item.rating.toLocaleString()}`;
+    value.title = item.rating === null ? item.reason : `Rough estimate from ${item.eligibleMoves} non-book decisions in competitive positions. Not an account rating.`;
+    value.setAttribute('aria-label', `${color === 'w' ? 'White' : 'Black'} game rating: ${item.rating === null ? item.reason : `approximately ${item.rating}`}`);
+    cell.append(value);
+  }
+  for (const phase of phases) {
+    const row = body.insertRow(); row.dataset.phase = phase.id;
+    const name = document.createElement('th'); name.scope = 'row'; name.textContent = phase.name; row.append(name);
+    for (const color of ['w', 'b']) {
+      const item = phase[color], cell = row.insertCell(); cell.dataset.color = color;
+      const description = `${color === 'w' ? 'White' : 'Black'} ${phase.name}: ${item.label ? `${item.label}, ${item.total} moves` : 'no moves in this phase'}`;
+      const value = item.label ? makeBadge(item.label, 'phase-badge') : document.createElement('span');
+      if (!item.label) { value.textContent = '—'; value.className = 'phase-unavailable'; }
+      value.title = description; value.setAttribute('aria-label', description); cell.append(value);
+    }
+  }
+  section.append(table);
+  if (['w', 'b'].some(color => ratings[color].rating === null)) {
+    const note = document.createElement('p'); note.className = 'game-performance-note';
+    note.textContent = 'A game rating needs at least 8 reviewable decisions per player.'; section.append(note);
+  }
+  return section;
+}
 function renderSummary() {
   const summary = $('summary'); summary.replaceChildren(); summary.hidden = !state.result;
-  if (!state.result) setReviewTab('moves');
+  if (!state.result) { state.ratingFocus = null; setReviewTab('moves'); }
   renderChart();
   if (!state.result) return;
   const scores = document.createElement('div'); scores.className = 'score-row';
@@ -318,22 +383,34 @@ function renderSummary() {
     const info = document.createElement('div'); info.className = 'score-info';
     const name = document.createElement('strong'); name.textContent = state.selected[color === 'w' ? 'white' : 'black'].username;
     const caption = document.createElement('small'); caption.textContent = 'Study score · est.';
-    info.append(name, caption); card.append(value, info); scores.append(card);
+    const side = document.createElement('span'); side.className = 'score-side'; side.textContent = color === 'w' ? 'White' : 'Black';
+    info.append(name, caption); card.append(side, value, info); scores.append(card);
   }
-  summary.append(scores);
-  const totalsLabel = document.createElement('p'); totalsLabel.className = 'summary-caption'; totalsLabel.textContent = 'Move ratings · White / Black'; summary.append(totalsLabel);
+  summary.append(scores, renderGamePerformance());
+  const totalsLabel = document.createElement('div'); totalsLabel.className = 'summary-caption classification-heading';
+  for (const text of ['Move ratings', 'White', '', 'Black']) { const heading = document.createElement('span'); heading.textContent = text; totalsLabel.append(heading); }
+  summary.append(totalsLabel);
   const counts = document.createElement('div'); counts.className = 'classification-counts';
   for (const label of MOVE_LABELS) {
     const row = document.createElement('div'); row.className = `classification-count ${label.toLowerCase()}`;
     const name = document.createElement('span'); name.textContent = label;
-    const white = document.createElement('strong'); white.textContent = String(state.result.summary.w.counts[label] || 0); white.setAttribute('aria-label', `White: ${white.textContent}`);
-    const black = document.createElement('strong'); black.textContent = String(state.result.summary.b.counts[label] || 0); black.setAttribute('aria-label', `Black: ${black.textContent}`);
+    const countButton = color => {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'rating-count';
+      const count = state.result.summary[color].counts[label] || 0;
+      button.textContent = String(count); button.dataset.count = String(count); button.dataset.color = color; button.dataset.label = label;
+      button.disabled = !count || state.busy;
+      button.title = `Explore ${color === 'w' ? 'White' : 'Black'} ${label.toLowerCase()} moves`;
+      button.setAttribute('aria-label', `${color === 'w' ? 'White' : 'Black'}: ${count} ${label} moves. Select to explore.`);
+      button.addEventListener('click', () => focusRating(label, color));
+      return button;
+    };
+    const white = countButton('w'), black = countButton('b');
     row.append(name, white, makeBadge(label), black); counts.append(row);
   }
   summary.append(counts);
 }
 function renderChart() {
-  const chart = $('eval-chart'); chart.replaceChildren();
+  const chart = $('eval-chart'); chart.replaceChildren(); $('chart-readout').textContent = 'White’s advantage ↑';
   if (!state.result) { const p = document.createElement('p'); p.textContent = 'Evaluation graph appears after review.'; chart.append(p); return; }
   const evaluations = state.result.positions;
   const ns = 'http://www.w3.org/2000/svg';
@@ -347,7 +424,10 @@ function renderChart() {
   evaluations.forEach((evaluation, ply) => {
     const button = document.createElement('button'); button.type = 'button'; button.dataset.ply = String(ply);
     const move = state.parsed.moves[ply - 1]; const label = `${ply ? `${move.before.split(' ')[5]}${move.color === 'w' ? '.' : '…'} ${move.san}` : 'Starting position'}: ${displayEvaluation(evaluation)}`;
-    button.title = label; button.setAttribute('aria-label', label); button.addEventListener('click', () => goTo(ply)); hit.append(button);
+    button.title = label; button.setAttribute('aria-label', label); button.addEventListener('click', () => goTo(ply));
+    for (const event of ['pointerenter', 'focus']) button.addEventListener(event, () => { $('chart-readout').textContent = label; });
+    for (const event of ['pointerleave', 'blur']) button.addEventListener(event, () => { $('chart-readout').textContent = 'White’s advantage ↑'; });
+    hit.append(button);
   }); chart.append(hit);
 }
 function currentEvaluation() {
@@ -575,12 +655,14 @@ async function review() {
   $('save-status').textContent = '';
   state.busy = true; state.controller = new AbortController(); state.result = null;
   showError(); renderMoves(); renderSummary(); renderBoard();
-  $('progress-area').hidden = false; $('progress').value = 0; $('progress-text').textContent = `Starting ${choice.label}…`; $('review-status').textContent = '';
+  $('progress-area').hidden = false; $('progress').value = 0; $('progress-percent').textContent = '0%'; $('progress-stage').textContent = 'Analyzing game'; $('progress-text').textContent = `Starting ${choice.label}…`; $('review-status').textContent = '';
   try {
     const result = await analyzeGame(selected.pgn, {
       engineFactory: () => createEngine(choice.id), smartAnalysis: analysis.smartAnalysis, moveTimeMs: Number($('depth').value), multiPV: Number($('multipv').value), signal: state.controller.signal,
       onProgress: ({ completed, total, phase, phaseCompleted, phaseTotal }) => {
         $('progress').value = total ? completed / total * 100 : 0;
+        $('progress-percent').textContent = `${Math.round($('progress').value)}%`;
+        $('progress-stage').textContent = phase === 'recheck' ? 'Rechecking key moves' : 'Analyzing game';
         $('progress-text').textContent = `${phase === 'recheck' ? `Rechecking key positions ${phaseCompleted} of ${phaseTotal}` : `First pass ${phaseCompleted ?? completed} of ${phaseTotal ?? total}`} · ${Math.floor((performance.now() - startedAt) / 1000)}s elapsed`;
       }
     });
@@ -895,6 +977,7 @@ $('username-form').addEventListener('submit', event => { event.preventDefault();
 $('demo-button').addEventListener('click', () => selectGame(sample));
 $('analyze-button').addEventListener('click', review);
 $('cancel-button').addEventListener('click', () => state.controller?.abort());
+$('clear-rating-focus').addEventListener('click', () => { state.ratingFocus = null; updateControls(); $('moves-tab').focus({ preventScroll: true }); });
 $('flip-button').addEventListener('click', () => { state.flipped = !state.flipped; renderBoard(); });
 $('first-button').addEventListener('click', () => navigatePosition(0));
 $('previous-button').addEventListener('click', () => navigatePosition(positionIndex() - 1));

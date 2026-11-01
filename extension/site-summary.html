@@ -13,6 +13,11 @@
   <p id="summary-game-detail" class="game-detail"></p>
 
   <section id="summary-progress-area" aria-label="Review progress">
+    <ol class="review-steps" aria-label="Review stages">
+      <li data-step="finding-game" class="is-current" aria-current="step"><span class="step-dot" aria-hidden="true">1</span><span>Find game</span></li>
+      <li data-step="analyzing"><span class="step-dot" aria-hidden="true">2</span><span>Analyze</span></li>
+      <li data-step="saving"><span class="step-dot" aria-hidden="true">3</span><span>Save</span></li>
+    </ol>
     <div class="progress-heading"><span id="summary-progress-label">Checking this completed game…</span><span id="summary-percent" hidden></span></div>
     <progress id="summary-progress" max="100" aria-label="Finding game"></progress>
     <p id="summary-progress-detail" role="status"></p>
@@ -22,6 +27,18 @@
   <section id="summary-result" aria-label="Completed game summary" hidden>
     <div id="summary-scores" class="scores"></div>
     <p class="scores-caption">Estimated study scores</p>
+    <table class="game-performance-table" aria-label="Estimated game performance by player">
+      <thead><tr><th scope="col">This game</th><th scope="col">White</th><th scope="col">Black</th></tr></thead>
+      <tbody>
+        <tr class="game-rating-row"><th scope="row">Game rating</th><td id="summary-rating-w">—</td><td id="summary-rating-b">—</td></tr>
+      </tbody>
+      <tbody id="summary-phase-performance"></tbody>
+    </table>
+    <details class="estimate-note">
+      <summary>About these estimates</summary>
+      <p>Game rating is a rough, uncalibrated estimate of this game's moves, not an account Elo. It needs at least eight non-book decisions with a choice of moves in competitive positions.</p>
+      <p>Opening covers up to the first 10 moves by each side from the normal starting position. Endgame begins when little non-pawn material remains; the rest is Middlegame. Custom starting positions begin in Middlegame or Endgame. Icons summarize move quality in each phase.</p>
+    </details>
     <div class="counts-heading"><span>Move ratings</span><span>White</span><span></span><span>Black</span></div>
     <div id="summary-counts" class="counts"></div>
     <p id="summary-engine" class="engine-caption"></p>
@@ -30,7 +47,7 @@
   <p id="summary-status" class="summary-status" role="status"></p>
   <footer>
     <div class="footer-actions">
-      <button id="summary-open-review" type="button" class="primary-button" disabled hidden>Open full review</button>
+      <button id="summary-open-review" type="button" class="primary-button" disabled hidden><span id="summary-open-label">Open full review</span><span class="button-arrow" aria-hidden="true">↗</span></button>
       <button id="summary-close" type="button" class="quiet-button" hidden>Close panel</button>
     </div>
     <p class="independent">MeowlChess · independent, local analysis</p>

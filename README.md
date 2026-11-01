@@ -5,7 +5,7 @@
   <p>Review completed games from Chess.com, Lichess, or a PGN file in Brave, Chrome, and Edge.</p>
   <p><sub>Meowl's cat likeness comes from <a href="https://weibo.com/melonpi">Melonpi Cat (瓜皮)</a>. <a href="THIRD_PARTY_NOTICES.md#meowl--melonpi-cat">Artwork credits</a></sub></p>
   <p>
-    <a href="https://github.com/ThuyTran735/MeowlChess/releases/latest"><strong>Download</strong></a> ·
+    <a href="https://github.com/ThuyTran735/MeowlChess/releases/latest/download/meowlchess.zip"><strong>Download ZIP</strong></a> ·
     <a href="#install">Install</a> ·
     <a href="#your-first-review">Get started</a> ·
     <a href="PRIVACY.md">Privacy</a> ·
@@ -13,9 +13,9 @@
   </p>
 </div>
 
-**Version 1.6.4** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.6.4) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
+**Version 1.7.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.7.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
 
-> New in 1.6.4: finished Chess.com games trigger a fresh archive check, with faster retries while the result is being published.
+> New in 1.7.0: a more interactive review screen, per-game rating estimates, and Opening / Middlegame / Endgame performance icons for both players.
 
 MeowlChess runs Stockfish or Lozza on your device. No subscription, analysis-service account, or chess-site login is required. Once a game is loaded, its analysis works offline.
 
@@ -32,7 +32,7 @@ MeowlChess is independent of Chess.com and Lichess. Use it **only after a game i
 
 ## Install
 
-1. Open the [latest release](https://github.com/ThuyTran735/MeowlChess/releases/latest), download **`meowlchess.zip`**, and extract it to a folder you will keep.
+1. Download [**meowlchess.zip**](https://github.com/ThuyTran735/MeowlChess/releases/latest/download/meowlchess.zip) and extract it to a folder you will keep. See the [latest release](https://github.com/ThuyTran735/MeowlChess/releases/latest) for release notes.
 2. Open your browser's extensions page:
 
    | Browser | Address |
@@ -58,7 +58,7 @@ Move notation uses small filled piece symbols for White and outlined symbols for
 
 The game picker remembers your entry separately for Chess.com and Lichess, including when you open Settings from the on-site panel. Edits are remembered when you leave the field or switch websites, and submitting an entry saves it even if the lookup fails. Clear the field to forget that entry.
 
-The game picker closes after selection. Move through the review with the move list, arrow keys, evaluation graph, key moments, or **Play**. **Engine lines** stays collapsed until you open it.
+The game picker closes after selection. Move through the review with the move list, arrow keys, evaluation graph, key moments, or **Play**. Select a move-rating count on **Summary** to jump to that player’s matching moves, then use the matching-move arrows or **Clear** to return to normal navigation. Hover or focus the evaluation graph to preview a move’s evaluation before selecting it. **Engine lines** stays collapsed until you open it.
 
 On a normal launch, an optional **Support MeowlChess** popup appears before the tutorial. **Star on GitHub** opens the repository in a new tab; you can star it there or choose **Skip** (or press Escape) to continue. Its **Never show again** checkbox is separate from the tutorial preference. Opening a saved review from the on-site panel or going directly to its settings bypasses both prompts.
 
@@ -193,6 +193,27 @@ Use a saved game's **×** button to delete its stored PGN, analysis, and bookmar
 
 Evaluations, move labels, and study scores are **MeowlChess estimates**. They do not reproduce Chess.com's proprietary accuracy or classification algorithms. A different engine or longer search can change the result. The graph and displayed evaluations use White's perspective; move counts are separated by player.
 
+The full review and on-site summary also show **Game rating** for each player and **Opening / Middlegame / Endgame** icons. The rating describes this game only, with an approximate value rounded to 50 points. Phase icons summarize each player's moves in that part of the game. Saved reviews gain these summaries without another engine run.
+
+<details>
+<summary><strong>Game-rating estimates and phase icons</strong></summary>
+
+Game rating is a rough, **uncalibrated MeowlChess study heuristic**, not an account rating, official Elo, or Chess.com's formula. The concept is similar to [single-game performance in Chess.com's Game Review](https://support.chess.com/en/articles/10773754-how-is-game-rating-calculated-in-game-review), but the numbers need not match. Engine choice and search time can affect the result.
+
+Each player needs at least **8 eligible decisions**. Known Book moves, forced moves with fewer than two legal choices, positions already showing mate, and positions with an estimated expected score outside 10–90% are excluded. A move that loses a competitive position or allows mate still counts. An unavailable estimate displays **—**. Custom starting positions are supported when enough decisions are present; the estimate then covers only the supplied play.
+
+For eligible moves, let `m` be mean expected-score loss (0 to 1). The estimate is `2800 × exp(-20 × m)`, clamped to 300–2800 and rounded to the nearest 50. These constants are project design choices, not a fitted prediction of human Elo. Account ratings and website names are not inputs. Existing study scores and individual move labels are unchanged.
+
+Phases use the position **before** each move:
+
+- **Opening:** the first 20 plies (10 moves per side) from the standard starting position, unless the endgame threshold is reached sooner. Custom starting positions are not assigned an opening phase.
+- **Endgame:** total remaining non-pawn material reaches 6 phase units or fewer, counting each knight/bishop as 1, rook as 2, and queen as 4 across both players. The starting position has 24 units. Once reached, the endgame continues even after promotion.
+- **Middlegame:** the moves between those phases. Games ending early may have no middlegame or endgame; missing phases show **—**.
+
+Phase grades use mean non-Book expected-score loss with the same Excellent / Good / Inaccuracy / Mistake / Blunder thresholds as individual moves. **Best** requires all scored moves to be engine-preferred and less than 1% mean loss. **Brilliant** or **Great** requires an actual move of that classification, less than 1% mean loss, and no move with 4% or greater loss or an error label. A phase containing only Book moves shows the Book icon. Hover an icon for its player, grade, and move count.
+
+</details>
+
 <details>
 <summary><strong>Move labels and score calculation</strong></summary>
 
@@ -231,7 +252,7 @@ Analysis stays on your device. MeowlChess has no analytics, advertising, remote 
 
 Public game retrieval contacts Chess.com or Lichess. Optional page access is requested only when you enable on-site reviews. Preferences use `chrome.storage.local`; the study library uses local IndexedDB. Browser host permissions apply to an origin even when a manifest entry contains a path. See the [privacy notice](PRIVACY.md) for permissions, retention, and deletion details.
 
-Use only completed games and follow [Chess.com's Fair Play rules](https://www.chess.com/legal/fair-play) and [Lichess fair play](https://lichess.org/page/fair-play). API references: [Chess.com Published-Data API](https://www.chess.com/news/view/published-data-api), [Lichess user games](https://lichess.org/api#tag/Games/operation/apiGamesUser), and [Lichess game export](https://lichess.org/api#tag/Games/operation/gamePgn).
+Use only completed games and follow [Chess.com's Fair Play rules](https://www.chess.com/legal/fair-play) and [Lichess fair play](https://lichess.org/page/fair-play). API references: [Chess.com Published-Data API](https://www.chess.com/news/view/published-data-api) and [Lichess API documentation](https://lichess.org/api) (Games → Export games of a user / Export one game).
 
 ## Development
 
@@ -255,6 +276,8 @@ Browser checks use Playwright and disposable profiles. Set `CHROMIUM_PATH` to a 
 npm run test:browser
 npm run test:extension
 npm run test:features
+npm run test:ui
+npm run test:performance
 npm run test:imports
 npm run test:tutorial
 npm run test:notation
@@ -281,4 +304,4 @@ Found a problem or have an idea? [Open an issue](https://github.com/ThuyTran735/
 
 MeowlChess code is [GPL-3.0-or-later](LICENSE). Stockfish is GPL-licensed, chess.js is BSD-2-Clause, Lozza has its own permissive license, and the Lichess opening dataset is CC0. Keep the included notices and engine source materials with redistributions.
 
-The Chess.com Neo pieces and move-icon outlines are third-party artwork, excluded from MeowlChess's code license. Their inclusion does not assert a license grant or affiliation with Chess.com. The project icon uses a user-supplied adaptation of Meowl, whose cat likeness comes from **Melonpi Cat (瓜皮 / Guapi)**. Cat/photo credit: [瓜皮的id酱 (@melonpi on Weibo)](https://weibo.com/melonpi). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for sources and license details.
+The Chess.com Neo pieces and move-icon outlines are third-party artwork, excluded from MeowlChess's code license. Their inclusion does not assert a license grant or affiliation with Chess.com. The project icon features Meowl, whose cat likeness comes from **Melonpi Cat (瓜皮 / Guapi)**. Cat/photo credit: [瓜皮的id酱 (@melonpi on Weibo)](https://weibo.com/melonpi). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for sources and license details.

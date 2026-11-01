@@ -83,7 +83,7 @@ The cat likeness behind the Meowl meme is **Melonpi Cat (瓜皮 / Guapi)**. Cred
 - Cat/photo account: [Melonpi Cat — 瓜皮的id酱](https://weibo.com/melonpi).
 - Original Meowl post: [zhumaokele’s cat/owl images on Weibo, April 28, 2013](https://weibo.com/1505044005/zuePUyE2D), documented in [Know Your Meme’s Meowl history](https://knowyourmeme.com/memes/meowl).
 
-MeowlChess uses a user-supplied chess-themed adaptation of Meowl. The supplied PNG is retained unchanged in `extension/icons/logo.png`; the browser icons are resized copies. MeowlChess does not claim authorship or ownership of Melonpi’s photographs or the underlying Meowl meme. These credits do not grant a license to the underlying third-party artwork.
+The MeowlChess icon is a chess-themed adaptation of Meowl, featuring Melonpi Cat. The artwork is stored in `extension/icons/logo.png`; the browser icons are resized copies. MeowlChess does not claim authorship or ownership of Melonpi’s photographs or the underlying Meowl meme. These credits do not grant a license to the underlying third-party artwork.
 
 ## Lichess opening names
 

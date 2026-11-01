@@ -4,6 +4,8 @@ import { reviewIdForGame } from './lib/library.js';
 import { parseCompletedPgn, safeOriginalGameUrl } from './lib/pgn.js';
 import { isCompletedGame } from './lib/archive.js';
 import { installFrameDrag } from './site-frame-drag.js';
+import { estimateGameRatings } from './lib/game-rating.js';
+import { getPhasePerformance } from './lib/game-performance.js';
 
 const $ = id => document.getElementById(id);
 const ORIGINS = { chesscom: ['https://www.chess.com', 'https://chess.com'], lichess: ['https://lichess.org'] };
@@ -45,6 +47,14 @@ function showStage(stage, label, detail = '') {
   const main = document.querySelector('main');
   main.dataset.stage = stage;
   main.setAttribute('aria-busy', 'true');
+  const stages = ['finding-game', 'analyzing', 'saving'];
+  for (const step of document.querySelectorAll('.review-steps [data-step]')) {
+    const current = step.dataset.step === stage;
+    step.classList.toggle('is-current', current);
+    step.classList.toggle('is-complete', stages.indexOf(step.dataset.step) < stages.indexOf(stage));
+    if (current) step.setAttribute('aria-current', 'step');
+    else step.removeAttribute('aria-current');
+  }
   $('summary-title').textContent = { 'finding-game': 'Finding game', analyzing: 'Analyzing', saving: 'Saving' }[stage];
   $('summary-progress-area').hidden = false;
   $('summary-progress-label').textContent = label;
@@ -114,6 +124,46 @@ function showGame(game, parsed) {
   const date = new Date(game.end_time * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   $('summary-game-detail').textContent = `${result} · ${date}`;
 }
+function renderPerformance(result) {
+  const ratings = estimateGameRatings(result);
+  for (const color of ['w', 'b']) {
+    const estimate = ratings[color], cell = $(`summary-rating-${color}`);
+    const side = color === 'w' ? 'White' : 'Black';
+    const available = Number.isFinite(estimate.rating);
+    cell.textContent = available ? `≈${estimate.rating.toLocaleString()}` : '—';
+    cell.classList.toggle('unavailable', !available);
+    const description = available
+      ? `${side} game rating: approximately ${estimate.rating.toLocaleString()}, from ${estimate.eligibleMoves} eligible moves. A rough estimate for this game, not an account rating.`
+      : `${side} game rating unavailable: ${estimate.reason || 'Not enough moves'}.`;
+    cell.title = description;
+    cell.setAttribute('aria-label', description);
+  }
+  const body = $('summary-phase-performance');
+  body.replaceChildren();
+  for (const phase of getPhasePerformance(result)) {
+    const row = document.createElement('tr'); row.dataset.phase = phase.id;
+    const name = document.createElement('th'); name.scope = 'row'; name.textContent = phase.name; row.append(name);
+    for (const color of ['w', 'b']) {
+      const cell = document.createElement('td'), performance = phase[color];
+      const side = color === 'w' ? 'White' : 'Black';
+      const description = performance.label
+        ? `${side} ${phase.name.toLowerCase()}: ${performance.label}, ${performance.total} ${performance.total === 1 ? 'move' : 'moves'} in this phase.`
+        : `${side} ${phase.name.toLowerCase()}: ${performance.total ? 'No rated moves in this phase' : 'No moves in this phase'}.`;
+      cell.title = description;
+      cell.setAttribute('aria-label', description);
+      if (performance.label) {
+        const icon = document.createElement('img');
+        icon.src = `move-icons/${performance.label.toLowerCase()}.svg`;
+        icon.alt = ''; icon.draggable = false;
+        cell.append(icon);
+      } else {
+        cell.textContent = '—'; cell.className = 'unavailable';
+      }
+      row.append(cell);
+    }
+    body.append(row);
+  }
+}
 function renderSummary(result, analysis, reused = false) {
   assertActive();
   finishStage('summary');
@@ -122,17 +172,21 @@ function renderSummary(result, analysis, reused = false) {
   $('summary-scores').replaceChildren(); $('summary-counts').replaceChildren();
   for (const color of ['w', 'b']) {
     const card = document.createElement('div'); card.className = `score-card score-${color}`;
+    const side = document.createElement('span'); side.className = 'score-side'; side.textContent = color === 'w' ? 'White' : 'Black';
     const value = document.createElement('span'); value.className = 'score-value';
     value.textContent = result.summary[color].accuracy?.toFixed(1) ?? '—';
     const player = document.createElement('span'); player.className = 'score-player'; player.textContent = payload.game[color === 'w' ? 'white' : 'black'].username; player.title = player.textContent;
-    card.append(value, player); $('summary-scores').append(card);
+    card.append(side, value, player); $('summary-scores').append(card);
   }
+  renderPerformance(result);
   for (const label of MOVE_LABELS) {
     const row = document.createElement('div'); row.className = `count-row ${label.toLowerCase()}`;
     const name = document.createElement('span'); name.textContent = label;
     const white = document.createElement('strong'); white.textContent = String(result.summary.w.counts[label] || 0); white.setAttribute('aria-label', `White: ${white.textContent}`);
     const black = document.createElement('strong'); black.textContent = String(result.summary.b.counts[label] || 0); black.setAttribute('aria-label', `Black: ${black.textContent}`);
     const icon = document.createElement('img'); icon.src = `move-icons/${label.toLowerCase()}.svg`; icon.alt = ''; icon.draggable = false;
+    white.classList.toggle('zero', !result.summary.w.counts[label]);
+    black.classList.toggle('zero', !result.summary.b.counts[label]);
     row.append(name, white, icon, black); $('summary-counts').append(row);
   }
   $('summary-engine').textContent = `${analysis.engineName} · ${analysis.moveTimeMs / 1000}s per position${analysis.smartAnalysis ? ' · key mistakes rechecked' : ''}${reused ? ' · saved review' : ''}`;
@@ -231,11 +285,17 @@ $('summary-close').addEventListener('click', () => sendParent('meowl:site-frame-
 $('summary-open-review').addEventListener('click', async () => {
   if (!savedId || stopped) return;
   $('summary-open-review').disabled = true;
+  $('summary-open-label').textContent = 'Opening…';
+  $('summary-open-review').setAttribute('aria-busy', 'true');
   try {
     const result = await chrome.runtime.sendMessage({ type: 'meowl:site-open-review', token, reviewId: savedId });
     if (result?.status !== 'opened') throw new Error(result?.status === 'expired' ? 'This panel has expired. Reload this page to open the saved review.' : result?.message || 'The full review could not be opened. Reload this page to try again.');
   } catch (error) { status(error.message || 'The full review could not be opened.', true); }
-  finally { $('summary-open-review').disabled = !savedId || stopped; }
+  finally {
+    $('summary-open-review').disabled = !savedId || stopped;
+    $('summary-open-label').textContent = 'Open full review';
+    $('summary-open-review').removeAttribute('aria-busy');
+  }
 });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes.siteReviewSettings || !source) return;
