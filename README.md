@@ -13,9 +13,9 @@
   </p>
 </div>
 
-**Version 1.9.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.9.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
+**Version 1.10.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.10.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
 
-> New in 1.9.0: review time estimates, adjustable board size, captured-piece displays, saved-account switching, review durations, private sharing, and optional move sounds.
+> New in 1.10.0: five local Meowl coaches, move-by-move commentary, animated companions, optional real cat sounds with volume control, and improved completed-game retrieval.
 
 MeowlChess runs Stockfish or Lozza on your device. No subscription, analysis-service account, or chess-site login is required. Once a game is loaded, its analysis works offline.
 
@@ -25,6 +25,7 @@ MeowlChess runs Stockfish or Lozza on your device. No subscription, analysis-ser
 | Get a summary on the game page | Opt in to automatic reviews on Chess.com or Lichess. |
 | Explore better moves | Follow engine arrows, play legal variations, or search a position more deeply. |
 | Practice your mistakes | Try a move again with hints hidden, then check your answer. |
+| Ask a local coach | Choose a personality and ask questions about the completed review. |
 | Keep a study library | Save completed reviews and bookmark positions locally. |
 | Choose your engine and pace | Use Stockfish 18 lite or Lozza 9 with five review speeds. |
 
@@ -81,7 +82,7 @@ The three-step tutorial points out the main controls with spotlights and arrows.
 | **Other sites** | Import a completed standard-chess game from `.pgn` or `.txt`, or paste its PGN. |
 | **Saved reviews / Sample** | Reopen local analysis or try the demo without a network request. |
 
-Recent-game lists contain up to **20 completed games**. On a game page, exact-game lookup is separate from that limit: Chess.com searches the configured player's monthly archives, including older months, and Lichess uses the game's public export. The configured username must be one of the players. Public archives can take time to update after a game ends.
+Recent-game lists contain up to **20 completed games**. On a game page, exact-game lookup is separate from that limit: Chess.com searches the configured player's monthly archives, including older months, and Lichess uses the game's public export. The configured username must be one of the players. If a just-finished Chess.com game has not reached the public archive, MeowlChess can read its completed PGN through the site's normal **Share → PGN** dialog.
 
 <details>
 <summary><strong>PGN imports and limits</strong></summary>
@@ -102,7 +103,7 @@ The panel shows each step clearly:
 
 **Finding game → Analyzing → Saving → Summary**
 
-If loading is waiting or fails, select **Retry loading** to check the current game again without refreshing the page. The button shows when another attempt is available; repeated clicks share the current request and respect the site's retry delay. An unfinished or unavailable game still waits for a confirmed completed record. Failed or stopped summary frames also offer Retry loading.
+If loading is waiting or fails, select **Retry loading** to check the current game again without refreshing the page. The button shows when another attempt is available; repeated clicks share the current request and respect the site's retry delay. An unfinished game cannot start a review; an unavailable completed game keeps waiting until its archive record or matching completed export is available. Failed or stopped summary frames also offer Retry loading.
 
 A current saved review goes straight to Summary without another engine run or saving stage. New reviews use your saved engine settings, or **Fast / one line** until you save preferences. **Open full review** opens the saved game at move 0 on Summary.
 
@@ -135,11 +136,11 @@ Bot reviews are saved as PGN imports. Their result comes from the export and can
 <details>
 <summary><strong>Retrieval, timing, and page access</strong></summary>
 
-On Chess.com's multiplayer play screen, MeowlChess watches for a finished-game notice and a new archive entry. On other supported pages, it can show the latest completed game. A visible result notice only opens the waiting panel: a matching completed archive game is still required before analysis starts. The panel contains no board, engine lines, or move suggestions.
+On Chess.com's multiplayer play screen, MeowlChess watches for a finished-game notice and a new archive entry. On other supported pages, it can show the latest completed game. When the exact finished game's archive entry is delayed, it can open the site's normal **Share → PGN** dialog and read that game's completed export locally. The export must link to the current game and include the configured player, legal standard-chess moves, and a final result. It closes only the export dialog it opened. The panel contains no board, engine lines, or move suggestions.
 
-Public archive delays mean a review may not start at the last move. When Chess.com shows a finished-game notice, MeowlChess refreshes that lookup immediately and retries every **15 seconds for up to two minutes** while waiting for the completed game. Normal checks use a **60-second interval on Chess.com** and **30 seconds on Lichess**; connection errors keep the normal retry delay. Cached games and temporary review handles use browser session storage, capped at **700 KB** and cleared when the browser restarts. This lets an open summary survive an extension background restart.
+When Chess.com shows a finished-game notice, MeowlChess refreshes the lookup immediately. If the completed PGN is unavailable, it retries the archive every **15 seconds for up to two minutes**. Normal checks use a **60-second interval on Chess.com** and **30 seconds on Lichess**; connection errors keep the normal retry delay. Cached games and temporary review handles use browser session storage, capped at **700 KB** and cleared when the browser restarts. This lets an open summary survive an extension background restart.
 
-The page helper reads the URL, visible game-end notices, and completed bot-game PGN exports. It does not read live board positions or make moves. Public API requests omit login cookies and private Lichess player keys. Disabling a site removes its panel and prevents future helper injection.
+The page helper reads the URL, visible game-end notices, and completed-game PGN exports from the site's normal Share dialog. It does not read live board positions, make moves, or use private game APIs. Public API requests omit login cookies and private Lichess player keys. Disabling a site removes its panel and prevents future helper injection.
 
 </details>
 
@@ -175,7 +176,7 @@ Fast automatically selects one line. For 100 nonterminal positions, its first pa
 
 In **Settings**, enable **Notify me when a review finishes** to request optional browser notification permission. It is off by default. A newly completed, successfully saved review can show a quiet desktop alert when you are away from its tab. Select the alert to open that exact saved game at move 0 on Summary. Reopening saved analysis, canceled reviews, and failed saves do not send an alert. Browser or operating-system notification settings may suppress alerts.
 
-With alerts enabled, an on-site review that has already started can finish after you switch tabs. MeowlChess does not start new game lookups or bot exports while that page is hidden. Closing the page or panel, changing the game, or turning the setting off while it is hidden stops that work.
+With alerts enabled, an on-site review that has already started can finish after you switch tabs. MeowlChess does not start new game lookups or page exports while that page is hidden. Closing the page or panel, changing the game, or turning the setting off while it is hidden stops that work.
 
 Use **Share summary** from the main Summary tab or the panel's share icon to preview a **1200 × 1200 PNG** with both study scores, estimated game ratings, phase performance, and move counts. **Copy image** puts it on your clipboard; **Save image** downloads it with a `MeowlChess-` filename. If the browser blocks clipboard access in the panel, use Save image. **Hide player names** replaces usernames with White and Black in the preview and exported image, and uses the filename `MeowlChess-summary.png`. The choice is remembered for both the main page and panel; the underlying saved game keeps its original names. Images are created locally from the existing review; nothing is uploaded and no new analysis runs.
 
@@ -189,6 +190,32 @@ Use **Share summary** from the main Summary tab or the panel's share icon to pre
 The Moves tab shows the best engine arrow by default; Summary leaves the board clear. Hover over or keyboard-focus another line to preview it, or enable **All engine moves**: green is first, blue second, orange third. Knight arrows turn at a right angle. Arrows always describe the displayed position and side to move; terminal positions have no continuation.
 
 **Face my side** uses your entered or remembered username to put your pieces at the bottom. You can disable it or flip the board manually. Retry mode faces the player whose move is being retried. Display choices and playback speed are saved locally, and motion respects reduced-motion preferences.
+
+## Ask your coach
+
+**Explain moves automatically** is on by default. As you step through a completed review in Moves or Coach, one short comment follows the selected move without filling your chat. It follows **Focus on**, pauses during practice or variations, and skips past positions when you scrub quickly. Turn it off in the Coach tab; animation and sound preferences remain separate.
+
+After reviewing a game, open **Coach** beside Summary and Moves. Choose from five Meowl personalities: encouraging **Meowl**, precise **Professor Meowl**, playful **Captain Paws**, patient **Mellow Meowl**, or tactics-focused **Scout Meowl**. Your selected coach appears beside the board on larger screens and below it on smaller screens, with small portraits in chat replies. The two newer personalities share the existing Meowl artwork and have their own colors, wording, and gesture timing. All five use the same saved analysis; personality changes how an answer is phrased, not its chess assessment.
+
+Choose **White**, **Black**, or **Both** to set the side you want to discuss. Ask a question or start with a suggested prompt:
+
+- “What was my biggest mistake?”
+- “Why was this move a blunder?”
+- “What was better on 12...?”
+- “What opening was this?”
+- “What should I practice?”
+
+Ask **“Show Brilliant and Great moves”**, **“How many brilliants did White play?”**, or **“Show Black's mistakes”** to search the whole reviewed game. The coach recognizes every move rating, shows the actual matching labels and counts, and links to those moves. Asking why a specific move received its rating still explains that exact move. It reports the saved review's labels without inventing new awards.
+
+The coach follows the position displayed on the board. Move links in its answers take you to that moment while keeping the conversation open. On a game website, **Ask coach** opens that saved game's Coach tab in the full review.
+
+Coaching is free and entirely local. It uses built-in question matching, legal engine continuations, and the completed review; it is not an open-ended AI model. Unrecognized questions get suggested alternatives, and explanations stay within the available evidence. Re-reviewing more deeply can change its assessment. Coach answers are unavailable during retry practice and while exploring an unsaved variation.
+
+Coaches animate the same 2D drawing with mouth movements, blinks, wing gestures, and personality-specific timing. **Brilliant** moves get a hop and wing-flapping celebration; **Great** and **Best** moves get a smaller celebration, while missed opportunities get a thoughtful reaction. **Focus on** controls whose moves get these reactions. Tap or keyboard-activate your coach to get a friendly wing wave. Between comments, the companion occasionally blinks and takes a small breath. **Coach animations** can be turned off, and reduced-motion settings keep reactions still. Move commentary stops on Summary; reactions pause during practice attempts, variations, loading, and hidden tabs.
+
+**Meow volume** is always visible in Coach and remembers your chosen level. **Meow sounds** stays off by default; enable it to hear reactions or use **Preview**. Coaches use 25 real cat recordings: 19 meows, five chirps, and one purring chirrup, played at their original pitch and speed. The clips rotate between comments, celebrations, curious reactions, and greetings without immediate repeats. Recordings are bundled for offline playback; idle blinks are silent. See the [recording credits](THIRD_PARTY_NOTICES.md#recorded-coach-meows).
+
+Coach, side, automatic-commentary, animation, sound, and volume preferences are remembered on this device. Chats keep the most recent 12 question-and-answer pairs in the open tab, and clear when you switch games, re-review, reload, or select **Clear chat**. Messages are not saved to your library or sent to a service.
 
 ## Saved reviews and practice
 

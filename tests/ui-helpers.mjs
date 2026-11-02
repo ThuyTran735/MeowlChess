@@ -50,7 +50,7 @@ export async function openSummary(page) {
 // Close only the generated test profile if Windows leaves a crash reporter holding its pipe.
 export async function closeTestContext(context, profile, prefix) {
   const temporaryRoot = resolve(tmpdir());
-  const safeProfile = typeof profile === 'string' && /^meowlchess-[a-z-]+-$/.test(prefix) && dirname(profile) === temporaryRoot && basename(profile).startsWith(prefix);
+  const safeProfile = typeof profile === 'string' && /^MeowlChess-[a-z-]+-$/i.test(prefix) && dirname(profile) === temporaryRoot && basename(profile).startsWith(prefix);
   if (!context) return;
   const closing = context.close();
   let timer;

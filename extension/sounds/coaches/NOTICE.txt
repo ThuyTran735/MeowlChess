@@ -1,0 +1,49 @@
+MeowlChess recorded cat sounds
+
+All source recordings below are released under CC0 1.0 Universal:
+https://creativecommons.org/publicdomain/zero/1.0/
+
+MeowlChess-meow-01.wav
+"cat meow" by tuberatanka
+https://freesound.org/people/tuberatanka/sounds/110011/
+
+MeowlChess-meow-02.wav
+"meow-1.wav" by nathan-osman
+https://freesound.org/people/nathan-osman/sounds/686775/
+
+MeowlChess-meow-03.wav through MeowlChess-meow-07.wav
+"Cat meowing x5" by peridactyloptrix
+https://freesound.org/people/peridactyloptrix/sounds/214759/
+
+MeowlChess-meow-08.wav through MeowlChess-meow-15.wav
+"cat meowing" by nekoninja; cat: Sushi
+https://freesound.org/people/nekoninja/sounds/414042/
+
+MeowlChess-meow-16.wav through MeowlChess-meow-18.wav
+"Cat meows for food" by Sadiquecat; cat: Petit chat
+https://freesound.org/people/Sadiquecat/sounds/706278/
+
+MeowlChess-meow-19.wav through MeowlChess-meow-22.wav
+"Autumn_Mehs1.wav" by Keskaowl; cat: Autumn
+https://freesound.org/people/Keskaowl/sounds/646955/
+
+MeowlChess-meow-23.wav
+"Cat Meowing" by lextrack
+https://freesound.org/people/lextrack/sounds/333916/
+
+MeowlChess-meow-24.wav
+"cat chirp.wav" by dreamstobecome; cat: Queen Felicia
+https://freesound.org/people/dreamstobecome/sounds/451250/
+
+MeowlChess-meow-25.wav
+"catpurrchirp.m4a" by dreamstobecome; cat: Queen Felicia
+https://freesound.org/people/dreamstobecome/sounds/535318/
+
+Source pages and CC0 declarations checked 2026-11-01. Audio was obtained
+from the public high-quality MP3 previews linked by those source pages.
+Changes: excerpted individual calls, mono 32 kHz PCM conversion,
+DC removal, peak normalization, and 8ms edge fades. Very short chirps
+include trailing silence padding. Original pitch and speed are unchanged.
+provenance.json records exact excerpts and hashes.
+
+Credits do not imply endorsement of MeowlChess by the recordists.

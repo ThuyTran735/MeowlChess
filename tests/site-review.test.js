@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSiteReviewBroker, createSiteReviewLibraryBridge, normalizeSiteSettings, normalizeSiteAnalysis, providerForUrl, gameUrlForPage, completedSiteGames } from '../extension/lib/site-review.js';
+import { createSiteReviewBroker, createSiteReviewLibraryBridge, normalizeSiteSettings, normalizeSiteAnalysis, providerForUrl, gameUrlForPage, completedSiteGames, completedPageGame } from '../extension/lib/site-review.js';
 import { createReviewLibrary, reviewIdForGame } from '../extension/lib/library.js';
 import { ANALYSIS_VERSION, analyzeGame } from '../extension/lib/review.js';
 
@@ -51,6 +51,160 @@ const finishedResult = () => analyzeGame(completedPgn, { smartAnalysis: true, mo
   async init() {}, dispose() {},
   async evaluate() { return { cp: 0, mate: null, bestMove: null, pv: [], candidates: [], depth: 8 }; },
 }) });
+
+const pageExportPgn = '[Event "Live Chess"]\n[Site "Chess.com"]\n[White "Alice"]\n[Black "Bob"]\n[Result "1-0"]\n[Link "https://www.chess.com/game/live/123"]\n\n1. e4 e5 1-0';
+const importPageGame = (broker, pgn = pageExportPgn, sender = content('https://www.chess.com/game/123')) => broker.handle({ type: 'meowl:site-game-import', pgn }, sender);
+
+test('an exact completed page export starts without an archive and retains its canonical identity', async () => {
+  const { broker, state, check } = setup({ fetchGames: async () => { throw new Error('The archive must not be used.'); } });
+  const actor = { ...content('https://www.chess.com/game/123'), documentId: 'doc-one' };
+  const ready = await importPageGame(broker, pageExportPgn, actor);
+  assert.equal(ready.status, 'ready'); assert.equal(ready.kind, 'export'); assert.equal(ready.gameUrl, game().url);
+  const payload = await broker.handle({ type: 'meowl:site-payload', token: ready.token }, frame(actor.url));
+  assert.equal(payload.status, 'ready'); assert.equal(payload.kind, 'export');
+  assert.equal(payload.game.source, 'chesscom'); assert.equal(payload.game.imported, true);
+  assert.equal(payload.game.provenance, 'page-export'); assert.equal(payload.game.url, game().url);
+  assert.equal(payload.game.white.result, 'win'); assert.equal(payload.game.black.result, 'lose');
+  assert.equal(await reviewIdForGame(payload.game), await reviewIdForGame(game('123', { pgn: pageExportPgn.replace('1. e4', '1. e4 {[%clk 0:09:58]}') })));
+  assert.deepEqual(completedSiteGames([payload.game], 'chesscom', 'alice'), [], 'Page exports are never archive confirmations.');
+  assert.equal((await importPageGame(broker, pageExportPgn, actor)).token, ready.token);
+  assert.equal((await check(actor)).token, ready.token);
+  broker.pageChanged(5, 'https://www.chess.com/member/alice');
+  const resumed = await check({ ...content('https://www.chess.com/member/alice'), documentId: 'doc-one' });
+  assert.equal(resumed.token, ready.token); assert.equal(resumed.kind, 'export'); assert.equal(state.calls.length, 0);
+});
+
+test('page exports retain a generic draw instead of inventing the reason it ended', () => {
+  const draw = pageExportPgn.replaceAll('1-0', '1/2-1/2');
+  const result = completedPageGame(draw, game().url, 'ALICE');
+  assert.equal(result.white.result, 'draw'); assert.equal(result.black.result, 'draw');
+  assert.deepEqual(completedSiteGames([result], 'chesscom', 'alice'), []);
+});
+
+test('page export links accept canonical Chess.com navigation aliases without changing the original PGN', async () => {
+  for (const link of [
+    'https://www.chess.com/game/123',
+    'https://www.chess.com/game/live/123?move=0',
+    'https://chess.com/analysis/game/live/123/?move=2#review',
+  ]) {
+    const pgn = pageExportPgn.replace(game().url, link);
+    const { broker } = setup();
+    const ready = await importPageGame(broker, pgn);
+    assert.equal(ready.status, 'ready', link); assert.equal(ready.gameUrl, game().url);
+    const payload = await broker.handle({ type: 'meowl:site-payload', token: ready.token }, frame(game().url));
+    assert.equal(payload.game.pgn, pgn); assert.equal(payload.game.url, game().url);
+  }
+});
+
+test('page export imports require an authenticated top-level exact Chess.com game and opt-in', async () => {
+  for (const actor of [
+    { ...content(game().url), id: 'another-extension' },
+    { ...content(game().url), frameId: 2 },
+    { ...content(game().url), documentLifecycle: 'cached' },
+    content('https://evil.test/game/123'), content('https://lichess.org/abcdefgh'),
+    content('https://www.chess.com/play/online'), content('https://www.chess.com/member/alice'),
+    content('https://www.chess.com/play/computer'), content('https://www.chess.com/game/computer/abc'),
+    content('https://www.chess.com/game/future/123'),
+    { ...content(game().url), tab: { id: 5, url: 'https://evil.test/game/123' } },
+  ]) {
+    const { broker } = setup();
+    assert.equal((await importPageGame(broker, pageExportPgn, actor)).status, 'disabled', actor.url);
+  }
+  for (const revoke of ['permission', 'opt-in', 'account']) {
+    const { broker, state } = setup();
+    if (revoke === 'permission') state.permitted = false;
+    if (revoke === 'opt-in') state.settings.siteReviewSettings.chesscom.enabled = false;
+    if (revoke === 'account') state.settings.siteReviewSettings.chesscom.username = '';
+    assert.equal((await importPageGame(broker)).status, 'disabled');
+  }
+});
+
+test('page export imports reject unfinished, illegal, oversized, mismatched, and ambiguous PGNs', async () => {
+  const bad = [
+    pageExportPgn.replace('1. e4 e5 1-0', '1. e4 e5 *'),
+    pageExportPgn.replace('1. e4 e5', '1. e5 e4'),
+    pageExportPgn.replace('[Result "1-0"]', '[Result "0-1"]'),
+    pageExportPgn.replace('[Link "https://www.chess.com/game/live/123"]', ''),
+    pageExportPgn.replace('/live/123', '/live/999'),
+    pageExportPgn.replace('https://www.chess.com/game/live/123', 'https://evil.test/game/live/123'),
+    pageExportPgn.replace('https://www.chess.com/', 'https://person@www.chess.com/'),
+    pageExportPgn.replace('https://www.chess.com/', 'https://www.chess.com:444/'),
+    pageExportPgn.replace('https://www.chess.com/', 'https://www.chess.com.evil.test/'),
+    pageExportPgn.replace('[Link ', '[Link "https://www.chess.com/game/live/999"]\n[Link '),
+    pageExportPgn.replace('[Link ', '[Link "https://www.chess.com/game/live/123"]\n[Link '),
+    pageExportPgn.replace('[White "Alice"]', '[White "Someone"]'),
+    pageExportPgn.replace('[White "Alice"]', '[White "Someone"]\n[White "Alice"]'),
+    pageExportPgn.replace('[Black "Bob"]', '[Black "Bob"]\n[Black "Other"]'),
+    pageExportPgn.replace('[Result ', '[Result "1-0"]\n[Result '),
+    pageExportPgn.replace('[White "Alice"]', '[White "Alice"]\n[Comment "' + 'x'.repeat(250000) + '"]'),
+  ];
+  for (const pgn of bad) {
+    const { broker } = setup();
+    assert.equal((await importPageGame(broker, pgn)).status, 'error', pgn.slice(0, 220));
+  }
+});
+
+test('page export cannot replace an existing same-game archive review or reopen a closed panel', async () => {
+  const { broker, check } = setup({ fetchGames: async () => [game('123', { pgn: pageExportPgn })] });
+  const sender = content(game().url);
+  const archived = await check(sender);
+  await broker.handle({ type: 'meowl:site-panel-state', token: archived.token, panelGeneration: archived.panelGeneration, panelState: 'closed' }, sender);
+  const exported = await importPageGame(broker, pageExportPgn, sender);
+  assert.equal(exported.token, archived.token); assert.equal(exported.kind, undefined); assert.equal(exported.panelState, 'closed');
+});
+
+test('page exports survive session restoration and reject changed identity or stripped provenance', async () => {
+  let saved;
+  const session = { readSession: async () => structuredClone(saved), writeSession: async value => { saved = structuredClone(value); } };
+  const first = setup(session), ready = await importPageGame(first.broker);
+  assert.equal(saved.jobs[0].kind, 'export'); assert.equal(saved.cache.length, 0);
+  const original = structuredClone(saved), actor = content(game().url);
+  const second = setup(session);
+  assert.equal((await second.check(actor)).token, ready.token); assert.equal(second.state.calls.length, 0);
+  const request = { type: 'meowl:site-payload', token: ready.token };
+  for (const mutate of [
+    item => { delete item.kind; },
+    item => { item.kind = 'bot'; },
+    item => { item.game.imported = false; },
+    item => { delete item.game.provenance; },
+    item => { item.game.source = 'pgn'; },
+    item => { item.game.url = game('999').url; },
+    item => { item.game.pgn = pageExportPgn.replace('/live/123', '/live/999'); },
+    item => { item.game.pgn = pageExportPgn.replace('Alice', 'Someone'); },
+    item => { item.game.pgn = pageExportPgn.replace('1. e4 e5 1-0', '1. e4 e5 *'); },
+    item => { item.selectionPageKey = 'https://www.chess.com/play/online'; },
+    item => { item.game.end_time = Date.now() / 1000 + 300; },
+  ]) {
+    const snapshot = structuredClone(original); mutate(snapshot.jobs[0]);
+    const next = setup({ readSession: async () => snapshot });
+    assert.equal((await next.broker.handle(request, frame(actor.url))).status, 'expired');
+  }
+});
+
+test('navigation, document replacement, account changes, and permission revocation cancel pending page imports', async () => {
+  for (const cancel of ['page', 'document', 'source', 'all', 'account', 'permission']) {
+    let release, reads = 0, fixture;
+    fixture = setup({ readSettings: async () => { if (++reads === 2) await new Promise(resolve => { release = resolve; }); return fixture.state.settings; } });
+    const pending = importPageGame(fixture.broker, pageExportPgn, { ...content(game().url), documentId: 'doc-one' });
+    while (!release) await new Promise(resolve => setImmediate(resolve));
+    if (cancel === 'page') fixture.broker.pageChanged(5, 'https://www.chess.com/game/999');
+    if (cancel === 'document') fixture.broker.documentChanged(5);
+    if (cancel === 'source') fixture.broker.invalidateSource('chesscom');
+    if (cancel === 'all') fixture.broker.invalidate();
+    if (cancel === 'account') fixture.state.settings.siteReviewSettings.chesscom.username = 'Bob';
+    if (cancel === 'permission') fixture.state.permitted = false;
+    release(); assert.equal((await pending).status, 'disabled', cancel);
+  }
+});
+
+test('a retired page document cannot import into its replacement document', async () => {
+  const { broker, check } = setup();
+  const firstActor = { ...content(game().url), documentId: 'doc-one' };
+  const selected = await importPageGame(broker, pageExportPgn, firstActor);
+  broker.documentChanged(5);
+  assert.equal((await check({ ...content(game().url), documentId: 'doc-two' })).token, selected.token);
+  assert.equal((await importPageGame(broker, pageExportPgn, firstActor)).status, 'expired');
+});
 
 test('page review settings are opt-in, provider-specific, and accept usernames only', () => {
   assert.deepEqual(normalizeSiteSettings(), { chesscom: { enabled: false, username: '' }, lichess: { enabled: false, username: '' } });
@@ -324,6 +478,11 @@ test('release and review opening enforce tab ownership and safe local review IDs
   const reviewId = `game-${'a'.repeat(64)}`;
   assert.equal((await broker.handle({ type, token, reviewId }, frame())).status, 'opened');
   assert.deepEqual(state.opened, [extensionUrl(`review.html?reviewId=${reviewId}`)]);
+  assert.equal((await broker.handle({ type, token, reviewId, view: 'coach' }, frame())).status, 'opened');
+  assert.equal(state.opened.at(-1), extensionUrl(`review.html?reviewId=${reviewId}&view=coach`));
+  assert.equal((await broker.handle({ type, token, reviewId, view: 'coach&url=https://untrusted.invalid' }, frame())).status, 'opened');
+  assert.equal(state.opened.at(-1), extensionUrl(`review.html?reviewId=${reviewId}`));
+  assert.equal((await broker.handle({ type, token, reviewId, view: 'coach' }, frame(page, 6))).status, 'expired');
   assert.equal((await broker.handle({ type: 'meowl:site-release', token, panelGeneration }, content(page, 6))).status, 'expired');
   assert.equal((await broker.handle({ type: 'meowl:site-release', token }, content())).status, 'expired');
   assert.equal((await broker.handle({ type: 'meowl:site-release', token, panelGeneration }, content())).status, 'released');

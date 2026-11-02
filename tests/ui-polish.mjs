@@ -101,6 +101,8 @@ try {
   await point.focus(); assert.equal(await page.locator('#chart-readout').innerText(), await point.getAttribute('aria-label'));
   await point.press('Enter'); assert.equal(await activePly(), 7);
   await page.locator('#moves-tab').focus(); await page.keyboard.press('ArrowRight');
+  assert.equal(await page.locator('#coach-tab').getAttribute('aria-selected'), 'true');
+  await page.keyboard.press('ArrowRight');
   assert.equal(await page.locator('#practice-tab').getAttribute('aria-selected'), 'true');
   await page.keyboard.press('Home'); assert.equal(await page.locator('#summary-tab').getAttribute('aria-selected'), 'true');
   assert.equal(await page.locator('#summary-panel').evaluate(el => getComputedStyle(el).animationName), 'none');

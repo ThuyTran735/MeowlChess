@@ -5,10 +5,12 @@ import { formatReviewDuration } from './lib/review-duration.js';
 import { reviewIdForGame } from './lib/library.js';
 import { parseCompletedPgn, safeOriginalGameUrl } from './lib/pgn.js';
 import { isCompletedGame } from './lib/archive.js';
+import { completedPageGame } from './lib/site-review.js';
 import { installFrameDrag } from './site-frame-drag.js';
 import { estimateGameRatings } from './lib/game-rating.js';
 import { getPhasePerformance } from './lib/game-performance.js';
 import { createSummaryShare } from './lib/summary-share.js';
+import { coachPortraitUrl } from './lib/coach-portraits.js';
 import { notifyReviewComplete } from './lib/completion-alerts.js';
 
 const $ = id => document.getElementById(id);
@@ -17,7 +19,17 @@ const TOKEN = /^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i;
 const token = location.hash.slice(1);
 const controller = new AbortController();
 let source, username, payload, savedId = null, stopped = false, disposed = false, lastHeight = 0, frame = 0, percent = 0;
-let sharedSummary = null;
+let sharedSummary = null, openingReview = false;
+let coachPortraitRevision = 0;
+function updateCoachPortrait(preferences) {
+  const image = $('summary-coach').querySelector('img');
+  const url = coachPortraitUrl(preferences?.coach);
+  if (image.src !== url) image.src = url;
+}
+const initialCoachPortraitRevision = coachPortraitRevision;
+chrome.storage.local.get('coachPreferences').then(stored => {
+  if (!disposed && coachPortraitRevision === initialCoachPortraitRevision) updateCoachPortrait(stored.coachPreferences);
+}).catch(() => {});
 const summaryShare = createSummaryShare({ getSummary: () => sharedSummary });
 $('summary-share').addEventListener('click', () => { void summaryShare.open(); });
 let parentOrigin = null;
@@ -58,7 +70,7 @@ observer.observe(document.querySelector('footer'));
 function status(message = '', error = false) {
   $('summary-status').textContent = message;
   $('summary-status').classList.toggle('error', error);
-  if (error && parentOrigin) { $('summary-retry').hidden = false; $('summary-open-review').hidden = true; }
+  if (error && parentOrigin) { $('summary-retry').hidden = false; $('summary-open-review').hidden = true; $('summary-coach').hidden = true; }
 }
 let progressEstimator = null;
 function clearProgressEstimate() { $('summary-eta').hidden = true; $('summary-eta').textContent = ''; progressEstimator = null; }
@@ -108,6 +120,7 @@ function dispose() {
   if (disposed) return;
   disposed = true; stopped = true; controller.abort(); observer.disconnect(); cancelAnimationFrame(frame);
   $('summary-open-review').disabled = true;
+  $('summary-coach').disabled = true;
 }
 function assertActive() {
   if (stopped || disposed || controller.signal.aborted) throw new DOMException('Review canceled.', 'AbortError');
@@ -121,13 +134,18 @@ async function checkEnabled() {
     throw new DOMException('Review canceled.', 'AbortError');
   }
 }
-function validatePayload(value) {
+function validatePayload(value, configuredUsername) {
   if (value?.status !== 'ready' || value.token !== token || !ORIGINS[value.source]) throw new Error(value?.status === 'expired' ? 'This panel has expired. Select Retry loading to reconnect.' : value?.message || 'This panel could not start. Select Retry loading to try again.');
-  const game = value.game;
+  let game = value.game;
   const bot = value.kind === 'bot';
   if (!game || game.rules !== 'chess' || !Number.isFinite(game.end_time) || game.end_time <= 0 || game.end_time > Date.now() / 1000) throw new Error('A finished game is not available yet.');
   if (bot) {
     if (value.source !== 'chesscom' || game.source !== 'pgn' || game.imported !== true || game.url !== null || !/^pgn:game-[a-f0-9]{64}$/.test(value.gameKey || '')) throw new Error('This bot game export is invalid.');
+  } else if (value.kind === 'export') {
+    if (value.source !== 'chesscom' || game.source !== 'chesscom' || game.imported !== true || game.provenance !== 'page-export') throw new Error('This finished-game export is invalid.');
+    // Rebuild player and result metadata from this page's completed PGN. Export
+    // results are not the detailed termination codes used by public archives.
+    game = completedPageGame(game.pgn, game.url, configuredUsername, game.end_time * 1000);
   } else {
     const url = safeOriginalGameUrl(game.url);
     if (value.kind !== undefined || game.source !== value.source || !url || !ORIGINS[value.source].includes(new URL(url).origin)) throw new Error('This game is not from the selected site.');
@@ -138,7 +156,7 @@ function validatePayload(value) {
   const analysis = value.analysis;
   const engine = ENGINE_OPTIONS.find(item => item.id === analysis?.engineId);
   if (!engine || ![50, 150, 500, 1500, 3000].includes(analysis.moveTimeMs) || !Number.isInteger(analysis.multiPV) || analysis.multiPV < 1 || analysis.multiPV > engine.maxLines || typeof analysis.smartAnalysis !== 'boolean' || analysis.analysisVersion !== ANALYSIS_VERSION) throw new Error('The review settings have changed. Reload this page to try again.');
-  return { ...value, parsed, analysis: { ...analysis, engineName: engine.label } };
+  return { ...value, game, parsed, analysis: { ...analysis, engineName: engine.label } };
 }
 function showGame(game, parsed) {
   $('summary-source').textContent = payload.kind === 'bot' ? 'Chess.com · bot game' : source === 'chesscom' ? 'Chess.com' : 'Lichess';
@@ -220,6 +238,8 @@ function renderSummary(result, analysis, reused = false) {
   $('summary-duration').hidden = !duration;
   $('summary-open-review').hidden = false;
   $('summary-open-review').disabled = !savedId;
+  $('summary-coach').hidden = false;
+  $('summary-coach').disabled = !savedId;
   $('summary-close').hidden = false;
   reportSize();
 }
@@ -310,12 +330,13 @@ async function runReview(id) {
 async function start() {
   try {
     if (parent === window || !TOKEN.test(token)) throw new Error('Open this summary from the MeowlChess panel on your game page.');
-    payload = validatePayload(await chrome.runtime.sendMessage({ type: 'meowl:site-payload', token }));
+    const reply = await chrome.runtime.sendMessage({ type: 'meowl:site-payload', token });
+    const settings = (await chrome.storage.local.get('siteReviewSettings')).siteReviewSettings?.[reply?.source];
+    username = typeof settings?.username === 'string' ? settings.username.trim().toLowerCase() : '';
+    payload = validatePayload(reply, username);
     source = payload.source;
     if (!parentOrigin && ORIGINS[source].includes(payload.parentOrigin)) parentOrigin = payload.parentOrigin;
     if (!ORIGINS[source].includes(parentOrigin)) throw new Error('This summary is not connected to the selected game site.');
-    const settings = (await chrome.storage.local.get('siteReviewSettings')).siteReviewSettings?.[source];
-    username = typeof settings?.username === 'string' ? settings.username.trim().toLowerCase() : '';
     if (!username || (payload.kind !== 'bot' && ![payload.game.white.username, payload.game.black.username].some(name => name.toLowerCase() === username))) throw new Error('This completed game does not belong to the configured player.');
     await checkEnabled(); showGame(payload.game, payload.parsed); reportSize();
     const id = await reviewIdForGame(payload.game);
@@ -344,22 +365,32 @@ async function start() {
 $('summary-retry').addEventListener('click', () => { sendParent('meowl:site-frame-retry'); });
 $('summary-cancel').addEventListener('click', () => cancel());
 $('summary-close').addEventListener('click', () => sendParent('meowl:site-frame-close'));
-$('summary-open-review').addEventListener('click', async () => {
-  if (!savedId || stopped) return;
+async function openFullReview(view = 'summary') {
+  if (!savedId || stopped || disposed || openingReview) return;
+  openingReview = true;
+  $('summary-coach').disabled = true;
   $('summary-open-review').disabled = true;
   $('summary-open-label').textContent = 'Opening…';
   $('summary-open-review').setAttribute('aria-busy', 'true');
   try {
-    const result = await chrome.runtime.sendMessage({ type: 'meowl:site-open-review', token, reviewId: savedId });
+    const result = await chrome.runtime.sendMessage({ type: 'meowl:site-open-review', token, reviewId: savedId, view });
     if (result?.status !== 'opened') throw new Error(result?.status === 'expired' ? 'This panel has expired. Select Retry loading to reconnect.' : result?.message || 'The full review could not be opened. Reload this page to try again.');
   } catch (error) { status(error.message || 'The full review could not be opened.', true); }
   finally {
     $('summary-open-review').disabled = !savedId || stopped;
     $('summary-open-label').textContent = 'Open full review';
     $('summary-open-review').removeAttribute('aria-busy');
+    openingReview = false;
+    $('summary-coach').disabled = !savedId || stopped || disposed;
   }
-});
+}
+$('summary-open-review').addEventListener('click', () => { void openFullReview(); });
+$('summary-coach').addEventListener('click', () => { void openFullReview('coach'); });
 chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.coachPreferences) {
+    coachPortraitRevision++;
+    if (!disposed) updateCoachPortrait(changes.coachPreferences.newValue);
+  }
   if (area !== 'local' || !changes.siteReviewSettings || !source) return;
   const settings = changes.siteReviewSettings.newValue?.[source];
   if (settings?.enabled !== true || typeof settings.username !== 'string' || settings.username.trim().toLowerCase() !== username) { cancel('Automatic review is turned off or the account has changed.'); dispose(); sendParent('meowl:site-frame-close'); }

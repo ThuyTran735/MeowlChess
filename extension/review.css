@@ -592,3 +592,23 @@ progress::-webkit-progress-value { transition: width .2s ease-out; }
 .saved-account-controls button:hover:enabled { background: #ffffff0c; color: var(--text); }
 #account-status:not(:empty) { margin-top: 8px; }
 .review-duration { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); }
+
+
+/* A completed review gets a companion beside the board, never over its controls. */
+.board-layout:has(> .coach-companion:not([hidden])) { grid-template-areas: "board insights" "companion insights"; row-gap: 18px; }
+.board-layout:has(> .coach-companion:not([hidden])) > .board-column { grid-area: board; position: static; }
+.board-layout:has(> .coach-companion:not([hidden])) > .insights-column { grid-area: insights; }
+.board-layout:has(> .coach-companion:not([hidden])) > .coach-companion { grid-area: companion; }
+@media (min-width: 921px) and (max-width: 1279px) {
+  .board-layout:has(> .coach-companion:not([hidden])) { grid-template-rows: min-content 1fr; }
+}
+@media (min-width: 1280px) {
+  main:has(#coach-companion:not([hidden])) { max-width: min(1324px, calc(var(--board-column-width) + 644px)); }
+  html[data-board-size="custom"] main:has(#coach-companion:not([hidden])) { max-width: calc(var(--board-size) + 684px); }
+  .study-panel:has(#coach-companion:not([hidden])) > .study-title { margin-left: 244px; }
+  .board-layout:has(> .coach-companion:not([hidden])) { grid-template-columns: 220px minmax(0, 1fr) 340px; grid-template-areas: "companion board insights"; }
+  .board-layout:has(> .coach-companion:not([hidden])) > .board-column { position: sticky; }
+}
+@media (max-width: 920px) {
+  .board-layout:has(> .coach-companion:not([hidden])) { grid-template-areas: "board" "companion" "insights"; }
+}

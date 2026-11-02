@@ -64,6 +64,33 @@ function completedBotGame(pgn, timestamp) {
   return { ...game, url: null, end_time: game.end_time || Math.floor(timestamp / 1000) };
 }
 
+/** A finished page export is tied to its own game link, not confirmed by the public archive. */
+export function completedPageGame(pgn, canonicalGameUrl, username, timestamp = Date.now()) {
+  if (typeof canonicalGameUrl !== 'string' || !/^https:\/\/www\.chess\.com\/game\/(?:live|daily)\/\d+$/.test(canonicalGameUrl)) {
+    throw new Error('Open the exact finished Chess.com game before importing its export.');
+  }
+  const game = importPgn(pgn);
+  const tags = new Map(), tag = /\s*\[\s*([A-Za-z]+)\s*"([^"\\]*(?:\\.[^"\\]*)*)"\s*\]/y;
+  let match;
+  while ((match = tag.exec(game.pgn))) {
+    const values = tags.get(match[1]) || [];
+    values.push(match[2]); tags.set(match[1], values);
+  }
+  const one = name => tags.get(name)?.length === 1 ? tags.get(name)[0] : null;
+  if (gameUrlForPage(one('Link')) !== canonicalGameUrl) throw new Error('This PGN must contain one matching link to the finished game on this page.');
+  const white = one('White'), black = one('Black'), result = one('Result');
+  if (![white, black].every(name => typeof name === 'string' && /^[a-zA-Z0-9_-]{2,50}$/.test(name)) ||
+      typeof username !== 'string' || ![white, black].some(name => name.toLowerCase() === username.toLowerCase())) {
+    throw new Error('This completed game does not belong to the configured Chess.com player.');
+  }
+  if (!['1-0', '0-1', '1/2-1/2'].includes(result)) throw new Error('This export must contain one final game result.');
+  const endTime = game.end_time || Math.floor(timestamp / 1000);
+  if (!Number.isFinite(endTime) || endTime <= 0 || endTime * 1000 > Date.now()) throw new Error('This finished game has an invalid date.');
+  return { ...game, source: 'chesscom', url: canonicalGameUrl, imported: true, provenance: 'page-export', end_time: endTime,
+    white: { ...game.white, username: white, result: result === '1-0' ? 'win' : result === '0-1' ? 'lose' : 'draw' },
+    black: { ...game.black, username: black, result: result === '0-1' ? 'win' : result === '1-0' ? 'lose' : 'draw' } };
+}
+
 /** Strip navigation parameters and private Lichess player keys before retaining a URL. */
 export function gameUrlForPage(value) {
   const url = trustedUrl(value);
@@ -123,6 +150,7 @@ export function completedSiteGames(games, source, username, now = Date.now()) {
   const accepted = new Map();
   for (const game of games.slice(0, 50)) {
     if (!game || game.source !== source || game.rules !== 'chess') continue;
+    if (game.imported === true || game.provenance === 'page-export') continue;
     if (!Number.isFinite(game.end_time) || game.end_time <= 0 || game.end_time * 1000 > now) continue;
     if (![game.white?.username, game.black?.username].some(name => typeof name === 'string' && name.toLowerCase() === username)) continue;
     const url = safeOriginalGameUrl(game.url);
@@ -178,6 +206,7 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
   const invalidatedTabs = new Set();
   const sourceEpochs = new Map();
   const botImports = new Map();
+  const gameImports = new Map();
   let generation = 0;
   let restorePromise, restored = false, persistence = Promise.resolve();
 
@@ -272,6 +301,13 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
           } catch { continue; }
           // Parsing and hashing yield; revocation/navigation must still win.
           if (generation !== startedGeneration || (sourceEpochs.get(item.source) || 0) !== (startedSources.get(item.source) || 0)) continue;
+        } else if (item.kind === 'export') {
+          const target = gameUrlForPage(item.selectionPageKey || item.pageKey);
+          if (item.source !== 'chesscom' || !target || item.game?.source !== 'chesscom' || item.game.imported !== true || item.game.provenance !== 'page-export' || item.game.url !== target) continue;
+          if (!Number.isFinite(item.game.end_time) || item.game.end_time <= 0 || item.game.end_time * 1000 > now()) continue;
+          try { game = completedPageGame(item.game.pgn, target, config.username, item.game.end_time * 1000); }
+          catch { continue; }
+          bot = { kind: 'export' };
         } else {
           const selection = item.selectionPageKey || item.pageKey;
           if (item.kind !== undefined || isChessComBotPage(selection) || unrecognizedChessGamePage(selection)) continue;
@@ -415,7 +451,7 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
     return { status: 'ready', token: job.token, gameUrl: job.kind === 'bot' ? job.gameKey : job.game.url, source: job.source,
       endTime: job.game.end_time, retryAfterMs,
       panelState: job.panelState, panelGeneration: job.panelGeneration, resumed,
-      ...(job.kind === 'bot' ? { kind: 'bot', gameKey: job.gameKey } : {}) };
+      ...(job.kind === 'bot' ? { kind: 'bot', gameKey: job.gameKey } : job.kind === 'export' ? { kind: 'export' } : {}) };
   }
 
   function newJob(context, sender, config, game, extra = {}) {
@@ -511,6 +547,35 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
     return jobReady(job);
   }
 
+  async function importGame(sender, pgn) {
+    const context = contentContext(sender);
+    const target = context?.source === 'chesscom' ? gameUrlForPage(context.pageKey) : null;
+    if (!context || !target) return disabled();
+    const { source, tabId } = context;
+    pageChanged(tabId, sender.tab.url);
+    const retained = tabJob(tabId);
+    if (retained && (retained.documentPending || (retained.documentId && documentId(sender) !== retained.documentId))) return expired();
+    const epoch = tabEpochs.get(tabId) || 0, sourceEpoch = sourceEpochs.get(source) || 0, startedGeneration = generation;
+    const revision = (gameImports.get(tabId) || 0) + 1;
+    gameImports.set(tabId, revision);
+    if (gameImports.size > 200) gameImports.delete(gameImports.keys().next().value);
+    const config = await configuration(source);
+    if (!config) return disabled();
+    const game = completedPageGame(pgn, target, config.username, now());
+    const current = await configuration(source);
+    if (!current || current.key !== config.key || startedGeneration !== generation || (tabEpochs.get(tabId) || 0) !== epoch || (sourceEpochs.get(source) || 0) !== sourceEpoch || gameImports.get(tabId) !== revision) return disabled();
+    prune();
+    let job = [...jobs.values()].find(item => item.kind !== 'bot' && item.tabId === tabId && item.parentOrigin === context.parentOrigin && item.game.url === target && item.configKey === config.key);
+    if (!job) {
+      for (const [token, item] of jobs) if (item.tabId === tabId) jobs.delete(token);
+      job = newJob(context, sender, config, game, { kind: 'export' });
+      jobs.set(job.token, job);
+    }
+    if (!claimDocument(job, sender)) return expired();
+    job.expiresAt = now() + JOB_LIFETIME;
+    return jobReady(job);
+  }
+
   async function frameJob(sender, token) {
     if (!activeDocument(sender) || !isExtensionPage(sender, SITE_SUMMARY_FRAME, token) || !Number.isInteger(sender.frameId) || sender.frameId <= 0 || !Number.isInteger(sender.tab?.id)) return null;
     if (typeof token !== 'string' || token.length > 100) return null;
@@ -595,6 +660,7 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
       switch (message?.type) {
         case 'meowl:site-check': return check(sender, message);
         case 'meowl:site-bot-import': return importBot(sender, message.pgn);
+        case 'meowl:site-game-import': return importGame(sender, message.pgn);
         case 'meowl:site-open-settings': {
           const context = contentContext(sender);
           if (!context || !await configuration(context.source)) return disabled();
@@ -603,7 +669,7 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
         }
         case 'meowl:site-payload': {
           const job = await frameJob(sender, message.token);
-          return job ? { status: 'ready', token: job.token, source: job.source, parentOrigin: job.parentOrigin, game: job.game, analysis: job.analysis, ...(job.kind === 'bot' ? { kind: 'bot', gameKey: job.gameKey } : {}) } : expired();
+          return job ? { status: 'ready', token: job.token, source: job.source, parentOrigin: job.parentOrigin, game: job.game, analysis: job.analysis, ...(job.kind === 'bot' ? { kind: 'bot', gameKey: job.gameKey } : job.kind === 'export' ? { kind: 'export' } : {}) } : expired();
         }
         case 'meowl:site-load-review':
         case 'meowl:site-save-review': {
@@ -644,7 +710,7 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
         case 'meowl:site-open-review': {
           const job = await frameJob(sender, message.token);
           if (!job || typeof message.reviewId !== 'string' || !/^game-[a-f0-9]{64}$/.test(message.reviewId)) return expired();
-          await openReview(extensionUrl(`review.html?reviewId=${encodeURIComponent(message.reviewId)}`));
+          await openReview(extensionUrl(`review.html?reviewId=${encodeURIComponent(message.reviewId)}${message.view === 'coach' ? '&view=coach' : ''}`));
           return { status: 'opened' };
         }
         default: return undefined;

@@ -8,6 +8,7 @@ import { createReviewProgressEstimator } from './lib/review-progress.js';
 import { formatReviewDuration } from './lib/review-duration.js';
 import { normalizeAccounts, accountUsername, rememberAccount, forgetAccount } from './lib/accounts.js';
 import { createMoveSounds } from './lib/move-sounds.js';
+import { createCoachView } from './lib/coach-view.js';
 import { recognizeOpening } from './lib/openings.js';
 import { createStudyLine } from './lib/study.js';
 import { gradeRetry } from './lib/practice.js';
@@ -36,6 +37,23 @@ const completionAlertSetting = installCompletionAlertSetting($('completion-alert
 const summaryShare = createSummaryShare({ getSummary: () => state.result && state.selected ? { game: state.selected, result: state.result, analysis: state.recordMeta } : null });
 $('share-summary').addEventListener('click', () => { stopPlayback(); void summaryShare.open(); });
 const moveSounds = createMoveSounds({ isEnabled: () => $('move-sounds').checked });
+const coachView = createCoachView($('coach-root'), {
+  companionTarget: {
+    container: $('coach-companion'), image: $('coach-companion-avatar'), name: $('coach-companion-name'),
+    bubble: $('coach-companion-bubble'), heading: $('coach-companion-heading'), text: $('coach-companion-text'),
+  },
+  onNavigate: ({ ply }) => {
+    if (!state.result || state.busy || state.loading || state.libraryBusy || state.importing || state.retry || state.study || !Number.isInteger(ply) || ply < 1 || ply > state.result.moves.length) return;
+    goTo(ply, { view: 'coach' });
+  }
+});
+function updateCoach() {
+  const blockedReason = state.busy ? 'The coach will be ready when this review finishes.'
+    : state.retry ? 'Finish your practice attempt and return to the game to ask the coach.'
+    : state.study ? 'Return to the game to ask about its reviewed moves.'
+    : state.loading || state.libraryBusy || state.importing ? 'Loading your game…' : '';
+  coachView.setContext({ game: state.selected, result: state.result, ply: state.ply, blockedReason, active: state.reviewTab === 'coach', moveReactionsActive: state.reviewTab === 'moves' });
+}
 function playPositionSound(before, move) {
   if (!state.busy && !state.loading && before !== currentFen()) void moveSounds.play({ capture: !!move?.captured });
 }
@@ -229,9 +247,10 @@ function showError(message = '') {
   if (message) requestAnimationFrame(() => $('error').scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' }));
 }
 function setReviewTab(name, focus = false) {
-  if (name === 'summary' && !state.result) return;
+  if (!['moves', 'summary', 'coach', 'practice'].includes(name) || (['summary', 'coach'].includes(name) && !state.result) || (state.retry && name !== 'moves')) return;
+  if (name === 'coach' && state.reviewTab !== 'coach') stopPlayback();
   state.reviewTab = name;
-  for (const view of ['moves', 'summary', 'practice']) {
+  for (const view of ['moves', 'summary', 'coach', 'practice']) {
     const active = view === name;
     $(`${view}-panel`).hidden = !active;
     $(`${view}-tab`).setAttribute('aria-selected', String(active));
@@ -241,6 +260,7 @@ function setReviewTab(name, focus = false) {
   renderEngineArrows(currentCandidates());
   if (name === 'moves') keepSelectedMoveVisible();
   if (focus) $(`${name}-tab`).focus();
+  updateCoach();
 }
 
 function displayEvaluation(evaluation) {
@@ -256,6 +276,8 @@ function updateControls() {
   $('open-tutorial').disabled = unavailable || !tutorial.ready || !!state.retry;
   $('summary-tab').disabled = !state.result || !!state.retry;
   $('practice-tab').disabled = !!state.retry;
+  $('coach-tab').disabled = !state.result || !!state.retry || unavailable;
+  updateCoach();
   $('smart-analysis').disabled = unavailable;
   $('retry-move').disabled = !state.result || !state.ply || unavailable || !!state.study || !!state.retry;
   $('show-why').disabled = !state.result || !state.ply || unavailable || !!state.study || !!state.retry;
@@ -772,12 +794,12 @@ function restorePreferences(settings) {
   for (const [id, key] of [['smart-analysis', 'smart'], ['auto-orient', 'autoOrient'], ['show-arrows', 'arrows'], ['show-badges', 'badges'], ['show-coordinates', 'coordinates'], ['move-sounds', 'moveSounds']]) if (typeof settings[key] === 'boolean') $(id).checked = settings[key];
   preferenceSnapshot = currentPreferences();
 }
-function goTo(ply, { playback = false } = {}) {
+function goTo(ply, { playback = false, view = 'moves' } = {}) {
   if (!state.parsed) return;
   const before = currentFen(), oldPly = state.study ? null : state.ply;
   if (!playback) stopPlayback();
   cancelPositionSearch(); resetExploration(); state.selectedLine = null;
-  state.ply = Math.max(0, Math.min(state.parsed.moves.length, ply)); setReviewTab('moves'); renderBoard();
+  state.ply = Math.max(0, Math.min(state.parsed.moves.length, ply)); setReviewTab(view); renderBoard();
   playPositionSound(before, oldPly !== null && state.ply > oldPly ? currentMove() : null);
 }
 function selectGame(game) {
@@ -1029,7 +1051,7 @@ function returnToGame() {
 }
 function navigatePosition(ply, { playback = false } = {}) {
   if (!state.parsed || (state.retry && !state.retry.revealed)) return;
-  if (!state.study) { goTo(ply, { playback }); return; }
+  if (!state.study) { goTo(ply, { playback, view: state.reviewTab === 'coach' ? 'coach' : 'moves' }); return; }
   const before = currentFen(), oldCursor = state.study.line.cursor;
   if (!playback) stopPlayback();
   cancelPositionSearch(); state.hoverLine = null; state.selectedSquare = null; state.pendingPromotion = null;
@@ -1196,11 +1218,12 @@ function renderNotebook() {
   }
 }
 
-for (const view of ['moves', 'summary', 'practice']) $(`${view}-tab`).addEventListener('click', () => { if (state.study && view !== 'moves') returnToGame(); setReviewTab(view); });
+for (const view of ['moves', 'summary', 'coach', 'practice']) $(`${view}-tab`).addEventListener('click', () => { if (state.study && view !== 'moves') returnToGame(); setReviewTab(view); });
 document.querySelector('.review-tabs').addEventListener('keydown', event => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
   event.preventDefault(); event.stopPropagation();
-  const names = state.result ? ['summary', 'moves', 'practice'] : ['moves', 'practice'];
+  const names = ['summary', 'moves', 'coach', 'practice'].filter(name => !$(`${name}-tab`).disabled);
+  if (!names.length) return;
   const current = names.indexOf(event.target.id.replace('-tab', ''));
   const next = event.key === 'Home' ? 0 : event.key === 'End' ? names.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + names.length) % names.length;
   if (state.study && names[next] !== 'moves') returnToGame();
@@ -1343,7 +1366,7 @@ for (const label of MOVE_LABELS) {
   row.append(makeBadge(label), name, description); $('classification-legend').append(row);
 }
 document.addEventListener('keydown', event => {
-  if (document.querySelector('dialog[open]') || answersHidden() || event.target.closest('#board') || ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName) || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (document.querySelector('dialog[open]') || answersHidden() || event.target.closest('#board, #coach-root') || ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName) || event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.key === 'ArrowLeft') { event.preventDefault(); navigatePosition(positionIndex() - 1); }
   if (event.key === 'ArrowRight') { event.preventDefault(); navigatePosition(positionIndex() + 1); }
   if (event.key === 'Home') { event.preventDefault(); navigatePosition(0); }
@@ -1351,7 +1374,7 @@ document.addEventListener('keydown', event => {
   if (event.target.closest('.chart-hit') && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) document.querySelector('.chart-hit button.active')?.focus({ preventScroll: true });
 });
 window.addEventListener('focus', () => { if ($('library-dialog').open) void refreshLibrary(); });
-window.addEventListener('beforeunload', () => { moveSounds.dispose(); state.controller?.abort(); cancelPositionSearch(); cancelRetry(); stopPlayback(); reviewLibrary.close().catch(() => {}); });
+window.addEventListener('beforeunload', () => { coachView.dispose(); moveSounds.dispose(); state.controller?.abort(); cancelPositionSearch(); cancelRetry(); stopPlayback(); reviewLibrary.close().catch(() => {}); });
 syncEngine(); syncSource(); renderBoard(); refreshLibrary();
 async function initializeReview() {
   let remembered;
@@ -1382,7 +1405,11 @@ async function initializeReview() {
   await supportPrompt.start({ autoOpen });
   await tutorial.start({ autoOpen });
   state.starting = false; updateControls();
-  if (validReview) { await openSavedReview(requestedReview); return; }
+  if (validReview) {
+    const opened = await openSavedReview(requestedReview);
+    if (opened && query.get('view') === 'coach') setReviewTab('coach', true);
+    return;
+  }
   if (openSiteSettings) {
     $('review-settings').open = true;
     document.querySelector('.site-review-settings').scrollIntoView({ block: 'center' });

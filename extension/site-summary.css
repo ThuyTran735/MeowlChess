@@ -126,3 +126,11 @@ footer:has(.summary-status:empty):not(:has(button:not([hidden]))) { display: non
 .progress-eta { margin: -3px 0 12px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 
 .review-duration { margin: 4px 0 0; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+.summary-coach { display: flex; align-items: center; gap: 10px; width: 100%; margin: 12px 0 6px; padding: 11px; border: 1px solid var(--line); border-radius: 8px; background: #34342d; text-align: left; }
+.summary-coach:hover:enabled { background: #3d3e34; }
+.summary-coach img { flex: none; width: 40px; height: 48px; object-fit: contain; }
+.summary-coach > span:nth-child(2) { flex: 1; min-width: 0; }
+.summary-coach strong { display: block; font-weight: 600; font-size: 12px; }
+.summary-coach small { display: block; color: var(--muted); font-size: 10px; margin-top: 1px; }
+.summary-coach > span:last-child { color: #b4c8a2; font-size: 18px; }

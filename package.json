@@ -1,6 +1,6 @@
 {
   "name": "meowlchess",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "private": true,
   "type": "module",
   "description": "Local reviews of completed Chess.com, Lichess, and imported PGN games",
@@ -29,7 +29,8 @@
     "test:alerts": "node tests/completion-alerts-ui.mjs",
     "test:board-qol": "node tests/board-qol-ui.mjs",
     "test:accounts": "node tests/accounts-ui.mjs",
-    "test:sounds": "node tests/move-sounds-ui.mjs"
+    "test:sounds": "node tests/move-sounds-ui.mjs",
+    "test:coach": "node tests/coach-ui.mjs"
   },
   "dependencies": {
     "chess.js": "1.4.0",

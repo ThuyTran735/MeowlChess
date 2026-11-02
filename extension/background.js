@@ -156,7 +156,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     completionAlerts.complete(message, sender).then(sendResponse, () => sendResponse({ status: 'unavailable' }));
     return true;
   }
-  if (!['meowl:site-check', 'meowl:site-panel-state', 'meowl:site-bot-import', 'meowl:site-payload', 'meowl:site-load-review', 'meowl:site-save-review', 'meowl:site-release', 'meowl:site-open-review', 'meowl:site-open-settings', 'meowl:site-settings-changed'].includes(message?.type)) return false;
+  if (!['meowl:site-check', 'meowl:site-panel-state', 'meowl:site-bot-import', 'meowl:site-game-import', 'meowl:site-payload', 'meowl:site-load-review', 'meowl:site-save-review', 'meowl:site-release', 'meowl:site-open-review', 'meowl:site-open-settings', 'meowl:site-settings-changed'].includes(message?.type)) return false;
   const response = message.type === 'meowl:site-settings-changed'
     ? broker.isSettingsSender(sender) ? scheduleReconcile({ inject: true }).then(() => ({ status: 'ready' })) : Promise.resolve({ status: 'disabled' })
     : broker.handle(message, sender);

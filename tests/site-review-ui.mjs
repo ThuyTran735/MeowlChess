@@ -99,17 +99,23 @@ try {
   await worker.evaluate(() => {
     globalThis.__siteFixtures = { chess: [], lichess: [] };
     globalThis.__siteFetches = [];
+    globalThis.__siteFetchOptions = [];
     globalThis.__siteOriginalDateNow = Date.now.bind(Date);
     globalThis.__siteSenders = [];
-    chrome.runtime.onMessage.addListener((message, sender) => { if (message?.type === 'meowl:site-check') globalThis.__siteSenders.push({ url: sender.url, tabUrl: sender.tab?.url, frameId: sender.frameId }); });
-    globalThis.fetch = async input => {
+    globalThis.__siteHumanImports = [];
+    chrome.runtime.onMessage.addListener((message, sender) => {
+      if (message?.type === 'meowl:site-check') globalThis.__siteSenders.push({ url: sender.url, tabUrl: sender.tab?.url, frameId: sender.frameId });
+      if (message?.type === 'meowl:site-game-import') globalThis.__siteHumanImports.push({ pgn: message.pgn, url: sender.tab?.url });
+    });
+    globalThis.fetch = async (input, options = {}) => {
       const raw = typeof input === 'string' ? input : input.url;
       globalThis.__siteFetches.push(raw);
+      globalThis.__siteFetchOptions.push({ url: raw, cache: options.cache || 'default' });
       const url = new URL(raw);
       const listing = url.pathname.match(/^\/pub\/player\/([a-z0-9_-]+)\/games\/archives$/);
       if (url.origin === 'https://api.chess.com' && listing) return { ok: true, status: 200, json: async () => ({ archives: Object.keys(globalThis.__siteFixtures.chessMonths || { '2026/10': [] }).map(month => `https://api.chess.com/pub/player/${listing[1]}/games/${month}`) }) };
       const archive = url.pathname.match(/^\/pub\/player\/[a-z0-9_-]+\/games\/(\d{4}\/\d{2})$/);
-      if (url.origin === 'https://api.chess.com' && archive) return { ok: true, status: 200, json: async () => ({ games: globalThis.__siteFixtures.chessMonths?.[archive[1]] || globalThis.__siteFixtures.chess }) };
+      if (url.origin === 'https://api.chess.com' && archive) return { ok: true, status: 200, json: async () => ({ games: options.cache !== 'no-cache' && globalThis.__siteCachedArchiveGames ? globalThis.__siteCachedArchiveGames : globalThis.__siteFixtures.chessMonths?.[archive[1]] || globalThis.__siteFixtures.chess }) };
       if (url.origin === 'https://lichess.org' && /^\/api\/games\/user\/[a-zA-Z0-9_-]+$/.test(url.pathname)) return { ok: true, status: 200, text: async () => globalThis.__siteFixtures.lichess.slice(0, Number(url.searchParams.get('max')) || 20).map(game => JSON.stringify(game)).join('\n') };
       const single = url.pathname.match(/^\/game\/export\/([a-zA-Z0-9]{8})$/);
       if (url.origin === 'https://lichess.org' && single) {
@@ -231,7 +237,7 @@ try {
     assert(await frame.locator('#summary-counts').innerText());
   };
 
-  if (process.env.SITE_FINISH_ONLY !== '1') {
+  if (process.env.SITE_FINISH_ONLY !== '1' && process.env.SITE_EXPORT_ONLY !== '1') {
   stage = 'disabled by default and permission denial';
   assert.equal(await settings.locator('#site-chesscom-enabled').isChecked(), false);
   assert.equal(await settings.locator('#site-lichess-enabled').isChecked(), false);
@@ -538,9 +544,9 @@ try {
   await settings.evaluate(() => { chrome.permissions.request = async () => true; });
   await settings.locator('#engine').selectOption('lozza'); await settings.locator('#depth').selectOption('50');
   const results = [];
-  const observe = async (page, expected, name) => {
+  const observe = async (page, expected, name, timeoutMs = 12000) => {
     const begin = Date.now(); let frame;
-    while (Date.now() - begin < 12000) {
+    while (Date.now() - begin < timeoutMs) {
       frame = page.frames().find(item => !item.isDetached() && /\/site-summary\.html/.test(item.url()));
       if (frame) break;
       await page.waitForTimeout(50);
@@ -559,6 +565,7 @@ try {
   const current = (id, opponent) => ({ ...chessGame('https://www.chess.com/game/live/' + id, 'Fresh finish', 'sitecat', opponent), end_time: Math.floor(Date.now() / 1000) - 1 });
   const cached = key => poll(async () => worker.evaluate(async key => (await chrome.storage.session.get('siteReviewSession')).siteReviewSession?.cache?.some(entry => entry.key === key), key), 'warm archive cache');
 
+  if (process.env.SITE_EXPORT_ONLY !== '1') {
   stage = 'warm exact-game miss then finish notice';
   const exact = current('12345001', 'exactowl');
   await fixtures([old]); await enabled('chesscom', true);
@@ -612,9 +619,233 @@ try {
   await pendingLobby.waitForTimeout(450);
   await worker.evaluate(() => globalThis.__releaseMonth());
   await observe(pendingLobby, pendingLatest, 'finish while latest request pending');
+
+  for (const hideResult of [false, true]) {
+    stage = hideResult ? 'delayed archive publication after result modal closes' : 'delayed archive publication after initial completion miss';
+    const delayed = current(hideResult ? '12345006' : '12345005', hideResult ? 'hiddenresultowl' : 'delayedowl');
+    const key = 'chesscom:sitecat:' + encodeURIComponent(delayed.url);
+    await fixtures([old]); await enabled('chesscom', true);
+    const delayedPage = await context.newPage(); watchErrors(delayedPage);
+    await delayedPage.goto(delayed.url.replace('/game/live/', '/game/')); await delayedPage.bringToFront();
+    await cached(key); await noFrame(delayedPage);
+    await delayedPage.evaluate(() => { document.querySelector('#round-result').hidden = false; });
+    // The API is still behind when the finish-triggered refresh completes.
+    // Publication below must be discovered by polling on this same game page.
+    await poll(async () => worker.evaluate(async key => {
+      const entries = (await chrome.storage.session.get('siteReviewSession')).siteReviewSession?.cache;
+      const entry = entries?.find(entry => entry.key === key);
+      return Number.isFinite(entry?.completionRefreshAt) && entry.value?.games?.length === 0;
+    }, key), 'empty completion refresh before delayed publication');
+    await delayedPage.waitForFunction(() => document.querySelector('#meowlchess-site-review')?.dataset.state === 'waiting');
+    await noFrame(delayedPage);
+    const priorRequests = await worker.evaluate(() => globalThis.__siteFetchOptions.length);
+    if (hideResult) {
+      // A successful pre-publication HTTP response may still be fresh in the
+      // browser cache. Only an explicit revalidation can see the new game.
+      await worker.evaluate(games => { globalThis.__siteCachedArchiveGames = games; }, [old]);
+      await delayedPage.evaluate(() => { document.querySelector('#round-result').hidden = true; });
+      await delayedPage.waitForTimeout(1100); // Include the ordinary route/notice inspection.
+    }
+    await fixtures([delayed, old]);
+    if (hideResult) {
+      await poll(() => worker.evaluate(start => globalThis.__siteFetchOptions.slice(start).some(request => /\/games\/\d{4}\/\d{2}$/.test(request.url)), priorRequests), 'next publication poll after hiding the result', 22000);
+      const nextRequests = await worker.evaluate(start => globalThis.__siteFetchOptions.slice(start), priorRequests);
+      assert(nextRequests.length >= 2 && nextRequests.every(request => request.cache === 'no-cache'), 'Hiding a finished-game modal must not return to a stale HTTP archive cache.');
+    }
+    await observe(delayedPage, delayed, hideResult ? 'delayed publication with result modal hidden' : 'delayed publication after empty completion refresh', 22000);
+    await worker.evaluate(() => { globalThis.__siteCachedArchiveGames = null; });
+    console.log('Delayed publication request options:', JSON.stringify({ hideResult, requests: await worker.evaluate(start => globalThis.__siteFetchOptions.slice(start), priorRequests) }));
+  }
   assert.deepEqual(errors, []); assert.deepEqual(unexpectedRequests, []);
-  assert.equal(results.length, 4);
+  assert.equal(results.length, 6);
   console.log('Site review: warm exact/latest caches and in-flight finish refreshes select the correct newly finished games.');
+  }
+
+  if (process.env.SITE_FINISH_ONLY !== '1') {
+  const exportedPgn = (url, opponent, completed = true) => `[Link "${url}"]\n` + pgn('Finished human export fixture', 'sitecat', opponent, completed);
+  const humanImports = () => worker.evaluate(() => globalThis.__siteHumanImports);
+  const humanExportPage = async (url, exported, hold = false, delay = 0) => {
+    const initialFetches = await worker.evaluate(() => globalThis.__siteFetches.length);
+    await fixtures([old]); await enabled('chesscom', true);
+    const page = await context.newPage(); watchErrors(page);
+    await page.goto(url.replace('/game/live/', '/game/')); await page.bringToFront();
+    await page.evaluate(({ exported, hold, delay }) => {
+      const style = document.createElement('style');
+      style.textContent = '.small-controls-leftIcons button,#share-modal button{display:inline-flex!important}dialog{background:#eee;color:#222;padding:20px;border:1px solid #999}textarea{display:block;width:500px;height:180px}';
+      document.head.append(style);
+      const controls = document.createElement('div'); controls.className = 'small-controls-leftIcons';
+      const download = document.createElement('button'); download.type = 'button'; download.id = 'human-download'; download.setAttribute('aria-label', 'Download'); download.textContent = 'Download'; controls.append(download);
+      const mount = document.createElement('div'); mount.id = 'share-modal'; document.body.append(controls, mount);
+      window.__humanExportFixture = { exported, hold, delay, downloads: 0, tabs: 0, closes: 0 };
+      download.addEventListener('click', () => {
+        const fixture = window.__humanExportFixture; fixture.downloads++;
+        if (fixture.navigateOnOpen) {
+          history.pushState({}, '', fixture.navigateOnOpen);
+          document.querySelector('#round-result').hidden = true;
+        }
+        const modal = document.createElement('dialog');
+        const header = document.createElement('div'); header.className = 'share-menu-modal-header';
+        const close = document.createElement('button'); close.className = 'cc-modal-header-close'; close.textContent = 'Close';
+        close.addEventListener('click', () => { fixture.closes++; modal.close(); modal.remove(); }); header.append(close);
+        const tab = document.createElement('button'); tab.type = 'button'; tab.id = 'tab-pgn'; tab.textContent = 'PGN';
+        const content = document.createElement('div'); content.className = 'share-menu-tab-pgn-component';
+        window.__publishHumanExport = () => {
+          fixture.publishedAt = performance.now();
+          const text = document.createElement('textarea'); text.className = 'share-menu-tab-pgn-textarea'; text.readOnly = true; text.value = fixture.exported; content.replaceChildren(text);
+        };
+        tab.addEventListener('click', () => { fixture.tabs++; fixture.selectedAt = performance.now(); if (!fixture.hold) setTimeout(window.__publishHumanExport, fixture.delay); });
+        modal.append(header, tab, content); mount.append(modal); modal.show();
+      });
+    }, { exported, hold, delay });
+    await poll(() => worker.evaluate(({ pageUrl, initialFetches }) => globalThis.__siteSenders.some(sender => sender.tabUrl === pageUrl) && globalThis.__siteFetches.length >= initialFetches + 2, { pageUrl: page.url(), initialFetches }), 'initial exact-game archive lookup');
+    return page;
+  };
+  const finishHuman = page => page.evaluate(() => { document.querySelector('#round-result').hidden = false; });
+  const closeHuman = async page => { await page.close(); await enabled('chesscom', false); };
+
+  stage = 'active human game never opens Share; completed replay metadata enables exact export';
+  const exportedUrl = 'https://www.chess.com/game/live/12345007';
+  const validExport = exportedPgn(exportedUrl, 'exportowl');
+  const exportPage = await humanExportPage(exportedUrl, validExport, false, 6000);
+  const beforeExportRecords = (await records()).length, beforeImportCalls = (await humanImports()).length;
+  await exportPage.waitForTimeout(1200); await noFrame(exportPage);
+  assert.equal(await exportPage.evaluate(() => window.__humanExportFixture.downloads), 0, 'A live game must not open the Share/PGN controls.');
+  assert.equal((await humanImports()).length, beforeImportCalls);
+  await exportPage.evaluate(url => {
+    const canonical = document.createElement('meta'); canonical.setAttribute('property', 'og:url'); canonical.content = url;
+    const description = document.createElement('meta'); description.name = 'description'; description.content = 'sitecat vs exportowl. exportowl won by checkmate in 2 moves. Click to review the game, move by move.';
+    document.head.append(canonical, description);
+  }, exportedUrl);
+  const exportFrame = await waitFrame(exportPage); await complete(exportFrame);
+  assert.equal(await exportFrame.locator('#summary-players').innerText(), 'sitecat vs exportowl');
+  assert.doesNotMatch(await exportFrame.locator('#summary-source').innerText(), /bot/i);
+  assert((await exportFrame.evaluate(() => window.__siteTest)).searches > 0, 'The human export uses a real local engine.');
+  assert.deepEqual(await exportPage.evaluate(() => ({ downloads: window.__humanExportFixture.downloads, tabs: window.__humanExportFixture.tabs, closes: window.__humanExportFixture.closes })), { downloads: 1, tabs: 1, closes: 1 });
+  assert(await exportPage.evaluate(() => window.__humanExportFixture.publishedAt - window.__humanExportFixture.selectedAt >= 5900), 'The PGN must arrive after the previous five-second export budget.');
+  assert.equal((await humanImports()).length, beforeImportCalls + 1);
+  assert.equal((await humanImports()).at(-1).pgn, validExport);
+  const exportedRecords = await records(); assert.equal(exportedRecords.length, beforeExportRecords + 1);
+  assert(exportedRecords.some(record => record.game.url === exportedUrl && record.game.source === 'chesscom' && record.game.black.username === 'exportowl'));
+  assert.equal((await checkCurrentPage(exportPage)).gameUrl, exportedUrl);
+  assert.equal(await exportPage.locator('#round-result').evaluate(el => el.hidden), true, 'Finished replay metadata works without opening an end-of-game modal.');
+  await closeHuman(exportPage);
+  console.log('Site review: completed replay metadata enables exact PGN export without an end modal or archive; live game does not open Share.');
+
+  stage = 'mismatched and unfinished human exports never start analysis';
+  for (const fixture of [
+    { url: 'https://www.chess.com/game/live/12345008', pgn: exportedPgn('https://www.chess.com/game/live/98765432', 'wronglinkowl') },
+    { url: 'https://www.chess.com/game/live/12345009', pgn: exportedPgn('https://www.chess.com/game/live/12345009', 'unfinishedowl', false), unfinished: true },
+  ]) {
+    const page = await humanExportPage(fixture.url, fixture.pgn);
+    const count = (await records()).length;
+    await finishHuman(page);
+    await poll(() => page.evaluate(() => window.__humanExportFixture.downloads > 0), 'official export dialog opened');
+    if (fixture.unfinished) {
+      await poll(() => page.evaluate(() => window.__humanExportFixture.publishedAt !== undefined), 'unfinished PGN is visible');
+      await page.waitForTimeout(1200); await noFrame(page);
+      assert.equal((await records()).length, count);
+      await clickShadow(page, 'meowlchess-site-review', 'button[aria-label="Close review"]');
+    }
+    await poll(() => page.evaluate(() => window.__humanExportFixture.closes > 0), 'invalid export dialog cleaned up', 12000);
+    await page.waitForTimeout(250); await noFrame(page);
+    if (!fixture.unfinished) {
+      const feedback = await withShadowControl(page, 'meowlchess-site-review', '.waiting p[role="status"]', async (cdp, nodeId) => {
+        const { object } = await cdp.send('DOM.resolveNode', { nodeId });
+        return (await cdp.send('Runtime.callFunctionOn', { objectId: object.objectId, functionDeclaration: 'function(){return this.textContent}', returnByValue: true })).result.value;
+      });
+      assert.match(feedback, /matching link/i, 'A rejected export must explain the exact-game mismatch instead of only mentioning the archive.');
+    }
+    assert.equal(page.workers().length, 0);
+    assert.equal((await records()).length, count, 'A different game or unfinished PGN cannot authorize a review.');
+    await closeHuman(page);
+  }
+
+  stage = 'closing or navigating away cancels an unfinished export read';
+  for (const cancel of ['close', 'navigate']) {
+    const url = 'https://www.chess.com/game/live/' + (cancel === 'close' ? '12345010' : '12345011');
+    const page = await humanExportPage(url, exportedPgn(url, 'canceledowl'), true);
+    const count = (await records()).length, imports = (await humanImports()).length;
+    await finishHuman(page);
+    await poll(() => page.evaluate(() => window.__humanExportFixture.tabs > 0), 'held PGN tab selected');
+    if (cancel === 'close') await clickShadow(page, 'meowlchess-site-review', 'button[aria-label="Close review"]');
+    else await page.evaluate(() => { history.pushState({}, '', '/game/12345999'); document.querySelector('#round-result').hidden = true; });
+    await page.evaluate(() => window.__publishHumanExport());
+    await poll(() => page.evaluate(() => window.__humanExportFixture.closes > 0), 'canceled export dialog cleaned up');
+    await page.waitForTimeout(1200); await noFrame(page);
+    assert.equal((await humanImports()).length, imports, 'A canceled or previous-page export must not be submitted.');
+    assert.equal((await records()).length, count); assert.equal(page.workers().length, 0);
+    await closeHuman(page);
+  }
+  console.log('Site review: mismatched/unfinished exports and close/navigation cancellation never analyze or save a stale game.');
+
+  stage = 'synchronous Share navigation cannot close the destination dialog';
+  const departingUrl = 'https://www.chess.com/game/live/12345014';
+  const destinationUrl = 'https://www.chess.com/game/live/12345015';
+  const departingPage = await humanExportPage(departingUrl, exportedPgn(destinationUrl, 'destinationowl'));
+  const navigationImports = (await humanImports()).length, navigationRecords = (await records()).length;
+  await departingPage.evaluate(() => { window.__humanExportFixture.navigateOnOpen = '/game/12345015'; });
+  await finishHuman(departingPage);
+  await poll(() => departingPage.evaluate(() => window.__humanExportFixture.downloads === 1), 'Share click synchronously changes the game route');
+  await departingPage.waitForTimeout(1200);
+  assert.equal(departingPage.url(), destinationUrl.replace('/game/live/', '/game/'));
+  assert.equal(await departingPage.locator('#share-modal dialog').isVisible(), true, 'An export canceled before observing its dialog must leave the destination page’s dialog open.');
+  assert.deepEqual(await departingPage.evaluate(() => ({ tabs: window.__humanExportFixture.tabs, closes: window.__humanExportFixture.closes })), { tabs: 0, closes: 0 });
+  await noFrame(departingPage);
+  assert.equal((await humanImports()).length, navigationImports); assert.equal((await records()).length, navigationRecords);
+  await closeHuman(departingPage);
+
+  stage = 'manual retry after two failed exports, hidden result and expired fast-refresh window';
+  const retryUrl = 'https://www.chess.com/game/live/12345012';
+  const retryPage = await humanExportPage(retryUrl, exportedPgn('https://www.chess.com/game/live/98765432', 'retryexportowl'));
+  const retryRecords = (await records()).length;
+  const advanceContentClock = async offset => {
+    const [result] = await worker.evaluate(async ({ url, offset }) => {
+      const [tab] = await chrome.tabs.query({ url });
+      return chrome.scripting.executeScript({ target: { tabId: tab.id }, world: 'ISOLATED', args: [offset], func: offset => {
+        globalThis.__testRealContentClock ||= Date.now.bind(Date);
+        Date.now = () => globalThis.__testRealContentClock() + offset;
+        return Date.now() - globalThis.__testRealContentClock();
+      } });
+    }, { url: retryPage.url(), offset });
+    assert(Math.abs(result.result - offset) < 20);
+    assert(Math.abs(await worker.evaluate(() => Date.now()) - Date.now()) < 3000, 'The broker clock and real timeout timing must remain unchanged.');
+    await settings.bringToFront(); await settings.waitForTimeout(150); await retryPage.bringToFront();
+  };
+  await finishHuman(retryPage);
+  await poll(() => retryPage.evaluate(() => window.__humanExportFixture.closes === 1), 'first unsuccessful export');
+  await retryPage.evaluate(() => { document.querySelector('#round-result').hidden = true; });
+  await retryPage.waitForTimeout(1100);
+  await advanceContentClock(20000);
+  await poll(() => retryPage.evaluate(() => window.__humanExportFixture.closes === 2), 'second unsuccessful export');
+  await noFrame(retryPage); assert.equal((await records()).length, retryRecords);
+  await advanceContentClock(121000);
+  await retryPage.waitForTimeout(1200);
+  assert.equal(await retryPage.evaluate(() => window.__humanExportFixture.downloads), 2, 'Ordinary polling must not keep opening the dialog after two failures.');
+  await retryPage.evaluate(value => { window.__humanExportFixture.exported = value; }, exportedPgn(retryUrl, 'retryexportowl'));
+  await poll(() => withShadowControl(retryPage, 'meowlchess-site-review', '.retry-loading', async (cdp, nodeId) => {
+    const { object } = await cdp.send('DOM.resolveNode', { nodeId });
+    return (await cdp.send('Runtime.callFunctionOn', { objectId: object.objectId, functionDeclaration: 'function(){return !this.disabled}', returnByValue: true })).result.value;
+  }), 'manual retry is available');
+  await clickShadow(retryPage, 'meowlchess-site-review', '.retry-loading');
+  const retriedFrame = await waitFrame(retryPage); await complete(retriedFrame);
+  assert.equal(await retriedFrame.locator('#summary-players').innerText(), 'sitecat vs retryexportowl');
+  assert.equal((await checkCurrentPage(retryPage)).gameUrl, retryUrl);
+  assert.deepEqual(await retryPage.evaluate(() => ({ downloads: window.__humanExportFixture.downloads, closes: window.__humanExportFixture.closes, hidden: document.querySelector('#round-result').hidden })), { downloads: 3, closes: 3, hidden: true });
+  assert.equal((await records()).length, retryRecords + 1);
+  await closeHuman(retryPage);
+
+  stage = 'a user-opened Share dialog remains open after fallback';
+  const ownedUrl = 'https://www.chess.com/game/live/12345013';
+  const ownedPage = await humanExportPage(ownedUrl, exportedPgn(ownedUrl, 'userdialogowl'));
+  await ownedPage.locator('#human-download').click(); await ownedPage.locator('#tab-pgn').click();
+  await finishHuman(ownedPage);
+  const ownedFrame = await waitFrame(ownedPage); await complete(ownedFrame);
+  assert.equal(await ownedFrame.locator('#summary-players').innerText(), 'sitecat vs userdialogowl');
+  assert.equal(await ownedPage.locator('#share-modal dialog').isVisible(), true, 'The extension must not close a Share dialog opened by the user.');
+  assert.deepEqual(await ownedPage.evaluate(() => ({ downloads: window.__humanExportFixture.downloads, closes: window.__humanExportFixture.closes })), { downloads: 1, closes: 0 });
+  await closeHuman(ownedPage);
+  console.log('Site review: explicit retry survives an expired refresh window and hidden result; user-opened Share dialog stays open.');
+  }
   assert.deepEqual(unexpectedRequests, [], 'No live network requests are allowed.');
   assert.deepEqual(errors, []);
   console.log('All site-review browser assertions passed. Native permission grant/revoke prompts require manual verification.');

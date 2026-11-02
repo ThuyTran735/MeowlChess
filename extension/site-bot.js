@@ -9,8 +9,12 @@
     return ['www.chess.com', 'chess.com'].includes(location.hostname) && location.protocol === 'https:'
       && (/^\/play\/computer(?:\/|$)/.test(location.pathname) || /^\/(?:analysis\/)?game\/computer\/[^/]+\/?$/.test(location.pathname));
   }
-  function readExport() {
-    if (!isPage()) return null;
+  function isGamePage() {
+    return ['www.chess.com', 'chess.com'].includes(location.hostname) && location.protocol === 'https:'
+      && /^\/(?:analysis\/)?game\/(?:(?:live|daily)\/)?\d+\/?$/.test(location.pathname);
+  }
+  function readExportFor(eligible) {
+    if (!eligible()) return null;
     // Read Chess.com's own export, never infer a starting position from board pieces
     // or reconstruct a partial/virtualized move list. PGN preserves promotions and FEN.
     const fields = document.querySelectorAll('.share-menu-tab-pgn-component textarea, textarea[name="pgn"][aria-label="PGN"], textarea.share-menu-tab-pgn-textarea');
@@ -22,9 +26,11 @@
     }
     return null;
   }
-  async function requestExport(isActive = () => true) {
-    if (!isPage() || !isActive()) return null;
-    const ready = readExport(); if (ready) return ready;
+  async function requestExportFor(eligible, isActive = () => true) {
+    const originalPage = location.origin + location.pathname;
+    const active = () => eligible() && isActive() && originalPage === location.origin + location.pathname;
+    if (!active()) return null;
+    const ready = readExportFor(eligible); if (ready) return ready;
     // #share-modal itself is a permanent (usually empty) mount point, not an
     // open dialog. Treating it as the modal would prevent the export click.
     const shareModal = () => document.querySelector('.share-menu-modal-header')?.closest('dialog')
@@ -33,21 +39,23 @@
     const alreadyOpen = visible(currentModal);
     if (!alreadyOpen) {
       // Use the site's normal Share control, never a private endpoint or page global.
-      // On the bot page Download opens the Share dialog on its PGN tab; it does
+      // Download opens the Share dialog on its PGN tab; it does
       // not download a file. Share is the fallback when that icon is unavailable.
       const share = [...document.querySelectorAll('.small-controls-leftIcons button[aria-label="Download"]')].find(visible)
         || [...document.querySelectorAll('.small-controls-leftIcons button[aria-label="Share"]')].find(visible);
       if (!share || share.disabled) return null;
       share.click();
     }
-    const deadline = Date.now() + 5000;
+    // Share and its PGN tab can load separately on a cold page. Give the whole
+    // read one bounded window, independent of wall-clock changes.
+    const deadline = performance.now() + 30000;
     let selected = false, openedModal = null;
     try {
-      while (Date.now() < deadline && isActive() && isPage()) {
+      while (performance.now() < deadline && active()) {
         const modal = shareModal();
         if (visible(modal)) {
           openedModal ||= modal;
-          const pgn = readExport();
+          const pgn = readExportFor(eligible);
           if (pgn) return pgn;
           const tab = modal.querySelector('button#tab-pgn, button[aria-controls="tabpanel-pgn"]');
           if (!selected && visible(tab) && !tab.disabled) { tab.click(); selected = true; }
@@ -58,7 +66,9 @@
     } finally {
       // A timeout or canceled review must not strand our native modal above the
       // board. A dialog that the user already had open belongs to the user.
-      const ownedModal = openedModal || shareModal();
+      // Before a dialog has been observed, a new route may already own a
+      // different Share dialog. Do not mistake that destination for our export.
+      const ownedModal = openedModal || (originalPage === location.origin + location.pathname ? shareModal() : null);
       if (!alreadyOpen && visible(ownedModal) && ownedModal === shareModal()) {
         const close = ownedModal.querySelector('.share-menu-modal-header .cc-modal-header-close');
         if (visible(close)) close.click();
@@ -99,5 +109,11 @@
     more.append(summary, file, text, review); box.append(title, detail, read, more, feedback);
     return { element: box, feedback: message => { feedback.textContent = message; } };
   }
-  globalThis.__meowlChessBot = { isPage, readExport, requestExport, createImport };
+  globalThis.__meowlChessBot = {
+    isPage, createImport,
+    readExport: () => readExportFor(isPage),
+    requestExport: isActive => requestExportFor(isPage, isActive),
+    readGameExport: () => readExportFor(isGamePage),
+    requestGameExport: isActive => requestExportFor(isGamePage, isActive),
+  };
 })();

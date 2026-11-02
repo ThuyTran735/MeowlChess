@@ -18,9 +18,15 @@ try {
   context = await chromium.launchPersistentContext(profile, { ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : { channel: 'chromium' }), headless: true, viewport: { width: 1100, height: 800 } });
   await context.route('**/*', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><style>body{margin:0; background:#302e2b}</style><div class="game-over-component">Game over</div>' }));
   const page = await context.newPage(), errors = []; page.on('pageerror', error => errors.push(error.message));
-  async function setup() {
-    await page.goto('https://www.chess.com/game/991122334');
-    await page.evaluate(() => {
+  async function setup({ url = 'https://www.chess.com/game/991122334', metadata = null, result = true } = {}) {
+    await page.goto(url);
+    await page.evaluate(({ metadata, result }) => {
+      if (!result) document.querySelector('.game-over-component').remove();
+      for (const [attribute, name, content] of [
+        ['property', 'og:url', metadata?.url], ['name', 'description', metadata?.description], ['property', 'og:description', metadata?.ogDescription],
+      ]) if (content !== undefined) {
+        const meta = document.createElement('meta'); meta.setAttribute(attribute, name); meta.content = content; document.head.append(meta);
+      }
       const listeners = new Set(), roots = new WeakMap(), attach = Element.prototype.attachShadow;
       Element.prototype.attachShadow = function(...args) { const root = attach.apply(this, args); roots.set(this, root); return root; };
       window.lifecycle = { reads: [], calls: [], pending: [], hold: false,
@@ -34,7 +40,7 @@ try {
         return { status: 'waiting', retryAfterMs: 15000, message: 'Waiting for this completed game.' };
       } };
       chrome.storage = { local: { get: keys => Array.isArray(keys) ? new Promise(resolve => lifecycle.reads.push(resolve)) : Promise.resolve({}), set: async () => {} }, onChanged: { addListener: fn => listeners.add(fn) } };
-    });
+    }, { metadata, result });
     for (const source of scripts) await page.addScriptTag({ content: source });
   }
   await setup();
@@ -90,6 +96,35 @@ try {
     window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
   });
   await page.waitForTimeout(50);
+
+  const replay = 'https://www.chess.com/game/live/186378605424';
+  const finishedDescription = 'NaGmOr-5 (958) vs DillPickleChips1 (988). DillPickleChips1 won by resignation in 38 moves over 14 minutes. Click to review the game, move by move.';
+  await setup({ url: 'https://www.chess.com/game/186378605424?move=0', metadata: { url: replay, description: finishedDescription }, result: false });
+  await page.evaluate(value => lifecycle.reads.shift()({ siteReviewSettings: value }), settings(true));
+  await page.locator('#meowlchess-site-review').waitFor();
+  assert.equal(await page.evaluate(() => lifecycle.calls.find(call => call.type === 'meowl:site-check')?.refreshCompleted), true, 'A matching finished replay at move zero starts retrieval without a modal.');
+  await page.evaluate(() => { lifecycle.calls.length = 0; history.pushState({}, '', '/game/186378605425'); });
+  await poll(() => page.evaluate(() => lifecycle.calls.some(call => call.type === 'meowl:site-check')), 'new game route with prior replay metadata');
+  assert.equal(await page.evaluate(() => lifecycle.calls.some(call => call.refreshCompleted === true)), false, 'Stale metadata cannot mark the next SPA game complete.');
+  assert.equal(await page.locator('#meowlchess-site-review').count(), 0);
+
+  for (const fixture of [
+    { metadata: { url: 'https://chess.com/game/991122334', ogDescription: 'The game was drawn by repetition in 72 moves.' }, finished: true },
+    { metadata: null, finished: false },
+    { metadata: { url: 'https://www.chess.com/game/live/991122334', description: 'sitecat vs siteowl. Game in progress. Watch live.' }, finished: false },
+    { metadata: { url: 'https://www.chess.com/game/live/991122335', description: finishedDescription }, finished: false },
+    { metadata: { url: 'https://www.chess.com.evil.invalid/game/live/991122334', description: finishedDescription }, finished: false },
+    { metadata: { url: 'https://visitor@www.chess.com/game/live/991122334', description: finishedDescription }, finished: false },
+    { metadata: { url: 'http://www.chess.com/game/live/991122334', description: finishedDescription }, finished: false },
+    { url: 'https://www.chess.com/play/online', metadata: { url: replay, description: finishedDescription }, finished: false },
+  ]) {
+    await setup({ ...fixture, result: false });
+    await page.evaluate(value => lifecycle.reads.shift()({ siteReviewSettings: value }), settings(true));
+    await poll(() => page.evaluate(() => lifecycle.calls.some(call => call.type === 'meowl:site-check')), 'replay metadata check');
+    assert.equal(await page.evaluate(() => lifecycle.calls.some(call => call.refreshCompleted === true)), fixture.finished, JSON.stringify(fixture));
+    if (fixture.finished) await page.locator('#meowlchess-site-review').waitFor();
+    else assert.equal(await page.locator('#meowlchess-site-review').count(), 0);
+  }
   assert.deepEqual(errors, []);
   console.log('Site lifecycle assertions passed.');
 } finally { await closeTestContext(context, profile, prefix); }

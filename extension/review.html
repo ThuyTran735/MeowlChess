@@ -7,6 +7,8 @@
   <link rel="icon" type="image/png" href="icons/icon32.png">
   <link rel="stylesheet" href="review.css">
   <link rel="stylesheet" href="summary-share.css">
+  <link rel="stylesheet" href="coach.css">
+  <link rel="stylesheet" href="coach-motion.css">
 </head>
 <body>
 <header class="topbar">
@@ -19,6 +21,10 @@
       <div id="error" class="error-message" role="alert" hidden></div>
       <div class="study-title"><div><span id="game-kind" class="eyebrow">GAME REVIEW</span><h1 id="game-title">Choose a game</h1><p id="game-subtitle" class="muted">Open Games to find or import a completed game.</p></div></div>
       <div class="board-layout">
+        <aside id="coach-companion" class="coach-companion" aria-label="Your coach" hidden>
+          <figure class="coach-companion-figure"><button class="coach-companion-greet" type="button" aria-label="Say hello to Meowl" title="Tap to say hello to Meowl"><img id="coach-companion-avatar" class="coach-avatar coach-companion-avatar" src="icons/coaches/MeowlChess-coach-meowl.png" width="220" height="220" alt="" draggable="false"></button><figcaption id="coach-companion-name">Meowl</figcaption></figure>
+          <div id="coach-companion-bubble" class="coach-companion-bubble" role="status" aria-live="polite" aria-atomic="true" hidden><strong id="coach-companion-heading" class="coach-walkthrough-heading"></strong><p id="coach-companion-text" class="coach-walkthrough-text"></p></div>
+        </aside>
         <div class="board-column">
           <div class="player-line"><span class="player-avatar" aria-hidden="true"></span><strong id="top-player">Black</strong><span id="top-rating"></span><span id="top-score" class="player-score"></span></div>
           <div id="top-captured" class="captured-row" role="group"></div>
@@ -69,7 +75,7 @@
             <div class="review-status-row"><p id="review-status" class="review-status" role="status"></p><p id="save-status" class="review-status" role="status"></p></div>
           </section>
 
-          <div class="review-tabs" role="tablist" aria-label="Review view"><button id="summary-tab" type="button" role="tab" aria-selected="false" aria-controls="summary-panel" tabindex="-1" disabled>Summary</button><button id="moves-tab" type="button" role="tab" aria-selected="true" aria-controls="moves-panel">Moves</button><button id="practice-tab" type="button" role="tab" aria-selected="false" aria-controls="practice-panel" tabindex="-1">Practice</button></div>
+          <div class="review-tabs" role="tablist" aria-label="Review view"><button id="summary-tab" type="button" role="tab" aria-selected="false" aria-controls="summary-panel" tabindex="-1" disabled>Summary</button><button id="moves-tab" type="button" role="tab" aria-selected="true" aria-controls="moves-panel">Moves</button><button id="coach-tab" type="button" role="tab" aria-selected="false" aria-controls="coach-panel" tabindex="-1" disabled>Coach</button><button id="practice-tab" type="button" role="tab" aria-selected="false" aria-controls="practice-panel" tabindex="-1">Practice</button></div>
           <section id="summary-panel" role="tabpanel" aria-labelledby="summary-tab" hidden>
             <div class="summary-actions"><button id="share-summary" type="button" class="secondary-button" aria-haspopup="dialog" disabled><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3m-4 4 4-4 4 4M5 12v8h14v-8"/></svg><span>Share summary</span></button></div>
             <div id="summary" class="summary" hidden></div>
@@ -93,12 +99,14 @@
             <p class="keyboard-hint">← → Step through moves</p>
           </section>
 
+          <section id="coach-panel" role="tabpanel" aria-labelledby="coach-tab" hidden><div id="coach-root"></div></section>
+
           <section id="practice-panel" role="tabpanel" aria-labelledby="practice-tab" hidden><div class="notebook-heading"><h3>Your notebook</h3><p>Saved mistakes and bookmarked positions.</p></div><div id="practice-items"></div><div id="bookmark-items"></div></section>
         </div>
       </div>
     </section>
   </section>
-  <footer><span>MeowlChess v1.9.0 · Local analysis · <button id="open-tutorial" class="footer-link" type="button" disabled aria-haspopup="dialog" aria-controls="tutorial-dialog">Tutorial</button></span><span>Completed games only · <a href="https://www.chess.com/legal/fair-play" target="_blank" rel="noopener noreferrer">Fair play</a></span></footer>
+  <footer><span>MeowlChess v1.10.0 · Local analysis · <button id="open-tutorial" class="footer-link" type="button" disabled aria-haspopup="dialog" aria-controls="tutorial-dialog">Tutorial</button></span><span>Completed games only · <a href="https://www.chess.com/legal/fair-play" target="_blank" rel="noopener noreferrer">Fair play</a></span></footer>
 </main>
 
 <dialog id="library-dialog" class="library-dialog" aria-labelledby="library-title">

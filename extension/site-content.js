@@ -12,6 +12,8 @@
   let dismissed = null, baseline = null, completedUrl = null, baselineKnown = false, hint = false, hintSince = 0, nextCheck = 0;
   let interval = source === 'chesscom' ? 60000 : 30000;
   let completionRefresh = null, completionAlerts = false;
+  let gameExportAttempts = 0, gameExportAttemptPgn = null, finishedPageUrl = null;
+  let gameExportIssue = null;
   let configurationRead = 0, settingsRevision = 0, alertsRevision = 0;
   let retryButton, retryTimer, manualRetryUntil = 0, manualRetryPending = false;
   const bot = globalThis.__meowlChessBot;
@@ -266,6 +268,40 @@
       else botForm?.feedback('Open Share → PGN, or use a PGN file below. Only finished games can be reviewed.');
     }).catch(error => { if (active()) botForm?.feedback(error.message); }).finally(() => { botExporting = false; });
   }
+  async function tryFinishedGameExport(started, revision) {
+    const target = specificGameUrl();
+    if (source !== 'chesscom' || !target || !bot?.requestGameExport ||
+        !(hint || finishedPageUrl === target)) return false;
+    const active = () => enabled && !document.hidden && started === generation &&
+      specificGameUrl() === target && !dismissed && !selection;
+    if (!active()) return false;
+    const available = bot.readGameExport();
+    // Try twice in case Chess.com's Share controls mount after its result notice.
+    // A manual retry permits another attempt; ordinary polling never loops dialogs.
+    if (!available && gameExportAttempts >= 2) return false;
+    if (!available) gameExportAttempts++;
+    gameExportIssue = null;
+    try {
+      waiting('Getting the finished game from Chess.com…');
+      const pgn = available || await bot.requestGameExport(active);
+      if (!active() || !pgn || pgn === gameExportAttemptPgn) return false;
+      gameExportAttemptPgn = pgn;
+      // The broker checks the complete legal PGN, configured player and exact
+      // Link against the browser's current game URL before authorizing a review.
+      const reply = await send('meowl:site-game-import', { pgn });
+      if (!active()) return false;
+      if (reply?.status === 'error') {
+        gameExportIssue = reply.message || 'The game export could not be read. Retrying the public archive…';
+        return false;
+      }
+      if (reply?.status !== 'ready' || reply.gameUrl !== target || (reply.kind !== undefined && reply.kind !== 'export')) return false;
+      acceptReview(reply, revision);
+      return true;
+    } catch {
+      if (active()) gameExportIssue = 'The game export could not be read. Retrying the public archive…';
+      return false;
+    }
+  }
   function waiting(text = 'Looking for this completed game.', error = false) {
     if (frame || dismissed) return;
     if (botPage()) { botPrompt(); if (error) botForm?.feedback(text); return; }
@@ -310,6 +346,8 @@
     if (!enabled || document.hidden || started !== generation) return;
     if (fromFrame) clearPanel();
     manualRetryPending = true; nextCheck = 0;
+    gameExportAttempts = 0; gameExportAttemptPgn = null;
+    gameExportIssue = null;
     waiting('Checking for this completed game again…'); updateRetryButton();
     if (!checking) void check();
   }
@@ -343,26 +381,51 @@
     if (!element || !element.getClientRects().length) return false;
     const css = getComputedStyle(element); return css.display !== 'none' && css.visibility !== 'hidden';
   }
+  function canonicalChessGameUrl(value) {
+    try {
+      const url = new URL(value);
+      if (url.protocol !== 'https:' || !['www.chess.com', 'chess.com'].includes(url.hostname) || url.port || url.username || url.password || url.search || url.hash) return null;
+      const match = url.pathname.match(/^\/game\/(?:(live|daily)\/)?(\d+)\/?$/);
+      return match ? `https://www.chess.com/game/${match[1] || 'live'}/${match[2]}` : null;
+    } catch { return null; }
+  }
+  function finishedReplayMetadata() {
+    const target = specificGameUrl();
+    if (source !== 'chesscom' || !target) return false;
+    // Replay pages at move zero may have no result modal. Their server-rendered
+    // metadata names the finished game; a previous SPA game's metadata must not
+    // act as a completion notice for the current route.
+    const canonical = document.head?.querySelector('meta[property="og:url"]')?.content;
+    if (canonicalChessGameUrl(canonical) !== target) return false;
+    const description = document.head?.querySelector('meta[name="description"]')?.content
+      || document.head?.querySelector('meta[property="og:description"]')?.content || '';
+    return /\b(?:won by (?:resignation|checkmate|timeout|abandonment|forfeit)|won on time|game (?:was )?(?:drawn|ended in a draw)|(?:drew|drawn|draw) by (?:agreement|repetition|stalemate|insufficient material|(?:50|fifty)[ -]move(?: rule)?))\b/i.test(description);
+  }
   function finishedHint() {
     if (!gamePage()) return false;
-    // Human games require an archive entry. Bot hints only open the export UI;
-    // the background separately validates a complete, legally replayable PGN.
+    // Hints only start retrieval/export. The background still validates a
+    // completed archive entry or a complete, legally replayable PGN.
     const explicit = source === 'chesscom' ? '[class*="game-over-modal"],[data-cy="game-over-modal"],.game-over-component,[data-cy="game-over-component"],.daily-game-footer-game-over' : '.round__app .result,.round__app .gameover,.round__app .follow-up';
     if ([...document.querySelectorAll(explicit)].some(visible)) return true;
     const generic = source === 'chesscom' ? '[data-cy="game-result"],.game-result,.game-result-component' : '.round__app .status,.game__meta .status';
-    return [...document.querySelectorAll(generic)].some(element => visible(element) && /(?:1\s*[-–]\s*0|0\s*[-–]\s*1|½\s*[-–]\s*½|1\/2|checkmate|stalemate|draw|resigned|won|wins|game over)/i.test(element.textContent));
+    return [...document.querySelectorAll(generic)].some(element => visible(element) && /(?:1\s*[-–]\s*0|0\s*[-–]\s*1|½\s*[-–]\s*½|1\/2|checkmate|stalemate|draw|resigned|won|wins|game over)/i.test(element.textContent)) || finishedReplayMetadata();
   }
   function refreshFinishedGame() {
     // A finished-game notice must not reuse the lookup made while it was live.
     // Keep publication retries brief and bounded; the broker still validates
     // completed archive data and enforces its own request cooldown.
-    if (source === 'chesscom' && !botPage() && gamePage()) completionRefresh = { until: Date.now() + 120000 };
+    if (source === 'chesscom' && !botPage() && gamePage()) {
+      finishedPageUrl = specificGameUrl();
+      completionRefresh = { gameUrl: finishedPageUrl, until: Date.now() + 120000 };
+    }
   }
   function inspectPage() {
     if (!enabled || document.hidden) return;
     const current = pageKey();
     if (current !== route) {
       generation++; route = current; nextCheck = 0; completionRefresh = null; resetRetry();
+      gameExportAttempts = 0; gameExportAttemptPgn = null; finishedPageUrl = null;
+      gameExportIssue = null;
       const target = specificGameUrl();
       if (target && target !== selection?.gameUrl) {
         forgetSelection(); clearPanel(); clearLauncher(); dismissed = null;
@@ -377,7 +440,9 @@
       return;
     }
     const nextHint = finishedHint();
-    if (hint && !nextHint) completionRefresh = null;
+    // Closing a result modal does not make this exact game live again. Preserve
+    // its bounded revalidation window; reusable play/bot pages still reset.
+    if (hint && !nextHint && (!completionRefresh?.gameUrl || completionRefresh.gameUrl !== specificGameUrl())) completionRefresh = null;
     if (botPage() && hint && !nextHint) {
       // The bot page reuses its URL for a rematch. Forget the previous result
       // when its final notice disappears rather than showing it as the new game.
@@ -461,8 +526,14 @@
         acceptReview(reply, revision);
       } else if (reply?.status === 'waiting') {
         if (liveLobby() && !baselineKnown) baselineKnown = true;
-        if (hint || host) waiting(reply.message);
-      } else if (reply?.status === 'error' && (hint || host)) waiting(reply.message || 'Could not load the game. Retrying shortly…', true);
+        if (await tryFinishedGameExport(started, revision)) return;
+        if (!enabled || document.hidden || started !== generation) return;
+        if (hint || host) waiting(gameExportIssue || reply.message);
+      } else if (reply?.status === 'error' && (hint || host)) {
+        if (await tryFinishedGameExport(started, revision)) return;
+        if (!enabled || document.hidden || started !== generation) return;
+        waiting(gameExportIssue || reply.message || 'Could not load the game. Retrying shortly…', true);
+      }
     } catch {
       nextCheck = Date.now() + interval;
       if (enabled && started === generation && (hint || host)) waiting('Could not connect to MeowlChess. Reload this page to reconnect.', true);
@@ -482,6 +553,8 @@
     const config = raw?.[source], name = typeof config?.username === 'string' ? config.username.trim().toLowerCase() : '';
     if (config?.enabled === true && enabled && name === username) return;
     stop(); username = name;
+    gameExportAttempts = 0; gameExportAttemptPgn = null; finishedPageUrl = null;
+    gameExportIssue = null;
     if (config?.enabled !== true || !new RegExp(`^[a-z0-9_-]{2,${source === 'lichess' ? 30 : 50}}$`).test(name)) return;
     enabled = true; route = pageKey(); dismissed = baseline = completedUrl = null; baselineKnown = false; hint = finishedHint(); hintSince = hint ? Date.now() : 0; nextCheck = 0; botAttemptPgn = botSavedPgn = null; botExportAttempted = false;
     if (hint) refreshFinishedGame();

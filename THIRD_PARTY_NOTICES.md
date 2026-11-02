@@ -83,7 +83,25 @@ The cat likeness behind the Meowl meme is **Melonpi Cat (瓜皮 / Guapi)**. Cred
 - Cat/photo account: [Melonpi Cat — 瓜皮的id酱](https://weibo.com/melonpi).
 - Original Meowl post: [zhumaokele’s cat/owl images on Weibo, April 28, 2013](https://weibo.com/1505044005/zuePUyE2D), documented in [Know Your Meme’s Meowl history](https://knowyourmeme.com/memes/meowl).
 
-The MeowlChess icon is a chess-themed adaptation of Meowl, featuring Melonpi Cat. The artwork is stored in `extension/icons/logo.png`; the browser icons are resized copies. MeowlChess does not claim authorship or ownership of Melonpi’s photographs or the underlying Meowl meme. These credits do not grant a license to the underlying third-party artwork.
+The MeowlChess icon is a chess-themed adaptation of Meowl, featuring Melonpi Cat. The three 2D coach illustrations in `extension/icons/coaches/` also adapt the Meowl character, with cat-likeness credit to **Melonpi Cat (瓜皮 / Guapi)** and the photo account linked above. The artwork is stored in `extension/icons/logo.png`; the browser icons are resized copies. MeowlChess does not claim authorship or ownership of Melonpi’s photographs or the underlying Meowl meme. These credits do not grant a license to the underlying third-party artwork.
+
+## Recorded coach meows
+
+The 25 WAV clips in `extension/sounds/coaches/` are edited excerpts of real cat recordings released under the [CC0 1.0 Universal Public Domain Dedication](https://creativecommons.org/publicdomain/zero/1.0/):
+
+| Bundled clips | Recording and creator |
+| --- | --- |
+| `MeowlChess-meow-01.wav` | [cat meow — tuberatanka](https://freesound.org/people/tuberatanka/sounds/110011/) |
+| `MeowlChess-meow-02.wav` | [meow-1.wav — nathan-osman](https://freesound.org/people/nathan-osman/sounds/686775/) |
+| `MeowlChess-meow-03.wav` through `MeowlChess-meow-07.wav` | [Cat meowing x5 — peridactyloptrix](https://freesound.org/people/peridactyloptrix/sounds/214759/) |
+| `MeowlChess-meow-08.wav` through `MeowlChess-meow-15.wav` | [cat meowing — nekoninja; cat: Sushi](https://freesound.org/people/nekoninja/sounds/414042/) |
+| `MeowlChess-meow-16.wav` through `MeowlChess-meow-18.wav` | [Cat meows for food — Sadiquecat; cat: Petit chat](https://freesound.org/people/Sadiquecat/sounds/706278/) |
+| `MeowlChess-meow-19.wav` through `MeowlChess-meow-22.wav` | [Autumn_Mehs1.wav — Keskaowl; cat: Autumn](https://freesound.org/people/Keskaowl/sounds/646955/) |
+| `MeowlChess-meow-23.wav` | [Cat Meowing — lextrack](https://freesound.org/people/lextrack/sounds/333916/) |
+| `MeowlChess-meow-24.wav` | [cat chirp.wav — dreamstobecome; cat: Queen Felicia](https://freesound.org/people/dreamstobecome/sounds/451250/) |
+| `MeowlChess-meow-25.wav` | [catpurrchirp.m4a — dreamstobecome; cat: Queen Felicia](https://freesound.org/people/dreamstobecome/sounds/535318/) |
+
+The source pages' public high-quality MP3 previews were trimmed into individual calls, converted to mono 32 kHz PCM, normalized, and given short edge fades. Original pitch and playback speed are preserved. `extension/sounds/coaches/NOTICE.txt` and `provenance.json` include source links, excerpt times, and file hashes. Attribution does not imply endorsement by the recordists.
 
 ## Lichess opening names
 

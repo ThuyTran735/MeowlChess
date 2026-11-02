@@ -1,0 +1,495 @@
+{
+  "processing": "Trimmed individual calls, mono 32 kHz PCM, DC removal, peak normalization and 8ms edge fades. Short chirps may have trailing silence padding. Original pitch and speed preserved.",
+  "clips": [
+    {
+      "file": "MeowlChess-meow-01.wav",
+      "source": {
+        "id": "110011",
+        "author": "tuberatanka",
+        "page": "https://freesound.org/people/tuberatanka/sounds/110011/",
+        "audio": "https://cdn.freesound.org/previews/110/110011_1537422-hq.mp3",
+        "license": "CC0-1.0",
+        "sha256": "2890268279C76F06DC0B7C2B59313BECF63A152A1ADDCEDE5EE5161CEE9EB45A"
+      },
+      "excerpt_seconds": [
+        0.1,
+        1.22
+      ],
+      "sha256": "2194270b255f5d98947e327a9ee773229bb3b5dbc9d2ce30ca27fe4b0bb6c9b8"
+    },
+    {
+      "file": "MeowlChess-meow-02.wav",
+      "source": {
+        "id": "686775",
+        "author": "nathan-osman",
+        "page": "https://freesound.org/people/nathan-osman/sounds/686775/",
+        "audio": "https://cdn.freesound.org/previews/686/686775_2956624-hq.mp3",
+        "license": "CC0-1.0",
+        "sha256": "0FAC01655FA518DE44BA97715892922873BA567E96462469B159C5271CCDD891"
+      },
+      "excerpt_seconds": [
+        0.1,
+        0.79
+      ],
+      "sha256": "9129e2e88945843cef252d7a9ce7189f89792683a49d1a47d83d6b0158980cd8"
+    },
+    {
+      "file": "MeowlChess-meow-03.wav",
+      "source": {
+        "id": "214759",
+        "author": "peridactyloptrix",
+        "page": "https://freesound.org/people/peridactyloptrix/sounds/214759/",
+        "audio": "https://cdn.freesound.org/previews/214/214759_2737063-hq.mp3",
+        "license": "CC0-1.0",
+        "sha256": "54820871935061BBC5ABF07FF13751EEAFCFC6256CF435F0D63FBF8B3CBF4045"
+      },
+      "excerpt_seconds": [
+        1.42,
+        2.36
+      ],
+      "sha256": "6756cbf5f4b581f46b1e0eb9c0d70b56e571789c200446cf4ead2a8bd5001e0b"
+    },
+    {
+      "file": "MeowlChess-meow-04.wav",
+      "source": {
+        "id": "214759",
+        "author": "peridactyloptrix",
+        "page": "https://freesound.org/people/peridactyloptrix/sounds/214759/",
+        "audio": "https://cdn.freesound.org/previews/214/214759_2737063-hq.mp3",
+        "license": "CC0-1.0",
+        "sha256": "54820871935061BBC5ABF07FF13751EEAFCFC6256CF435F0D63FBF8B3CBF4045"
+      },
+      "excerpt_seconds": [
+        5.62,
+        6.48
+      ],
+      "sha256": "730da3936f29d7518506fe1b577d45f1f6ace2481783383067f56ed98361a539"
+    },
+    {
+      "file": "MeowlChess-meow-05.wav",
+      "source": {
+        "id": "214759",
+        "author": "peridactyloptrix",
+        "page": "https://freesound.org/people/peridactyloptrix/sounds/214759/",
+        "audio": "https://cdn.freesound.org/previews/214/214759_2737063-hq.mp3",
+        "license": "CC0-1.0",
+        "sha256": "54820871935061BBC5ABF07FF13751EEAFCFC6256CF435F0D63FBF8B3CBF4045"
+      },
+      "excerpt_seconds": [
+        8.42,
+        9.25
+      ],
+      "sha256": "4bccd985fd10d392cb37c75b9ddececff241411591893bce5ab8e6e5ca8ecd2b"
+    },
+    {
+      "file": "MeowlChess-meow-06.wav",
+      "source": {
+        "id": "214759",
+        "author": "peridactyloptrix",
+        "page": "https://freesound.org/people/peridactyloptrix/sounds/214759/",
+        "audio": "https://cdn.freesound.org/previews/214/214759_2737063-hq.mp3",
+        "license": "CC0-1.0",
+        "sha256": "54820871935061BBC5ABF07FF13751EEAFCFC6256CF435F0D63FBF8B3CBF4045"
+      },
+      "excerpt_seconds": [
+        10.72,
+        11.66
+      ],
+      "sha256": "6241439133388ab22fef2d748a2d77eedad89a3fe312629ef28a35e1717496fa"
+    },
+    {
+      "file": "MeowlChess-meow-07.wav",
+      "source": {
+        "id": "214759",
+        "author": "peridactyloptrix",
+        "page": "https://freesound.org/people/peridactyloptrix/sounds/214759/",
+        "audio": "https://cdn.freesound.org/previews/214/214759_2737063-hq.mp3",
+        "license": "CC0-1.0",
+        "sha256": "54820871935061BBC5ABF07FF13751EEAFCFC6256CF435F0D63FBF8B3CBF4045"
+      },
+      "excerpt_seconds": [
+        14.08,
+        14.91
+      ],
+      "sha256": "399baaed80ad72a48bacf3de33d8addbe74f605391397a83ae8f4c5ac93b13ac"
+    },
+    {
+      "file": "MeowlChess-meow-08.wav",
+      "source": {
+        "id": "414042",
+        "author": "nekoninja",
+        "title": "cat meowing",
+        "page": "https://freesound.org/people/nekoninja/sounds/414042/",
+        "audio": "https://cdn.freesound.org/previews/414/414042_4682356-hq.mp3",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "checked": "2026-11-01",
+        "sha256": "cd3831343aa99d007476079b7c22425e3cdaf547c34a47c2047b92ebd7841908"
+      },
+      "excerpt_seconds": [
+        0.18,
+        0.68
+      ],
+      "silence_padding_seconds": 0.0,
+      "sound": "meow",
+      "sha256": "0c21fcb995beff17b78c53fff08513b0303c64e3793e8b93af0104d1051ce360"
+    },
+    {
+      "file": "MeowlChess-meow-09.wav",
+      "source": {
+        "id": "414042",
+        "author": "nekoninja",
+        "title": "cat meowing",
+        "page": "https://freesound.org/people/nekoninja/sounds/414042/",
+        "audio": "https://cdn.freesound.org/previews/414/414042_4682356-hq.mp3",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "checked": "2026-11-01",
+        "sha256": "cd3831343aa99d007476079b7c22425e3cdaf547c34a47c2047b92ebd7841908"
+      },
+      "excerpt_seconds": [
+        0.86,
+        1.55
+      ],
+      "silence_padding_seconds": 0.0,
+      "sound": "meow",
+      "sha256": "78770b27c9e260b4058b377828591bcc6edf74ed635c3cd3fa79de6fdfd2c51e"
+    },
+    {
+      "file": "MeowlChess-meow-10.wav",
+      "source": {
+        "id": "414042",
+        "author": "nekoninja",
+        "title": "cat meowing",
+        "page": "https://freesound.org/people/nekoninja/sounds/414042/",
+        "audio": "https://cdn.freesound.org/previews/414/414042_4682356-hq.mp3",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "checked": "2026-11-01",
+        "sha256": "cd3831343aa99d007476079b7c22425e3cdaf547c34a47c2047b92ebd7841908"
+      },
+      "excerpt_seconds": [
+        1.84,
+        2.42
+      ],
+      "silence_padding_seconds": 0.0,
+      "sound": "meow",
+      "sha256": "7b93d51aa84123727f04592c8d8b611a193e17dad792c407cc5b883b0f4de050"
+    },
+    {
+      "file": "MeowlChess-meow-11.wav",
+      "source": {
+        "id": "414042",
+        "author": "nekoninja",
+        "title": "cat meowing",
+        "page": "https://freesound.org/people/nekoninja/sounds/414042/",
+        "audio": "https://cdn.freesound.org/previews/414/414042_4682356-hq.mp3",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "checked": "2026-11-01",
+        "sha256": "cd3831343aa99d007476079b7c22425e3cdaf547c34a47c2047b92ebd7841908"
+      },
+      "excerpt_seconds": [
+        2.68,
+        3.18
+      ],
+      "silence_padding_seconds": 0.0,
+      "sound": "meow",
+      "sha256": "22e264fc1e1d418a68dbe73e635039ebc1d2fca8804907f57e7655cb28b62fd1"
+    },
+    {
+      "file": "MeowlChess-meow-12.wav",
+      "source": {
+        "id": "414042",
+        "author": "nekoninja",
+        "title": "cat meowing",
+        "page": "https://freesound.org/people/nekoninja/sounds/414042/",
+        "audio": "https://cdn.freesound.org/previews/414/414042_4682356-hq.mp3",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "checked": "2026-11-01",
+        "sha256": "cd3831343aa99d007476079b7c22425e3cdaf547c34a47c2047b92ebd7841908"
+      },
+      "excerpt_seconds": [
+        3.46,
+        4.16
+      ],
+      "silence_padding_seconds": 0.0,
+      "sound": "meow",
+      "sha256": "2065c095c731fd6f38e8fea6667eeb292947b0a9007e6b708ddadbc3d9b776cb"
+    },
+    {
+      "file": "MeowlChess-meow-13.wav",
+      "source": {
+        "id": "414042",
+        "author": "nekoninja",
+        "title": "cat meowing",
+        "page": "https://freesound.org/people/nekoninja/sounds/414042/",
+        "audio": "https://cdn.freesound.org/previews/414/414042_4682356-hq.mp3",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "checked": "2026-11-01",
+        "sha256": "cd3831343aa99d007476079b7c22425e3cdaf547c34a47c2047b92ebd7841908"
+      },
+      "excerpt_seconds": [
+        4.32,
+        5.06
+      ],
+      "silence_padding_seconds": 0.0,
+      "sound": "meow",
+      "sha256": "2bab63f65a3d8a3c9298de3eb87d4680c0df55cb10e4c4dfa262d3948f73411c"
+    },
+    {
+      "file": "MeowlChess-meow-14.wav",
+      "source": {
+        "id": "414042",
+        "author": "nekoninja",
+        "title": "cat meowing",
+        "page": "https://freesound.org/people/nekoninja/sounds/414042/",
+        "audio": "https://cdn.freesound.org/previews/414/414042_4682356-hq.mp3",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "checked": "2026-11-01",
+        "sha256": "cd3831343aa99d007476079b7c22425e3cdaf547c34a47c2047b92ebd7841908"
+      },
+      "excerpt_seconds": [
+        5.46,
+        6.04
+      ],
+      "silence_padding_seconds": 0.0,
+      "sound": "meow",
+      "sha256": "3b6f32d9009d19ff8b2308abc4671b4d20233d2a1c2f5493e272bb5be83ef233"
+    },
+    {
+      "file": "MeowlChess-meow-15.wav",
+      "source": {
+        "id": "414042",
+        "author": "nekoninja",
+        "title": "cat meowing",
+        "page": "https://freesound.org/people/nekoninja/sounds/414042/",
+        "audio": "https://cdn.freesound.org/previews/414/414042_4682356-hq.mp3",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "checked": "2026-11-01",
+        "sha256": "cd3831343aa99d007476079b7c22425e3cdaf547c34a47c2047b92ebd7841908"
+      },
+      "excerpt_seconds": [
+        9.32,
+        10.02
+      ],
+      "silence_padding_seconds": 0.0,
+      "sound": "meow",
+      "sha256": "7c08a3fe773ec0bc9dcf670438c354328d60ed67a5d584e4abb41ef50735374a"
+    },
+    {
+      "file": "MeowlChess-meow-16.wav",
+      "source": {
+        "id": "706278",
+        "author": "Sadiquecat",
+        "title": "Cat meows for food",
+        "page": "https://freesound.org/people/Sadiquecat/sounds/706278/",
+        "audio": "https://cdn.freesound.org/previews/706/706278_5287430-hq.mp3",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "checked": "2026-11-01",
+        "sha256": "5a9e233a5a9c197e8332bbf8df8b8dc31a3fe3efaf810d9f2b02835ca3b30e97"
+      },
+      "excerpt_seconds": [
+        0.02,
+        1.42
+      ],
+      "silence_padding_seconds": 0.0,
+      "sound": "meow",
+      "sha256": "8d6a516380970607df6bd2a10777084b017661bdd782d97596bd5b2757a11924"
+    },
+    {
+      "file": "MeowlChess-meow-17.wav",
+      "source": {
+        "id": "706278",
+        "author": "Sadiquecat",
+        "title": "Cat meows for food",
+        "page": "https://freesound.org/people/Sadiquecat/sounds/706278/",
+        "audio": "https://cdn.freesound.org/previews/706/706278_5287430-hq.mp3",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "checked": "2026-11-01",
+        "sha256": "5a9e233a5a9c197e8332bbf8df8b8dc31a3fe3efaf810d9f2b02835ca3b30e97"
+      },
+      "excerpt_seconds": [
+        5.72,
+        7.02
+      ],
+      "silence_padding_seconds": 0.0,
+      "sound": "meow",
+      "sha256": "01db52a614e2ca57afab0ea643a01ffd82f79faf998d68a007bad67429631675"
+    },
+    {
+      "file": "MeowlChess-meow-18.wav",
+      "source": {
+        "id": "706278",
+        "author": "Sadiquecat",
+        "title": "Cat meows for food",
+        "page": "https://freesound.org/people/Sadiquecat/sounds/706278/",
+        "audio": "https://cdn.freesound.org/previews/706/706278_5287430-hq.mp3",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "checked": "2026-11-01",
+        "sha256": "5a9e233a5a9c197e8332bbf8df8b8dc31a3fe3efaf810d9f2b02835ca3b30e97"
+      },
+      "excerpt_seconds": [
+        9.94,
+        11.32
+      ],
+      "silence_padding_seconds": 0.0,
+      "sound": "meow",
+      "sha256": "9396e9992d1281b74d2a2d828dd5b0500b8fa6bf475bc662327dccf3ba1e9e2e"
+    },
+    {
+      "file": "MeowlChess-meow-19.wav",
+      "source": {
+        "id": "646955",
+        "author": "Keskaowl",
+        "title": "Autumn_Mehs1.wav",
+        "page": "https://freesound.org/people/Keskaowl/sounds/646955/",
+        "audio": "https://cdn.freesound.org/previews/646/646955_9875501-hq.mp3",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "checked": "2026-11-01",
+        "sha256": "eeb7ba7b09a97d4654835a936b58546bf46d641cb50316e72b3b3c7096e8b852"
+      },
+      "excerpt_seconds": [
+        0.0,
+        0.38
+      ],
+      "silence_padding_seconds": 0.04,
+      "sound": "chirp",
+      "sha256": "54cc241f46c79694fa4d87526708ec395c6497881beab7752af6a1421045fd8b"
+    },
+    {
+      "file": "MeowlChess-meow-20.wav",
+      "source": {
+        "id": "646955",
+        "author": "Keskaowl",
+        "title": "Autumn_Mehs1.wav",
+        "page": "https://freesound.org/people/Keskaowl/sounds/646955/",
+        "audio": "https://cdn.freesound.org/previews/646/646955_9875501-hq.mp3",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "checked": "2026-11-01",
+        "sha256": "eeb7ba7b09a97d4654835a936b58546bf46d641cb50316e72b3b3c7096e8b852"
+      },
+      "excerpt_seconds": [
+        0.48,
+        0.88
+      ],
+      "silence_padding_seconds": 0.02,
+      "sound": "chirp",
+      "sha256": "82a9ae652217c7a140ed545f7b9a925944cb17186faba529e79293bbe0a1a00e"
+    },
+    {
+      "file": "MeowlChess-meow-21.wav",
+      "source": {
+        "id": "646955",
+        "author": "Keskaowl",
+        "title": "Autumn_Mehs1.wav",
+        "page": "https://freesound.org/people/Keskaowl/sounds/646955/",
+        "audio": "https://cdn.freesound.org/previews/646/646955_9875501-hq.mp3",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "checked": "2026-11-01",
+        "sha256": "eeb7ba7b09a97d4654835a936b58546bf46d641cb50316e72b3b3c7096e8b852"
+      },
+      "excerpt_seconds": [
+        1.06,
+        1.46
+      ],
+      "silence_padding_seconds": 0.02,
+      "sound": "chirp",
+      "sha256": "a6c32dd36c3da5783317c188e9178411fc4dbcdd9bc2739ebcf5c23d3ed747b0"
+    },
+    {
+      "file": "MeowlChess-meow-22.wav",
+      "source": {
+        "id": "646955",
+        "author": "Keskaowl",
+        "title": "Autumn_Mehs1.wav",
+        "page": "https://freesound.org/people/Keskaowl/sounds/646955/",
+        "audio": "https://cdn.freesound.org/previews/646/646955_9875501-hq.mp3",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "checked": "2026-11-01",
+        "sha256": "eeb7ba7b09a97d4654835a936b58546bf46d641cb50316e72b3b3c7096e8b852"
+      },
+      "excerpt_seconds": [
+        1.72,
+        2.0
+      ],
+      "silence_padding_seconds": 0.14,
+      "sound": "chirp",
+      "sha256": "e5d6808e58ae3cf8d673292975220216983927765cd9435a55776c0e2b70bf0c"
+    },
+    {
+      "file": "MeowlChess-meow-23.wav",
+      "source": {
+        "id": "333916",
+        "author": "lextrack",
+        "title": "Cat Meowing",
+        "page": "https://freesound.org/people/lextrack/sounds/333916/",
+        "audio": "https://cdn.freesound.org/previews/333/333916_4930786-hq.mp3",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "checked": "2026-11-01",
+        "sha256": "989a24e97b73c2b1fe0a08c86b3bbebb4cb7ff525d45f110e1601c238fd55fd6"
+      },
+      "excerpt_seconds": [
+        0.12,
+        1.2
+      ],
+      "silence_padding_seconds": 0.0,
+      "sound": "meow",
+      "sha256": "1dba00d2a419e5ac19527c063f622f36caa8a90e7de7bebd0cad05ea0686ea76"
+    },
+    {
+      "file": "MeowlChess-meow-24.wav",
+      "source": {
+        "id": "451250",
+        "author": "dreamstobecome",
+        "title": "cat chirp.wav",
+        "page": "https://freesound.org/people/dreamstobecome/sounds/451250/",
+        "audio": "https://cdn.freesound.org/previews/451/451250_7758073-hq.mp3",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "checked": "2026-11-01",
+        "sha256": "be493a43c91b5078eeaf8d08010382e7dec64e2d96197132bf2c26af048c6ab4"
+      },
+      "excerpt_seconds": [
+        2.7,
+        3.32
+      ],
+      "silence_padding_seconds": 0.0,
+      "sound": "chirp",
+      "sha256": "bfb2b142c2a1ae33db0788ff0fc1f25d1923fad0386e40fcc913816e0ebaa66d"
+    },
+    {
+      "file": "MeowlChess-meow-25.wav",
+      "source": {
+        "id": "535318",
+        "author": "dreamstobecome",
+        "title": "catpurrchirp.m4a",
+        "page": "https://freesound.org/people/dreamstobecome/sounds/535318/",
+        "audio": "https://cdn.freesound.org/previews/535/535318_7758073-hq.mp3",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "checked": "2026-11-01",
+        "sha256": "1798829926ab6fcb8293e0e9e0e7521e9a02553aa8d57c17bed8fcff61058dca"
+      },
+      "excerpt_seconds": [
+        10.57,
+        11.35
+      ],
+      "silence_padding_seconds": 0.0,
+      "sound": "purr-chirp",
+      "sha256": "d63caaf663f6b0ab5e82c6c68761d975c0c7d9fab1758e235e82505b96bbcf99"
+    }
+  ]
+}

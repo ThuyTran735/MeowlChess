@@ -15,6 +15,7 @@ const extension = join(bundle, 'extension');
 const PAGE = 'https://www.chess.com/play/computer';
 const HOST = '#meowlchess-site-review';
 const LAUNCHER = '#meowlchess-site-launcher';
+const reloadOnly = process.argv.includes('--reload-only');
 const pgn = '[Event "Bot browser fixture"]\n[White "Guest"]\n[Black "Martin"]\n[Result "0-1"]\n\n1. f3 e5 2. g4 Qh4# 0-1';
 const promotionPgn = '[Event "Bot promotion fixture"]\n[White "Guest"]\n[Black "Martin"]\n[SetUp "1"]\n[FEN "8/P7/8/8/8/6k1/8/4K3 w - - 0 1"]\n[Result "1-0"]\n\n1. a8=Q 1-0';
 const pastePgn = '[Event "Bot paste fixture"]\n[White "Guest"]\n[Black "Martin"]\n[Result "1/2-1/2"]\n\n1. d4 d5 1/2-1/2';
@@ -177,6 +178,21 @@ try {
   await poll(() => worker.evaluate(async () => Boolean((await chrome.storage.local.get('siteReviewPanelPosition:chesscom'))['siteReviewPanelPosition:chesscom'])), 'panel placement saved');
   const preferred = await worker.evaluate(async () => (await chrome.storage.local.get('siteReviewPanelPosition:chesscom'))['siteReviewPanelPosition:chesscom']);
 
+  if (reloadOnly) {
+    stage = 'isolated bot-page reload and placement restoration';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await page.reload(); await installFixture();
+      await page.waitForFunction(() => document.querySelector('#meowlchess-site-review')?.dataset.state === 'bot');
+      await page.waitForTimeout(250);
+      const restored = await page.locator(HOST).boundingBox();
+      assert(Math.abs(restored.x - preferred.left) <= 2 && Math.abs(restored.y - preferred.top) <= 2, 'Reload restores the saved placement.');
+      assert.equal(page.frames().length, 1, 'An unfinished round has no engine frame after reload.');
+      assert.equal(await page.evaluate(() => window.__downloads), 0);
+    }
+    assert.deepEqual(unexpectedRequests, []); assert.deepEqual(errors, []);
+    console.log('Bot UI: isolated reload and placement restoration passed.');
+  } else {
+
   stage = 'finish triggers official export, real Stockfish progress, summary and save';
   await page.evaluate(value => { window.__fixturePgn = value; document.querySelector('#result').textContent = '0–1'; }, pgn);
   const firstFrame = await waitFrame();
@@ -336,9 +352,24 @@ try {
   assert.deepEqual(await worker.evaluate(() => globalThis.__botFetches), []);
   assert.deepEqual(unexpectedRequests, []); assert.deepEqual(errors, []);
   console.log('All bot UI checks passed. Live Chess.com layout and native permissions remain separate from these controlled fixtures.');
+  }
 } catch (error) {
   console.error(`Bot UI failed during: ${stage}`); console.error(error);
   console.error('Page errors:', errors); console.error('Unexpected network:', unexpectedRequests);
+  if (worker) console.error('Extension state:', await worker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({ url: 'https://www.chess.com/*' });
+    const pages = [];
+    for (const tab of tabs) {
+      const state = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: async () => ({
+        url: location.href, hidden: document.hidden, ready: document.readyState,
+        content: Boolean(globalThis.__meowlChessSiteReview), bot: Boolean(globalThis.__meowlChessBot),
+        botPage: globalThis.__meowlChessBot?.isPage(), panel: Boolean(globalThis.__meowlChessCreatePanelMover),
+        reply: await chrome.runtime.sendMessage({ type: 'meowl:site-check' }),
+      }) }).catch(error => [{ error: error.message }]);
+      pages.push({ id: tab.id, status: tab.status, state });
+    }
+    return { scripts: await chrome.scripting.getRegisteredContentScripts(), settings: await chrome.storage.local.get('siteReviewSettings'), pages };
+  }).catch(error => error.message));
   if (page) { console.error('Page state:', await page.evaluate(() => ({ url: location.href, hidden: document.hidden, result: document.querySelector('#result')?.textContent, host: document.querySelector('#meowlchess-site-review')?.dataset.state, downloads: window.__downloads, closes: window.__shareCloses })).catch(() => null)); await mkdir(join(root, 'test-results'), { recursive: true }); await page.screenshot({ path: join(root, 'test-results', 'site-bot-failure.png') }).catch(() => {}); }
   throw error;
 } finally {
