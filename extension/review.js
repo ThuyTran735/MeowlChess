@@ -1,6 +1,8 @@
 import { Chess } from './vendor/chess.js';
 import { fetchGames, safeOriginalGameUrl } from './lib/games.js';
 import { parseGame, analyzeGame, MOVE_LABELS, ANALYSIS_VERSION } from './lib/review.js';
+import { installUpdateNotice } from './lib/update-notice.js';
+import { installRefreshPrompt } from './lib/refresh-prompt.js';
 import { createEngine, ENGINE_OPTIONS } from './lib/engine.js';
 import { moveArrowPath } from './lib/board.js';
 import { summarizeMaterial } from './lib/material.js';
@@ -284,6 +286,7 @@ function updateControls() {
   $('coach-tab').disabled = !state.result || !!state.retry || unavailable;
   updateCoach();
   $('smart-analysis').disabled = unavailable;
+  $('highlight-analysis').disabled = unavailable;
   $('retry-move').disabled = !state.result || !state.ply || unavailable || !!state.study || !!state.retry;
   $('show-why').disabled = !state.result || !state.ply || unavailable || !!state.study || !!state.retry;
   $('bookmark-position').disabled = !state.reviewId || unavailable || !!state.study || !!state.retry;
@@ -328,7 +331,7 @@ function updateControls() {
   $('next-key').disabled = !keys.some(ply => ply > state.ply);
   for (const button of document.querySelectorAll('.game-card, .notebook-item, .saved-open, .saved-delete, .import-game')) button.disabled = unavailable || button.dataset.invalid === 'true';
   const seconds = (state.parsed?.positions.length || 0) * ($('smart-analysis').checked ? Math.min(150, Number($('depth').value)) : Number($('depth').value)) / 1000;
-  $('time-estimate').textContent = seconds ? `About ${seconds < 60 ? `${Math.ceil(seconds)} sec` : `${Math.ceil(seconds / 60)} min`} for the first pass.${$('smart-analysis').checked ? ' Key mistakes get extra thinking time.' : ' More lines split the search time.'}` : 'Choose a game to see the estimated review time.';
+  $('time-estimate').textContent = seconds ? `About ${seconds < 60 ? `${Math.ceil(seconds)} sec` : `${Math.ceil(seconds / 60)} min`} for the first pass.${$('smart-analysis').checked ? ' Key mistakes get extra thinking time.' : ''}${$('highlight-analysis').checked ? ' Standout moves may get extra checks.' : ''}` : 'Choose a game to see the estimated review time.';
 }
 function renderCaptured(place, color, material) {
   const row = $(`${place}-captured`);
@@ -793,7 +796,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) commi
 $('board-size-auto').addEventListener('click', () => { setBoardSize('auto'); savePreferences(); });
 setBoardSize('auto');
 function currentPreferences() {
-  return { smart: $('smart-analysis').checked, autoOrient: $('auto-orient').checked, arrowMode: $('arrow-mode').value, engine: $('engine').value, source: $('game-source').value, time: $('depth').value, lines: $('multipv').value, arrows: $('show-arrows').checked, badges: $('show-badges').checked, coordinates: $('show-coordinates').checked, playback: $('play-speed').value, boardSize, moveSounds: $('move-sounds').checked };
+  return { smart: $('smart-analysis').checked, highlights: $('highlight-analysis').checked, autoOrient: $('auto-orient').checked, arrowMode: $('arrow-mode').value, engine: $('engine').value, source: $('game-source').value, time: $('depth').value, lines: $('multipv').value, arrows: $('show-arrows').checked, badges: $('show-badges').checked, coordinates: $('show-coordinates').checked, playback: $('play-speed').value, boardSize, moveSounds: $('move-sounds').checked };
 }
 let preferenceSnapshot = currentPreferences(), preferenceWrites = Promise.resolve(), unsavedPreferences = {};
 function savePreferences() {
@@ -829,7 +832,7 @@ function restorePreferences(settings) {
   for (const [id, key] of [['arrow-mode', 'arrowMode'], ['engine', 'engine'], ['game-source', 'source'], ['depth', 'time'], ['multipv', 'lines'], ['play-speed', 'playback']]) {
     if ([...$(id).options].some(option => option.value === settings[key])) $(id).value = settings[key];
   }
-  for (const [id, key] of [['smart-analysis', 'smart'], ['auto-orient', 'autoOrient'], ['show-arrows', 'arrows'], ['show-badges', 'badges'], ['show-coordinates', 'coordinates'], ['move-sounds', 'moveSounds']]) if (typeof settings[key] === 'boolean') $(id).checked = settings[key];
+  for (const [id, key] of [['smart-analysis', 'smart'], ['highlight-analysis', 'highlights'], ['auto-orient', 'autoOrient'], ['show-arrows', 'arrows'], ['show-badges', 'badges'], ['show-coordinates', 'coordinates'], ['move-sounds', 'moveSounds']]) if (typeof settings[key] === 'boolean') $(id).checked = settings[key];
   preferenceSnapshot = currentPreferences();
 }
 function goTo(ply, { playback = false, view = 'moves' } = {}) {
@@ -914,7 +917,7 @@ async function review() {
   const selected = state.selected;
   const choice = selectedEngine(); state.reviewEngine = choice.label;
   const startedAt = performance.now();
-  const analysis = { engineId: choice.id, engineName: choice.label, moveTimeMs: Number($('depth').value), multiPV: Number($('multipv').value), smartAnalysis: $('smart-analysis').checked };
+  const analysis = { engineId: choice.id, engineName: choice.label, moveTimeMs: Number($('depth').value), multiPV: Number($('multipv').value), smartAnalysis: $('smart-analysis').checked, highlightAnalysis: $('highlight-analysis').checked };
   const estimator = createReviewProgressEstimator(analysis);
   $('progress-eta').textContent = estimator.update().text; $('progress-eta').hidden = false;
   $('save-status').textContent = '';
@@ -923,7 +926,7 @@ async function review() {
   $('progress-area').hidden = false; $('progress').value = 0; $('progress-percent').textContent = '0%'; $('progress-stage').textContent = 'Analyzing game'; $('progress-text').textContent = `Starting ${choice.label}…`; $('review-status').textContent = '';
   try {
     const result = await analyzeGame(selected.pgn, {
-      engineFactory: () => createEngine(choice.id), smartAnalysis: analysis.smartAnalysis, moveTimeMs: Number($('depth').value), multiPV: Number($('multipv').value), signal: state.controller.signal,
+      engineFactory: () => createEngine(choice.id), smartAnalysis: analysis.smartAnalysis, highlightAnalysis: analysis.highlightAnalysis, moveTimeMs: Number($('depth').value), multiPV: Number($('multipv').value), signal: state.controller.signal,
       onProgress: (progress) => {
         const { completed, total, phase, phaseCompleted, phaseTotal } = progress;
         $('progress-eta').textContent = estimator.update(progress).text;
@@ -1362,7 +1365,7 @@ $('move-sounds').addEventListener('change', () => {
   else moveSounds.stop();
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) moveSounds.stop(); });
-for (const id of ['engine', 'depth', 'multipv', 'arrow-mode', 'smart-analysis', 'auto-orient', 'show-arrows', 'show-badges', 'show-coordinates', 'play-speed']) {
+for (const id of ['engine', 'depth', 'multipv', 'arrow-mode', 'smart-analysis', 'highlight-analysis', 'auto-orient', 'show-arrows', 'show-badges', 'show-coordinates', 'play-speed']) {
   $(id).addEventListener('change', () => {
     if (id === 'engine') syncEngine();
     if (id === 'auto-orient' && state.selected && !state.retry) orientToPlayer(state.selected);
@@ -1459,3 +1462,6 @@ async function initializeReview() {
   } else if (!state.selected) setLibraryOpen(true);
 }
 initializeReview();
+const updateBusy = () => state.busy || state.loading || state.libraryBusy || state.importing || !!state.positionController || !!state.retry?.controller;
+installUpdateNotice({ isBusy: updateBusy });
+installRefreshPrompt({ isBusy: updateBusy });

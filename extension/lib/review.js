@@ -69,7 +69,7 @@ function explain(move, verdict, bestSan, after) {
   return `${move.san} reduces your estimated winning chances by ${Math.round(verdict.probabilityLoss * 100)} percentage points.${bestSan ? ` Consider ${bestSan} instead.` : ''}`;
 }
 
-export async function analyzeGame(pgn, { moveTimeMs = 150, multiPV = 1, smartAnalysis = false, recognizeOpenings = true, onProgress = () => {}, signal, engineFactory = () => new StockfishEngine() } = {}) {
+export async function analyzeGame(pgn, { moveTimeMs = 150, multiPV = 1, smartAnalysis = false, highlightAnalysis = true, recognizeOpenings = true, onProgress = () => {}, signal, engineFactory = () => new StockfishEngine() } = {}) {
   abortCheck(signal);
   const startedAt = performance.now();
   const game = parseGame(pgn);
@@ -78,9 +78,10 @@ export async function analyzeGame(pgn, { moveTimeMs = 150, multiPV = 1, smartAna
   const scanTimeMs = smartAnalysis ? Math.min(selectedTime, 150) : selectedTime;
   const recheckTimeMs = smartAnalysis ? Math.max(500, Math.min(selectedTime, 3000)) : 0;
   const pairLimit = Math.min(8, Math.max(1, Math.ceil(game.moves.length * 0.15)));
+  const checkHighlights = highlightAnalysis !== false;
   const highlightLimit = Math.min(8, Math.max(1, Math.ceil(game.moves.length * 0.1)));
-  const highlightTimeMs = Math.max(2000, Math.min(selectedTime, 3000));
-  const highlightReserve = Math.min(game.positions.length, highlightLimit * 3);
+  const highlightTimeMs = checkHighlights ? Math.max(2000, Math.min(selectedTime, 3000)) : 0;
+  const highlightReserve = checkHighlights ? Math.min(game.positions.length, highlightLimit * 3) : 0;
   const scanProgressTotal = game.positions.length + highlightReserve + (smartAnalysis ? Math.min(game.positions.length, pairLimit * 2) : 0);
   const engine = engineFactory();
   const positions = [];
@@ -110,7 +111,7 @@ export async function analyzeGame(pgn, { moveTimeMs = 150, multiPV = 1, smartAna
       const evaluation = terminal || await engine.evaluate(game.positions[i], { moveTimeMs: scanTimeMs, multiPV, signal, initialFen: game.positions[0], moves: histories[i] });
       abortCheck(signal);
       positions.push(evaluation);
-      onProgress({ completed: i + 1, total: scanProgressTotal, phase: 'scan', phaseCompleted: i + 1, phaseTotal: game.positions.length, moreWork: true });
+      onProgress({ completed: i + 1, total: scanProgressTotal, phase: 'scan', phaseCompleted: i + 1, phaseTotal: game.positions.length, moreWork: !!smartAnalysis || checkHighlights });
     }
     abortCheck(signal);
     if (smartAnalysis) {
@@ -127,14 +128,14 @@ export async function analyzeGame(pgn, { moveTimeMs = 150, multiPV = 1, smartAna
       const pending = [...new Set(important.flatMap(({ index }) => [index, index + 1]))]
         .filter(index => !terminals[index]).sort((a, b) => a - b);
       const total = game.positions.length + pending.length + highlightReserve;
-      if (pending.length) onProgress({ completed: game.positions.length, total, phase: 'recheck', phaseCompleted: 0, phaseTotal: pending.length, moreWork: true });
+      if (pending.length) onProgress({ completed: game.positions.length, total, phase: 'recheck', phaseCompleted: 0, phaseTotal: pending.length, moreWork: checkHighlights });
       for (let count = 0; count < pending.length; count++) {
         abortCheck(signal);
         const index = pending[count];
         const evaluation = await engine.evaluate(game.positions[index], { moveTimeMs: recheckTimeMs, multiPV, signal, initialFen: game.positions[0], moves: histories[index] });
         abortCheck(signal);
         rechecked.set(index, evaluation);
-        onProgress({ completed: game.positions.length + count + 1, total, phase: 'recheck', phaseCompleted: count + 1, phaseTotal: pending.length, moreWork: true });
+        onProgress({ completed: game.positions.length + count + 1, total, phase: 'recheck', phaseCompleted: count + 1, phaseTotal: pending.length, moreWork: checkHighlights });
       }
       abortCheck(signal);
       // Apply the completed pass together: a selected move never receives only
@@ -142,15 +143,15 @@ export async function analyzeGame(pgn, { moveTimeMs = 150, multiPV = 1, smartAna
       for (const [index, evaluation] of rechecked) positions[index] = evaluation;
       abortCheck(signal);
     }
-    // Fast reviews still verify likely highlights. A shallow pass must not
-    // permanently suppress rare labels just because it did not reach depth 12.
-    const highlights = game.moves.flatMap((move, index) => {
+    // Optional deeper checks can confirm rare labels missed by a fast scan.
+    // Turning them off keeps normal classification from the available evidence.
+    const highlights = checkHighlights ? game.moves.flatMap((move, index) => {
       if (classifyHighlight(move, positions[index], positions[index + 1], { previousEvaluation: positions[index - 1], previousMove: game.moves[index - 1] })) return [];
       const candidate = highlightCandidate(move, positions[index], positions[index + 1], {
         previousEvaluation: positions[index - 1], previousMove: game.moves[index - 1],
       });
       return candidate ? [{ index, ...candidate }] : [];
-    }).sort((a, b) => b.priority - a.priority || a.index - b.index).slice(0, highlightLimit);
+    }).sort((a, b) => b.priority - a.priority || a.index - b.index).slice(0, highlightLimit) : [];
     highlightMoves = highlights.map(({ index }) => index + 1).sort((a, b) => a - b);
     const highlightLines = engine.supportsMultiPV ? Math.max(2, multiPV) : multiPV;
     const pendingHighlights = [...new Set(highlights.flatMap(({ index, kind }) => [
@@ -203,7 +204,7 @@ export async function analyzeGame(pgn, { moveTimeMs = 150, multiPV = 1, smartAna
     analysis: {
       version: ANALYSIS_VERSION, schemaVersion: REVIEW_SCHEMA_VERSION,
       accuracyVersion: ACCURACY_VERSION,
-      highlightMoves, highlightPositionCount: highlightChecks.size, highlightTimeMs,
+      highlightAnalysis: checkHighlights, highlightMoves, highlightPositionCount: highlightChecks.size, highlightTimeMs,
       durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
       smartAnalysis: !!smartAnalysis, scanTimeMs, recheckTimeMs,
       recheckedPlies: [...rechecked.keys()].sort((a, b) => a - b), recheckedMoves,

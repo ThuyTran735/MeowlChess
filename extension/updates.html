@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MeowlChess — Updates &amp; backups</title>
+  <link rel="icon" href="icons/icon32.png"><link rel="stylesheet" href="updates.css">
+</head>
+<body>
+  <header><a class="brand" href="review.html"><img src="icons/icon48.png" width="36" height="36" alt="">Meowl<span>Chess</span></a><a href="review.html">Open review →</a></header>
+  <main>
+    <div class="page-heading"><p class="eyebrow">MAKE YOURSELF AT HOME</p><h1>Updates &amp; backups</h1><p>Keep MeowlChess up to date. Take your study library with you.</p></div>
+    <div class="cards">
+      <section class="card" aria-labelledby="updates-heading">
+        <div class="card-heading"><span class="section-number" aria-hidden="true">↗</span><h2 id="updates-heading">Your version</h2><span id="current-version" class="version"></span></div>
+        <h3 id="update-heading">Ready when you are</h3>
+        <p id="update-status" role="status">Choose Check now to look for the latest release on GitHub.</p>
+        <p id="last-checked" class="muted"></p>
+        <div class="actions"><button id="check-update" class="primary" type="button">Check now</button><a id="download-update" class="button primary" href="https://github.com/ThuyTran735/MeowlChess/releases/latest/download/MeowlChess.zip" target="_blank" rel="noopener noreferrer" hidden>Download update</a><a id="release-link" href="https://github.com/ThuyTran735/MeowlChess/releases/latest" target="_blank" rel="noopener noreferrer">Release notes ↗</a></div>
+        <label class="toggle"><input id="automatic-updates" type="checkbox"><span>Check for updates automatically<small>Once a day when you open MeowlChess. Downloads stay in your control.</small></span></label>
+        <p class="muted small">Checking asks for access to GitHub's public release information. Your games and usernames are never sent.</p>
+        <details id="release-details" hidden><summary>What's new</summary><pre id="release-notes"></pre></details>
+      </section>
+      <section id="backup" class="card" aria-labelledby="backup-heading">
+        <div class="card-heading"><span class="section-number" aria-hidden="true">↓</span><h2 id="backup-heading">Your saved data</h2></div>
+        <h3>A copy you can keep</h3><p>Save reviews, bookmarked positions, preferences, remembered usernames, and coach unlocks in one backup file.</p>
+        <div class="actions"><button id="export-backup" class="primary" type="button">Download backup</button><button id="choose-backup" type="button">Restore backup…</button></div>
+        <input id="backup-file" type="file" accept=".json,application/json" hidden>
+        <p id="backup-status" class="muted" role="status">Stored on your device. Nothing is uploaded.</p>
+        <div class="note"><strong>Moving to another browser or a future store version?</strong><p>Download a backup here, then restore it in the new installation. Check your saved reviews before removing the old extension.</p></div>
+      </section>
+    </div>
+    <section class="card guide" aria-labelledby="guide-heading">
+      <div class="card-heading"><span class="section-number" aria-hidden="true">1–4</span><h2 id="guide-heading">Update without starting over</h2></div>
+      <p id="install-kind">This folder installation needs a manual update. Keep the same folder and the same MeowlChess card in your browser.</p>
+      <ol id="manual-guide">
+        <li><div><h3>Save a backup</h3><p>Use <button class="text-button" id="guide-backup" type="button">Download backup</button> above for a copy of your library and preferences.</p></div></li>
+        <li><div><h3>Download and extract</h3><p>Get <a href="https://github.com/ThuyTran735/MeowlChess/releases/latest/download/MeowlChess.zip" target="_blank" rel="noopener noreferrer">MeowlChess.zip</a>, then choose <strong>Extract All…</strong> on Windows or double-click it on macOS.</p></div></li>
+        <li><div><h3>Replace the files in your existing folder</h3><p>Open the new <strong>extension</strong> folder and copy its contents into the <strong>extension</strong> folder you originally installed. Choose to replace existing files.</p><div class="folder-example"><span>Your existing folder</span><code>MeowlChess / extension / manifest.json</code></div><p class="muted small">The final folder directly contains manifest.json. Avoid making an extra extension / extension folder. Your browser's MeowlChess Details page may show its installed path.</p></div></li>
+        <li><div><h3>Reload, then refresh</h3><p>Open your browser's extensions page and click the circular <strong>Reload</strong> button on your existing MeowlChess card. Then refresh Chess.com or Lichess and reopen your review tab.</p><div class="browser-row"><label for="browser">Browser</label><select id="browser"><option value="brave">Brave</option><option value="chrome">Chrome</option><option value="edge">Edge</option></select><code id="extensions-address">brave://extensions</code><button id="copy-address" type="button">Copy address</button></div><p id="copy-status" class="muted small" role="status">Paste this address into the address bar of that browser.</p></div></li>
+      </ol>
+      <p class="preserve-note"><strong>Keep MeowlChess installed.</strong> Reloading keeps saved data. Removing the extension can erase it.</p>
+      <p class="muted small">A store installation will receive browser-managed updates. This screen does not install updates or reload your tabs automatically.</p>
+    </section>
+  </main>
+  <dialog id="restore-dialog" aria-labelledby="restore-title">
+    <h2 id="restore-title">Restore this backup?</h2><p id="restore-summary"></p><p id="restore-origin" class="muted small"></p>
+    <p>Your existing reviews stay. Missing reviews and bookmarks are added, and coach progress is merged.</p>
+    <label class="toggle"><input id="restore-settings" type="checkbox" checked><span>Restore preferences too<small>Replaces saved preferences and merges remembered accounts. Website and notification permissions may need to be enabled again.</small></span></label>
+    <p class="muted small">Finish any active reviews before restoring. Refresh other MeowlChess tabs afterward to use restored preferences.</p>
+    <p id="restore-status" role="status"></p><div class="actions"><button id="cancel-restore" type="button">Cancel</button><button id="confirm-restore" class="primary" type="button">Restore backup</button></div>
+  </dialog>
+  <script type="module" src="updates-page.js"></script>
+</body>
+</html>

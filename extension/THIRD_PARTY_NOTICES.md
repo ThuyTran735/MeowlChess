@@ -18,6 +18,19 @@ The MeowlChess ZIP includes the pinned upstream source, its build scripts, the r
 
 This attribution does not imply that Chess.com or any Stockfish contributor endorses MeowlChess.
 
+## Lozza 9
+
+MeowlChess bundles the self-contained JavaScript engine and embedded evaluation network from upstream `examples/lozza9.0.js`. It runs in a local Web Worker, with no runtime downloads. Author: Colin Jenkins (op12no2).
+
+- Project: https://github.com/op12no2/lozza
+- Pinned revision: `9822ff0d34ea1f7b57c77a6d8a2453aa19ba702b`
+- Original source: https://github.com/op12no2/lozza/blob/9822ff0d34ea1f7b57c77a6d8a2453aa19ba702b/examples/lozza9.0.js
+- Upstream license: https://github.com/op12no2/lozza/blob/9822ff0d34ea1f7b57c77a6d8a2453aa19ba702b/LICENCE
+
+The upstream permission notice is included at `extension/licenses/lozza.txt`. The readable source, including its embedded network, is distributed at `extension/vendor/lozza-9.js`. MeowlChess changes only timed-search final-move selection (retain the last completed result), the UCI mate-distance rounding, terminal scores, forced-position searches (complete an evaluation before stopping), and the no-legal-move output (`0000`). These changes are marked in the source header.
+
+Lozza is exposed as a best-move-only option: this upstream version's extra lines are historical root candidates rather than independently searched, coherent MultiPV alternatives. Its small JavaScript package avoids Stockfish's WebAssembly startup, but it is a weaker alternative; the selected per-position time budget still determines review speed.
+
 ## chess.js 1.4.0
 
 Project: https://github.com/jhlywa/chess.js
@@ -47,3 +60,70 @@ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
 CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
+
+## Chess.com Neo pieces and move symbols
+
+The twelve unmodified 300×300 Neo PNG piece images in `extension/pieces/` are from Chess.com:
+
+- `https://www.chess.com/chess-themes/pieces/neo/300/{piece}.png`, where piece is wp, wn, wb, wr, wq, wk, bp, bn, bb, br, bq, or bk.
+
+The move-badge SVGs in `extension/move-icons/` use symbol contours extracted from Chess.com's public Chess V3 icon font, with circular backgrounds, colors and sizing matching the supplied screenshots:
+
+- Font source: https://www.chess.com/bundles/web/fonts/chessglyph-v3/chessglyph-v3.274864ae.woff
+- Palette reference: https://www.chess.com/bundles/app/vite/main-global-styles.HF1rcCqZrQ.css
+
+These third-party artwork files are not authored by MeowlChess and are excluded from MeowlChess's GPL code-license grant. No redistribution permission or other license grant from Chess.com is asserted here. The small filled and outlined piece symbols used in move notation are also extracted from that font. Their paths are bundled in `extension/lib/figurine-paths.js` and rendered as inline SVG.
+
+The original font is not bundled; only the used outlines are included. MeowlChess does not claim endorsement by Chess.com.
+
+## Meowl / Melonpi Cat
+
+The cat likeness behind the Meowl meme is **Melonpi Cat (瓜皮 / Guapi)**. Credit to Melonpi Cat and the photo account **瓜皮的id酱 (@melonpi on Weibo)**.
+
+- Cat/photo account: [Melonpi Cat — 瓜皮的id酱](https://weibo.com/melonpi).
+- Original Meowl post: [zhumaokele’s cat/owl images on Weibo, April 28, 2013](https://weibo.com/1505044005/zuePUyE2D), documented in [Know Your Meme’s Meowl history](https://knowyourmeme.com/memes/meowl).
+
+The MeowlChess icon is a chess-themed adaptation of Meowl, featuring Melonpi Cat. The six 2D coach characters in `extension/icons/coaches/` also adapt the Meowl character, with cat-likeness credit to **Melonpi Cat (瓜皮 / Guapi)** and the photo account linked above. The app-icon artwork is stored in `extension/icons/logo.png`; the browser icons are resized copies. Coach SVGs combine the original coach drawings with editable costume and facial-feature layers; `scripts/build-coach-outfits.mjs` reproduces these assets. MeowlChess does not claim authorship or ownership of Melonpi’s photographs or the underlying Meowl meme. These credits do not grant a license to the underlying third-party artwork.
+
+## Recorded coach meows
+
+The 35 WAV clips in `extension/sounds/coaches/` are edited excerpts of real cat recordings released under the [CC0 1.0 Universal Public Domain Dedication](https://creativecommons.org/publicdomain/zero/1.0/):
+
+| Bundled clips | Recording and creator |
+| --- | --- |
+| `MeowlChess-meow-01.wav` | [cat meow — tuberatanka](https://freesound.org/people/tuberatanka/sounds/110011/) |
+| `MeowlChess-meow-02.wav` | [meow-1.wav — nathan-osman](https://freesound.org/people/nathan-osman/sounds/686775/) |
+| `MeowlChess-meow-03.wav` through `MeowlChess-meow-07.wav` | [Cat meowing x5 — peridactyloptrix](https://freesound.org/people/peridactyloptrix/sounds/214759/) |
+| `MeowlChess-meow-08.wav` through `MeowlChess-meow-15.wav` | [cat meowing — nekoninja; cat: Sushi](https://freesound.org/people/nekoninja/sounds/414042/) |
+| `MeowlChess-meow-16.wav` through `MeowlChess-meow-18.wav` | [Cat meows for food — Sadiquecat; cat: Petit chat](https://freesound.org/people/Sadiquecat/sounds/706278/) |
+| `MeowlChess-meow-19.wav` through `MeowlChess-meow-22.wav` | [Autumn_Mehs1.wav — Keskaowl; cat: Autumn](https://freesound.org/people/Keskaowl/sounds/646955/) |
+| `MeowlChess-meow-23.wav` | [Cat Meowing — lextrack](https://freesound.org/people/lextrack/sounds/333916/) |
+| `MeowlChess-meow-24.wav` | [cat chirp.wav — dreamstobecome; cat: Queen Felicia](https://freesound.org/people/dreamstobecome/sounds/451250/) |
+| `MeowlChess-meow-25.wav` | [catpurrchirp.m4a — dreamstobecome; cat: Queen Felicia](https://freesound.org/people/dreamstobecome/sounds/535318/) |
+| `MeowlChess-meow-26.wav` | [Cat trill 1 — MBPL](https://freesound.org/people/MBPL/sounds/668822/) |
+| `MeowlChess-meow-27.wav` | [Cat trill 2 — MBPL](https://freesound.org/people/MBPL/sounds/668821/) |
+| `MeowlChess-meow-28.wav` | [Cat trill 3 — MBPL](https://freesound.org/people/MBPL/sounds/668820/) |
+| `MeowlChess-meow-29.wav` | [Cat trill 4 — MBPL](https://freesound.org/people/MBPL/sounds/668825/) |
+| `MeowlChess-meow-30.wav` | [Cat trill 5 — MBPL](https://freesound.org/people/MBPL/sounds/668824/) |
+| `MeowlChess-meow-31.wav` | [Cat trill 6 — MBPL](https://freesound.org/people/MBPL/sounds/668823/) |
+| `MeowlChess-meow-32.wav` | [Cat Meow — d.n.audio.uk](https://freesound.org/people/d.n.audio.uk/sounds/264507/) |
+| `MeowlChess-meow-33.wav` | [mew.wav — Ayana225](https://freesound.org/people/Ayana225/sounds/615893/) |
+| `MeowlChess-meow-34.wav` | [Cat meow — Sadiquecat](https://freesound.org/people/Sadiquecat/sounds/689324/) |
+| `MeowlChess-meow-35.wav` | [cat meow II — tuberatanka](https://freesound.org/people/tuberatanka/sounds/110010/) |
+
+The source pages' public high-quality MP3 previews were used as complete short calls or trimmed into individual calls, converted to mono 32 kHz PCM, normalized, and given short edge fades. Original pitch and playback speed are preserved. `extension/sounds/coaches/NOTICE.txt` and `provenance.json` include source links, excerpt times, and file hashes. Attribution does not imply endorsement by the recordists.
+
+## Lichess accuracy method
+
+MeowlChess's accuracy calculation independently implements the mathematical method described at [Lichess Accuracy metric](https://lichess.org/page/accuracy): a move-score curve, volatility weighting, and harmonic averaging. It uses MeowlChess's local evaluations and excludes Book moves. No Lichess source code is bundled for this calculation, and the resulting scores are not official Lichess or Chess.com scores.
+
+## Lichess opening names
+
+The local opening reference derives from the lichess-org/chess-openings dataset, released under the CC0 1.0 Universal Public Domain Dedication. The complete dedication is included at `extension/licenses/chess-openings.txt` and alongside the source.
+
+- Project: https://github.com/lichess-org/chess-openings
+- Pinned revision: `712a58be746c143f4ab935b68acc50f4bac813eb`
+- Source: https://github.com/lichess-org/chess-openings/tree/712a58be746c143f4ab935b68acc50f4bac813eb
+- License: https://github.com/lichess-org/chess-openings/blob/712a58be746c143f4ab935b68acc50f4bac813eb/COPYING.txt
+
+The five unmodified TSV source files and provenance are bundled in `third-party-source/chess-openings/`. `scripts/build-openings.mjs` converts their legal mainlines to compact UCI sequences at `extension/data/openings.js`. Opening recognition and Book labels use only exact mainline prefixes from the standard starting position; the dataset is not a complete opening-theory or move-quality oracle. Attribution does not imply endorsement by Lichess.

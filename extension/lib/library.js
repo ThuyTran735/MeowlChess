@@ -74,6 +74,20 @@ export function createIndexedDBReviewStore({ indexedDB = globalThis.indexedDB, d
   };
   return {
     read: id => read(id), readAll: () => read(null, true), readCoachProgress: () => read(COACH_UNLOCK_RECORD_ID, false, 'coachProgress'),
+    async snapshot() {
+      const db = await open();
+      return new Promise((resolve, reject) => {
+        let transaction, reviews, progress;
+        try {
+          transaction = db.transaction(['reviews', 'coachProgress'], 'readonly');
+          reviews = transaction.objectStore('reviews').getAll();
+          progress = transaction.objectStore('coachProgress').get(COACH_UNLOCK_RECORD_ID);
+        } catch (error) { reject(storageError(error)); return; }
+        transaction.oncomplete = () => resolve({ reviews: reviews.result, coachProgress: progress.result ?? null });
+        transaction.onabort = () => reject(storageError(transaction.error));
+        transaction.onerror = () => reject(storageError(transaction.error));
+      });
+    },
     async transact(update) {
       const db = await open();
       return new Promise((resolve, reject) => {
@@ -133,8 +147,8 @@ function normalizeAnalysis(raw, fallbackVersion) {
   if (!plain(raw)) invalid('The saved review is missing its engine settings.');
   const version = raw.analysisVersion || fallbackVersion;
   if (!['stockfish', 'lozza'].includes(raw.engineId) || !text(raw.engineName, 80) || !raw.engineName || !text(version, 160) || !version
-    || !integer(raw.moveTimeMs, 1, 60000) || !integer(raw.multiPV, 1, 3) || (raw.smartAnalysis !== undefined && typeof raw.smartAnalysis !== 'boolean') || (raw.engineId === 'lozza' && raw.multiPV !== 1)) invalid('The saved review has invalid engine settings.');
-  return { engineId: raw.engineId, engineName: raw.engineName, moveTimeMs: raw.moveTimeMs, multiPV: raw.multiPV, smartAnalysis: raw.smartAnalysis === true, analysisVersion: version };
+    || !integer(raw.moveTimeMs, 1, 60000) || !integer(raw.multiPV, 1, 3) || (raw.smartAnalysis !== undefined && typeof raw.smartAnalysis !== 'boolean') || (raw.highlightAnalysis !== undefined && typeof raw.highlightAnalysis !== 'boolean') || (raw.engineId === 'lozza' && raw.multiPV !== 1)) invalid('The saved review has invalid engine settings.');
+  return { engineId: raw.engineId, engineName: raw.engineName, moveTimeMs: raw.moveTimeMs, multiPV: raw.multiPV, smartAnalysis: raw.smartAnalysis === true, highlightAnalysis: raw.highlightAnalysis !== false, analysisVersion: version };
 }
 function validateLine(line, fen, deep) {
   if (!Array.isArray(line) || line.length > 256 || line.some(move => typeof move !== 'string' || !UCI.test(move))) invalid('A saved engine line is invalid.');
@@ -161,6 +175,7 @@ function normalizeResult(input, parsed, deep = true) {
   if (!plain(result) || !Array.isArray(result.positions) || result.positions.length !== parsed.positions.length || !Array.isArray(result.moves) || result.moves.length !== parsed.moves.length
     || JSON.stringify(result.game?.positions) !== JSON.stringify(parsed.positions)) invalid('This saved analysis belongs to a different game.');
   if (result.analysis?.durationMs !== undefined && !integer(result.analysis.durationMs, 0, Number.MAX_SAFE_INTEGER)) invalid('The saved review duration is invalid.');
+  if (result.analysis?.highlightAnalysis !== undefined && typeof result.analysis.highlightAnalysis !== 'boolean') invalid('The saved highlight setting is invalid.');
   result.positions.forEach((evaluation, ply) => validateEvaluation(evaluation, parsed.positions[ply], deep));
   result.moves = result.moves.map((move, index) => {
     const actual = parsed.moves[index];
@@ -201,9 +216,34 @@ function normalizeRecord(raw, deep = true) {
     const game = normalizeGame(raw.game);
     const { parsed } = parseCompletedPgn(game.pgn);
     const analysis = normalizeAnalysis(raw.analysis), result = normalizeResult(raw.result, parsed, deep);
-    if (result.analysis?.version && result.analysis.version !== analysis.analysisVersion || result.analysis?.smartAnalysis !== undefined && result.analysis.smartAnalysis !== analysis.smartAnalysis) invalid('The saved analysis settings do not match its results.');
+    if (result.analysis?.version && result.analysis.version !== analysis.analysisVersion || result.analysis?.smartAnalysis !== undefined && result.analysis.smartAnalysis !== analysis.smartAnalysis || (result.analysis?.highlightAnalysis !== false) !== analysis.highlightAnalysis) invalid('The saved analysis settings do not match its results.');
     return { schemaVersion: LIBRARY_SCHEMA_VERSION, id: raw.id, game, analysis, result, bookmarks: normalizeBookmarks(raw.bookmarks, parsed.moves.length), createdAt: raw.createdAt, updatedAt: raw.updatedAt };
   } catch (error) { throw new LibraryError('corrupt', 'This saved review is damaged or uses an unsupported format. Reopen its game and review it again, or delete the saved copy.', error); }
+}
+
+/** Validate every imported row before any write. Never silently omit damaged data. */
+export async function validateLibraryBackupData(value) {
+  if (!plain(value) || !Array.isArray(value.reviews) || value.reviews.length > LIBRARY_LIMITS.maxReviews
+      || (value.coachProgress != null && !initializedCoachMilestone(value.coachProgress))) {
+    throw new LibraryError('backup-invalid', 'This backup has an invalid review library or coach progress. Nothing was restored.');
+  }
+  const reviews = [], ids = new Set();
+  let bytes = 0;
+  for (const raw of value.reviews) {
+    let size;
+    try { size = byteSize(raw); } catch { invalid('This backup contains invalid review data.'); }
+    bytes += size;
+    if (size > LIBRARY_LIMITS.maxRecordBytes || bytes > LIBRARY_LIMITS.maxBytes) {
+      throw new LibraryError('limit', 'This backup exceeds the saved-review size limit. Nothing was restored.');
+    }
+    const record = normalizeRecord(raw);
+    if (ids.has(record.id) || await reviewIdForGame(record.game) !== record.id) {
+      throw new LibraryError('backup-invalid', 'This backup contains duplicate or mismatched game identities. Nothing was restored.');
+    }
+    ids.add(record.id); reviews.push(record);
+  }
+  const keys = reviews.map(record => coachGameMilestoneKey(record.game, record.result.game, record.id)).filter(Boolean);
+  return { reviews, coachProgress: mergeCoachMilestone(value.coachProgress, keys) };
 }
 
 /** Construct once per page. No in-memory cache: every call observes committed IndexedDB data. */
@@ -266,6 +306,55 @@ export function createReviewLibrary({ store = createIndexedDBReviewStore(), anal
     }));
   };
   return {
+    async exportBackupData() {
+      const data = store.snapshot ? await call('snapshot') : {
+        reviews: await call('readAll'), coachProgress: store.readCoachProgress ? await call('readCoachProgress') : null,
+      };
+      try { return await validateLibraryBackupData(data); }
+      catch (error) { throw new LibraryError('backup-invalid', 'The backup could not include every saved review. An unreadable review or unsupported format needs attention before exporting. No data was changed.', error); }
+    },
+    async mergeBackupData(input) {
+      const incoming = await validateLibraryBackupData(input);
+      const seed = await prepareUnlockSeed();
+      let progressChanged = false;
+      const result = await call('transact', (records, current) => {
+        if (current != null && !initializedCoachMilestone(current)) {
+          throw new LibraryError('backup-invalid', 'The current coach progress uses an unsupported format. Nothing was restored.');
+        }
+        const existing = new Map(records.map(record => [record.id, record]));
+        const put = [];
+        let added = 0, kept = 0, bookmarksAdded = 0;
+        for (const record of incoming.reviews) {
+          const old = existing.get(record.id);
+          if (!old) { put.push(record); added++; bookmarksAdded += record.bookmarks.length; continue; }
+          kept++;
+          // Keep existing analysis and notes. Add only bookmarks missing locally.
+          // Unknown/corrupt local rows are also preserved, never overwritten by import.
+          let previous;
+          try { previous = normalizeRecord(old, false); } catch { continue; }
+          if (canonicalIdentity(previous.result.game) !== canonicalIdentity(record.result.game)) continue;
+          const used = new Set(previous.bookmarks.map(bookmark => bookmark.ply));
+          const extra = record.bookmarks.filter(bookmark => !used.has(bookmark.ply));
+          if (extra.length) {
+            previous.bookmarks.push(...extra); previous.bookmarks.sort((a, b) => a.ply - b.ply);
+            previous.updatedAt = Math.max(previous.updatedAt, record.updatedAt);
+            put.push(previous); bookmarksAdded += extra.length;
+          }
+        }
+        const replacements = new Map(put.map(record => [record.id, record]));
+        capacity([...records.map(record => replacements.get(record.id) || record), ...put.filter(record => !existing.has(record.id))]);
+        const keys = [...incoming.coachProgress.gameKeys];
+        if (!initializedCoachMilestone(current)) for (const raw of records) {
+          const candidate = seed.get(raw.id);
+          if (candidate && candidate.fingerprint === reviewFingerprint(raw)) keys.push(candidate.key);
+        }
+        const coachProgress = mergeCoachMilestone(current, keys);
+        progressChanged = JSON.stringify(current) !== JSON.stringify(coachProgress);
+        return { put, ...(progressChanged ? { coachProgress } : {}), value: { added, kept, bookmarksAdded, coachGames: coachProgress.gameKeys.length } };
+      });
+      if (progressChanged) notifyCoachUnlockProgress();
+      return result;
+    },
     async getCoachUnlockProgress() {
       const progress = store.readCoachProgress ? await call('readCoachProgress') : null;
       if (initializedCoachMilestone(progress)) return coachUnlockProgress(progress);
@@ -283,7 +372,7 @@ export function createReviewLibrary({ store = createIndexedDBReviewStore(), anal
       const { parsed } = parseCompletedPgn(normalizedGame.pgn);
       const normalizedResult = normalizeResult(result, parsed);
       const analysis = normalizeAnalysis(settings, analysisVersion);
-      if (normalizedResult.analysis?.version && normalizedResult.analysis.version !== analysis.analysisVersion || normalizedResult.analysis?.smartAnalysis !== undefined && normalizedResult.analysis.smartAnalysis !== analysis.smartAnalysis) invalid('The engine settings do not match this analysis result.');
+      if (normalizedResult.analysis?.version && normalizedResult.analysis.version !== analysis.analysisVersion || normalizedResult.analysis?.smartAnalysis !== undefined && normalizedResult.analysis.smartAnalysis !== analysis.smartAnalysis || (normalizedResult.analysis?.highlightAnalysis !== false) !== analysis.highlightAnalysis) invalid('The engine settings do not match this analysis result.');
       const id = await reviewIdForGame(normalizedGame);
       const timestamp = now(); if (!number(timestamp, 1, Number.MAX_SAFE_INTEGER)) invalid('The system clock cannot timestamp this review.');
       return withMilestone(records => {
@@ -312,7 +401,7 @@ export function createReviewLibrary({ store = createIndexedDBReviewStore(), anal
           // The incoming identity was hashed before opening this synchronous transaction.
           // Compare the fully validated stored identity without awaiting inside IndexedDB.
           if (canonicalIdentity(old.result.game) !== canonicalIdentity(parsed)) throw new LibraryError('corrupt', 'This saved review has the wrong game identity.');
-          if (old.analysis.analysisVersion === analysisVersion) return { value: reportOutcome ? { record: expose(clone(old)), savedFresh: false } : expose(clone(old)) };
+          if (old.analysis.analysisVersion === analysisVersion && (!analysis.highlightAnalysis || old.analysis.highlightAnalysis)) return { value: reportOutcome ? { record: expose(clone(old)), savedFresh: false } : expose(clone(old)) };
         }
         const record = { schemaVersion: LIBRARY_SCHEMA_VERSION, id, game: normalizedGame, result: normalizedResult, analysis, bookmarks: old?.bookmarks || [], createdAt: old?.createdAt || timestamp, updatedAt: Math.max(timestamp, old?.updatedAt || 0) };
         capacity([...records.filter(item => item.id !== id), record]);

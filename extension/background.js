@@ -2,9 +2,12 @@ import { fetchGames } from './lib/games.js';
 import { createReviewLibrary, reviewIdForGame } from './lib/library.js';
 import { ANALYSIS_VERSION } from './lib/review.js';
 import { createCompletionAlertService } from './lib/completion-alert-service.js';
+import { createUpdateService } from './lib/updates.js';
 import { createSiteReviewBroker, createSiteReviewLibraryBridge, normalizeSiteSettings, normalizeSiteAnalysis, SITE_CONTENT_SCRIPT, SITE_PROVIDERS } from './lib/site-review.js';
 
 const SETTINGS_KEY = 'siteReviewSettings';
+const updateService = createUpdateService({ storage: chrome.storage.local, hasPermission: request => chrome.permissions.contains(request), version: chrome.runtime.getManifest().version });
+const updatePageSender = sender => sender?.id === chrome.runtime.id && ['review.html', 'updates.html'].some(path => sender.url?.split(/[?#]/)[0] === chrome.runtime.getURL(path));
 const SCRIPT_PREFIX = 'meowl-site-';
 const SITE_SCRIPTS = ['site-panel.js', 'site-bot.js', SITE_CONTENT_SCRIPT];
 const permissionFor = source => ({ permissions: ['scripting'], origins: SITE_PROVIDERS[source].origins });
@@ -141,6 +144,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes[SETTINGS_KEY]) void scheduleReconcile({ inject: true }).catch(() => {});
 });
 chrome.permissions.onRemoved.addListener(permissions => {
+  if (permissions?.origins?.some(origin => origin.includes('api.github.com'))) void chrome.storage.local.set({ updatePreferences: { automatic: false } }).catch(() => {});
   if (permissions?.permissions?.includes('notifications')) void chrome.storage.local.set({ completionAlerts: false }).catch(() => {});
   void scheduleReconcile({ inject: true }).catch(() => {});
 });
@@ -152,6 +156,17 @@ chrome.tabs.onUpdated.addListener((tabId, changes) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === 'meowl:version' && sender?.id === chrome.runtime.id) {
+    sendResponse({ version: chrome.runtime.getManifest().version }); return false;
+  }
+  if (['meowl:update-state', 'meowl:update-check', 'meowl:update-preference'].includes(message?.type)) {
+    if (!updatePageSender(sender)) { sendResponse({ status: 'unavailable' }); return false; }
+    const result = message.type === 'meowl:update-state' ? updateService.snapshot()
+      : message.type === 'meowl:update-preference' ? updateService.setAutomatic(message.enabled === true)
+      : updateService.check({ manual: message.manual === true && sender.url?.split(/[?#]/)[0] === chrome.runtime.getURL('updates.html') });
+    result.then(sendResponse, () => sendResponse({ status: 'unavailable', error: 'Updates are unavailable right now. Try reopening this page.' }));
+    return true;
+  }
   if (message?.type === 'meowl:review-completed') {
     completionAlerts.complete(message, sender).then(sendResponse, () => sendResponse({ status: 'unavailable' }));
     return true;

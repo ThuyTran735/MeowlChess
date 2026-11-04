@@ -71,6 +71,7 @@ function status(message = '', error = false) {
   $('summary-status').textContent = message;
   $('summary-status').classList.toggle('error', error);
   if (error && parentOrigin) { $('summary-retry').hidden = false; $('summary-open-review').hidden = true; $('summary-coach').hidden = true; }
+  $('summary-refresh').hidden = !parentOrigin || !/expired|extension context invalidated|reload this page/i.test(message);
 }
 let progressEstimator = null;
 function clearProgressEstimate() { $('summary-eta').hidden = true; $('summary-eta').textContent = ''; progressEstimator = null; }
@@ -80,6 +81,7 @@ function showStage(stage, label, detail = '') {
   main.dataset.stage = stage;
   if (stage !== 'analyzing') clearProgressEstimate();
   main.setAttribute('aria-busy', 'true');
+  sendParent('meowl:site-frame-stage', { busy: true });
   const stages = ['finding-game', 'analyzing', 'saving'];
   for (const step of document.querySelectorAll('.review-steps [data-step]')) {
     const current = step.dataset.step === stage;
@@ -103,6 +105,7 @@ function finishStage(stage) {
   main.dataset.stage = stage;
   if (stage !== 'analyzing') clearProgressEstimate();
   main.setAttribute('aria-busy', 'false');
+  sendParent('meowl:site-frame-stage', { busy: false });
   $('summary-progress-area').hidden = true;
   $('summary-retry').hidden = !['error', 'stopped'].includes(stage);
 }
@@ -155,8 +158,8 @@ function validatePayload(value, configuredUsername) {
   if (!game.white?.username || !game.black?.username || typeof game.white.username !== 'string' || typeof game.black.username !== 'string') throw new Error('This game is missing its players.');
   const analysis = value.analysis;
   const engine = ENGINE_OPTIONS.find(item => item.id === analysis?.engineId);
-  if (!engine || ![50, 150, 500, 1500, 3000].includes(analysis.moveTimeMs) || !Number.isInteger(analysis.multiPV) || analysis.multiPV < 1 || analysis.multiPV > engine.maxLines || typeof analysis.smartAnalysis !== 'boolean' || analysis.analysisVersion !== ANALYSIS_VERSION) throw new Error('The review settings have changed. Reload this page to try again.');
-  return { ...value, game, parsed, analysis: { ...analysis, engineName: engine.label } };
+  if (!engine || ![50, 150, 500, 1500, 3000].includes(analysis.moveTimeMs) || !Number.isInteger(analysis.multiPV) || analysis.multiPV < 1 || analysis.multiPV > engine.maxLines || typeof analysis.smartAnalysis !== 'boolean' || (analysis.highlightAnalysis !== undefined && typeof analysis.highlightAnalysis !== 'boolean') || analysis.analysisVersion !== ANALYSIS_VERSION) throw new Error('The review settings have changed. Reload this page to try again.');
+  return { ...value, game, parsed, analysis: { ...analysis, highlightAnalysis: analysis.highlightAnalysis !== false, engineName: engine.label } };
 }
 function showGame(game, parsed) {
   $('summary-source').textContent = payload.kind === 'bot' ? 'Chess.com · bot game' : source === 'chesscom' ? 'Chess.com' : 'Lichess';
@@ -232,7 +235,7 @@ function renderSummary(result, analysis, reused = false) {
     black.classList.toggle('zero', !result.summary.b.counts[label]);
     row.append(name, white, icon, black); $('summary-counts').append(row);
   }
-  $('summary-engine').textContent = `${analysis.engineName} · ${analysis.moveTimeMs / 1000}s per position${analysis.smartAnalysis ? ' · key mistakes rechecked' : ''}${reused ? ' · saved review' : ''}`;
+  $('summary-engine').textContent = `${analysis.engineName} · ${analysis.moveTimeMs / 1000}s per position${analysis.smartAnalysis ? ' · key mistakes rechecked' : ''}${analysis.highlightAnalysis === false ? ' · highlight rechecks off' : ''}${reused ? ' · saved review' : ''}`;
   const duration = formatReviewDuration(result.analysis?.durationMs);
   $('summary-duration').textContent = duration ? `Reviewed in ${duration}` : '';
   $('summary-duration').hidden = !duration;
@@ -300,7 +303,7 @@ async function runReview(id) {
   showStage('analyzing', 'Starting the local engine…', `${payload.analysis.engineName} · running on this device`);
   progressEstimator = createReviewProgressEstimator(payload.analysis);
   $('summary-eta').textContent = progressEstimator.update().text; $('summary-eta').hidden = false;
-  const result = await analyzeGame(payload.game.pgn, { engineFactory: () => createEngine(payload.analysis.engineId), moveTimeMs: payload.analysis.moveTimeMs, multiPV: payload.analysis.multiPV, smartAnalysis: payload.analysis.smartAnalysis, signal: controller.signal, onProgress });
+  const result = await analyzeGame(payload.game.pgn, { engineFactory: () => createEngine(payload.analysis.engineId), moveTimeMs: payload.analysis.moveTimeMs, multiPV: payload.analysis.multiPV, smartAnalysis: payload.analysis.smartAnalysis, highlightAnalysis: payload.analysis.highlightAnalysis, signal: controller.signal, onProgress });
   showStage('saving', 'Checking for an existing review…', 'Analysis is complete.');
   await checkEnabled();
   // A full review may have been saved elsewhere while this automatic pass ran.
@@ -363,6 +366,9 @@ async function start() {
 }
 
 $('summary-retry').addEventListener('click', () => { sendParent('meowl:site-frame-retry'); });
+$('summary-refresh').addEventListener('click', () => {
+  if (document.querySelector('main').getAttribute('aria-busy') !== 'true') sendParent('meowl:site-frame-refresh');
+});
 $('summary-cancel').addEventListener('click', () => cancel());
 $('summary-close').addEventListener('click', () => sendParent('meowl:site-frame-close'));
 async function openFullReview(view = 'summary') {

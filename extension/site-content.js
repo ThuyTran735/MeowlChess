@@ -4,6 +4,47 @@
   const source = ['www.chess.com', 'chess.com'].includes(location.hostname) ? 'chesscom' : location.hostname === 'lichess.org' ? 'lichess' : null;
   if (!source || location.protocol !== 'https:' || window !== top) return;
   const extensionOrigin = chrome.runtime.getURL('').replace(/\/$/, '');
+  const runtimeId = chrome.runtime.id;
+  const iconUrl = chrome.runtime.getURL('icons/icon48.png');
+  // Reloading an extension can leave its previous isolated helper and panel in
+  // this document. Keep the old review visible instead of creating two panels.
+  if (document.getElementById('meowlchess-site-review') || document.getElementById('meowlchess-site-launcher')) {
+    showPageRefresh(); return;
+  }
+  function showPageRefresh() {
+    if (document.getElementById('MeowlChess-page-refresh')) return;
+    const notice = document.createElement('aside'); notice.id = 'MeowlChess-page-refresh';
+    notice.style.cssText = 'all:initial!important;position:fixed!important;right:16px!important;bottom:16px!important;width:min(330px,calc(100vw - 32px))!important;z-index:2147483647!important;';
+    const root = notice.attachShadow({ mode: 'closed' }), style = document.createElement('style');
+    style.textContent = '[hidden]{display:none!important}.notice{box-sizing:border-box;padding:14px;background:#252b23;color:#f1f2ec;border:1px solid #64735b;border-radius:12px;box-shadow:0 8px 32px #0006;font:13px/1.5 system-ui,sans-serif}p{margin:0 0 12px}button{border:1px solid #77836e;border-radius:7px;background:transparent;color:inherit;padding:7px 11px;font:inherit;cursor:pointer}button:first-of-type{background:#a8bd94;color:#20291c;margin-right:8px}button:disabled{opacity:.55;cursor:default}button:focus-visible{outline:2px solid white;outline-offset:3px}';
+    const box = document.createElement('div'); box.className = 'notice'; box.setAttribute('aria-label', 'MeowlChess update');
+    const text = document.createElement('p'); text.setAttribute('role', 'status');
+    const refresh = document.createElement('button'); refresh.type = 'button'; refresh.textContent = 'Refresh page';
+    const busy = () => document.getElementById('meowlchess-site-review')?.dataset.busy === 'true';
+    let confirmStop = false;
+    const stuck = document.createElement('button'); stuck.type = 'button'; stuck.textContent = 'Review stuck?';
+    stuck.style.cssText = 'display:block;margin-top:10px;border:0;padding:3px 0;text-decoration:underline;color:#bacdaf';
+    const sync = () => {
+      if (!busy()) confirmStop = false;
+      refresh.disabled = busy() && !confirmStop;
+      refresh.textContent = confirmStop ? 'Stop review and refresh' : 'Refresh page';
+      stuck.hidden = !busy() || confirmStop;
+      text.textContent = confirmStop ? 'Refreshing stops any unfinished analysis on this page. Previously saved reviews are kept. Continue only after your game is over.'
+        : busy() ? 'MeowlChess updated. Finish this review, then refresh the page to reconnect.'
+          : 'MeowlChess updated or reloaded. Refresh after your game to reconnect. Saved reviews are kept.';
+    };
+    refresh.addEventListener('click', () => { if (!busy() || confirmStop) location.reload(); });
+    // A destroyed extension frame may never clear its busy flag. Recovery is
+    // deliberately two actions, so an update cannot interrupt a healthy review.
+    stuck.addEventListener('click', () => { confirmStop = true; sync(); refresh.focus(); });
+    const later = document.createElement('button'); later.type = 'button'; later.textContent = 'Later';
+    const watcher = new MutationObserver(sync);
+    const existing = document.getElementById('meowlchess-site-review');
+    if (existing) watcher.observe(existing, { attributes: true, attributeFilter: ['data-busy'] });
+    later.addEventListener('click', () => { watcher.disconnect(); notice.remove(); });
+    window.addEventListener('pagehide', () => watcher.disconnect(), { once: true });
+    box.append(text, refresh, later, stuck); root.append(style, box); document.documentElement.append(notice); sync();
+  }
   const tokenPattern = /^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i;
   const lichessRoutes = new Set(['analysis', 'training', 'practice', 'features', 'insights', 'streamer', 'password', 'bookmark', 'timeline', 'settings', 'checkout', 'registration']);
   let enabled = false, username = '', generation = 0, checking = false, timer, routeTimer, observer, debounce;
@@ -16,6 +57,7 @@
   let gameExportIssue = null;
   let configurationRead = 0, settingsRevision = 0, alertsRevision = 0;
   let retryButton, retryTimer, manualRetryUntil = 0, manualRetryPending = false;
+  let staleContext = false;
   const bot = globalThis.__meowlChessBot;
   let panelMover, botForm, botSubmitting = false, botExporting = false, botExportAttempted = false, botAttemptPgn = null, botSavedPgn = null;
   const botPage = () => source === 'chesscom' && bot?.isPage() === true;
@@ -34,8 +76,15 @@
     return source === 'chesscom' ? botPage() || liveLobby() || /^\/(?:analysis\/)?game\//.test(location.pathname) : Boolean(specificGameUrl());
   }
   function send(type, extra = {}) {
-    try { return Promise.resolve(chrome.runtime.sendMessage({ type, ...extra })); }
-    catch (error) { return Promise.reject(error); } // An extension reload can invalidate this old page helper.
+    try { return Promise.resolve(chrome.runtime.sendMessage({ type, ...extra })).catch(error => { detectStaleContext(error); throw error; }); }
+    catch (error) { detectStaleContext(error); return Promise.reject(error); }
+  }
+  function detectStaleContext(error) {
+    if (staleContext) return true;
+    if ((!runtimeId || chrome.runtime?.id) && !/extension context invalidated/i.test(error?.message || '')) return false;
+    staleContext = true; generation++; clearTimeout(timer); clearTimeout(debounce); clearTimeout(retryTimer); clearInterval(routeTimer); observer?.disconnect();
+    if (retryButton) { retryButton.disabled = true; retryButton.textContent = 'Refresh to reconnect'; }
+    if (enabled || host || launcher) showPageRefresh(); return true;
   }
   function release(value) {
     return value ? send('meowl:site-release', { token: value.token, panelGeneration: value.panelGeneration }).catch(() => {}) : Promise.resolve();
@@ -78,7 +127,7 @@
     const style = document.createElement('style');
     style.textContent = `button{display:flex;align-items:center;gap:9px;box-sizing:border-box;max-width:calc(100vw - 32px);padding:8px 13px 8px 8px;border:1px solid #ffffff26;border-radius:28px;background:#202320;color:#f1f2ec;box-shadow:0 4px 20px #0005;font:600 13px/1.4 'Segoe UI',Arial,sans-serif;cursor:pointer;transition:background-color .16s,border-color .16s}button:hover{background:#30362e;border-color:#ffffff40}button:focus-visible{outline:2px solid #a8bd94;outline-offset:3px}button:focus:not(:focus-visible){outline:none}img{display:block;width:28px;height:28px;flex:none;border-radius:50%;object-fit:cover}span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(prefers-reduced-motion:reduce){button{transition:none}}`;
     const open = button('Open MeowlChess review', '', () => { void reopenPanel(); });
-    const icon = document.createElement('img'); icon.src = chrome.runtime.getURL('icons/icon48.png'); icon.alt = ''; icon.draggable = false;
+    const icon = document.createElement('img'); icon.src = iconUrl; icon.alt = ''; icon.draggable = false;
     const label = document.createElement('span'); label.textContent = 'MeowlChess'; open.append(icon, label);
     root.append(style, open); document.documentElement.append(launcher);
     if (focus) open.focus({ preventScroll: true });
@@ -90,6 +139,7 @@
     schedule();
   }
   async function reopenPanel() {
+    if (staleContext) { showPageRefresh(); return; }
     if (!enabled || document.hidden) return;
     // A click just after navigation must not bring back the previous bot export.
     inspectPage();
@@ -207,7 +257,7 @@
     `;
     const panel = document.createElement('section'); panel.className = 'panel'; panel.setAttribute('aria-label', 'MeowlChess game review');
     const header = document.createElement('div'); header.className = 'head';
-    const icon = document.createElement('img'); icon.className = 'brand-icon'; icon.src = chrome.runtime.getURL('icons/icon48.png'); icon.alt = ''; icon.setAttribute('aria-hidden', 'true'); icon.draggable = false; icon.width = icon.height = 28;
+    const icon = document.createElement('img'); icon.className = 'brand-icon'; icon.src = iconUrl; icon.alt = ''; icon.setAttribute('aria-hidden', 'true'); icon.draggable = false; icon.width = icon.height = 28;
     const brand = document.createElement('span'); brand.className = 'brand'; brand.textContent = 'Meowl';
     const chess = document.createElement('span'); chess.textContent = 'Chess'; brand.append(chess);
     const settings = button('Page review settings', '', () => { void send('meowl:site-open-settings').catch(() => {}); }); settings.className = 'settings'; settings.append(controlIcon('settings'));
@@ -328,6 +378,7 @@
   function updateRetryButton() {
     clearTimeout(retryTimer);
     if (!retryButton) return;
+    if (staleContext) { retryButton.disabled = true; retryButton.textContent = 'Refresh to reconnect'; return; }
     const seconds = Math.max(0, Math.ceil((manualRetryUntil - Date.now()) / 1000));
     retryButton.disabled = checking || seconds > 0;
     retryButton.textContent = checking ? 'Checking…' : seconds ? `Retry in ${seconds}s` : 'Retry loading';
@@ -337,6 +388,7 @@
     manualRetryPending = false; manualRetryUntil = 0; clearTimeout(retryTimer);
   }
   async function retryLoading(fromFrame = false) {
+    if (staleContext) { showPageRefresh(); return; }
     if (!enabled || document.hidden || dismissed || (!fromFrame && (Date.now() < manualRetryUntil || checking))) return;
     inspectPage();
     const started = ++generation;
@@ -356,7 +408,7 @@
     if (token === reply.token && frame?.isConnected) return;
     const keepFocus = Boolean(shadow?.activeElement);
     clearPanel(); token = reply.token; gameUrl = reply.gameUrl;
-    ensurePanel(); host.dataset.state = 'review';
+    ensurePanel(); host.dataset.state = 'review'; host.dataset.busy = 'true';
     frame = document.createElement('iframe'); frame.title = 'MeowlChess review progress and summary'; frame.referrerPolicy = 'origin';
     frame.src = chrome.runtime.getURL('site-summary.html') + '#' + token; frame.style.height = '270px'; body.replaceChildren(frame);
     collapsed(panelState === 'collapsed');
@@ -421,7 +473,7 @@
     }
   }
   function inspectPage() {
-    if (!enabled || document.hidden) return;
+    if (!enabled || document.hidden || detectStaleContext()) return;
     const current = pageKey();
     if (current !== route) {
       generation++; route = current; nextCheck = 0; completionRefresh = null; resetRetry();
@@ -465,10 +517,10 @@
   }
   function schedule() {
     clearTimeout(timer);
-    if (enabled && !document.hidden && (!dismissed || selection)) timer = setTimeout(() => { void check(); }, Math.max(1000, nextCheck - Date.now()));
+    if (!staleContext && enabled && !document.hidden && (!dismissed || selection)) timer = setTimeout(() => { void check(); }, Math.max(1000, nextCheck - Date.now()));
   }
   async function check() {
-    if (!enabled || document.hidden || checking || botSubmitting || (dismissed && !selection)) return;
+    if (staleContext || !enabled || document.hidden || checking || botSubmitting || (dismissed && !selection)) return;
     if (Date.now() < nextCheck) { schedule(); return; }
     if (completionRefresh && completionRefresh.until <= Date.now()) completionRefresh = null;
     checking = true; const started = generation, revision = stateRevision, fresh = freshSelection, completion = completionRefresh, manualRetry = manualRetryPending;
@@ -535,7 +587,8 @@
         if (!enabled || document.hidden || started !== generation) return;
         waiting(gameExportIssue || reply.message || 'Could not load the game. Retrying shortly…', true);
       }
-    } catch {
+    } catch (error) {
+      if (detectStaleContext(error)) return;
       nextCheck = Date.now() + interval;
       if (enabled && started === generation && (hint || host)) waiting('Could not connect to MeowlChess. Reload this page to reconnect.', true);
     } finally {
@@ -543,7 +596,7 @@
       // If the finish notice arrived during an older lookup, give it its own
       // fresh check instead of losing it to that lookup's normal poll timer.
       if ((completionRefresh && completionRefresh !== completion) || manualRetryPending) nextCheck = 0;
-      updateRetryButton(); inspectBot(); schedule();
+      updateRetryButton(); if (!staleContext) inspectBot(); schedule();
     }
   }
   function stop(preserve = false) {
@@ -551,6 +604,7 @@
     resetRetry(); completionRefresh = null; enabled = false; generation++; clearTimeout(timer); clearTimeout(debounce); clearInterval(routeTimer); observer?.disconnect(); observer = null; clearPanel(); clearLauncher();
   }
   function configure(raw) {
+    if (staleContext) return;
     const config = raw?.[source], name = typeof config?.username === 'string' ? config.username.trim().toLowerCase() : '';
     if (config?.enabled === true && enabled && name === username) return;
     stop(); username = name;
@@ -573,10 +627,13 @@
         parentY: rect.top + data.clientY * rect.height / data.viewportHeight });
     }
     if (event.data.type === 'meowl:site-frame-size' && Number.isFinite(event.data.height)) frame.style.height = Math.max(180, Math.min(680, event.data.height)) + 'px';
+    if (event.data.type === 'meowl:site-frame-stage' && typeof event.data.busy === 'boolean') host.dataset.busy = String(event.data.busy);
+    if (event.data.type === 'meowl:site-frame-refresh' && host.dataset.busy !== 'true') location.reload();
     if (event.data.type === 'meowl:site-frame-close') dismiss();
     if (event.data.type === 'meowl:site-frame-retry') void retryLoading(true);
   });
   document.addEventListener('visibilitychange', () => {
+    if (staleContext) return;
     if (!enabled) return;
     if (document.hidden) {
       clearTimeout(timer); clearTimeout(retryTimer);
@@ -593,8 +650,8 @@
         if (read !== configurationRead) return;
         if (alertsAtStart === alertsRevision) completionAlerts = values.completionAlerts === true;
         if (settingsAtStart === settingsRevision) configure(values.siteReviewSettings);
-      }).catch(() => {});
-    } catch { /* An extension reload can invalidate a restored content script. */ }
+      }).catch(detectStaleContext);
+    } catch (error) { detectStaleContext(error); }
   }
   window.addEventListener('pagehide', () => { configurationRead++; stop(true); });
   window.addEventListener('pageshow', event => { if (event.persisted) readConfiguration(); });

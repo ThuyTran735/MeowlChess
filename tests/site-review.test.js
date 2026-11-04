@@ -47,7 +47,7 @@ function bridgeFixture() {
   return { library, records, writes: () => writes, bridge: createSiteReviewLibraryBridge({ library, idForGame: reviewIdForGame }) };
 }
 
-const finishedResult = () => analyzeGame(completedPgn, { smartAnalysis: true, moveTimeMs: 50, multiPV: 1, engineFactory: () => ({
+const finishedResult = (options = {}) => analyzeGame(completedPgn, { smartAnalysis: true, moveTimeMs: 50, multiPV: 1, ...options, engineFactory: () => ({
   async init() {}, dispose() {},
   async evaluate() { return { cp: 0, mate: null, bestMove: null, pv: [], candidates: [], depth: 8 }; },
 }) });
@@ -252,10 +252,48 @@ test('only trusted HTTPS origins are eligible and page URLs remove player secret
 });
 
 test('page analysis uses a fast default and clamps engine options to supported values', () => {
-  assert.deepEqual({ ...normalizeSiteAnalysis(), analysisVersion: 'version' }, { engineId: 'stockfish', engineName: 'Stockfish 18', moveTimeMs: 50, multiPV: 1, smartAnalysis: true, analysisVersion: 'version' });
+  assert.deepEqual({ ...normalizeSiteAnalysis(), analysisVersion: 'version' }, { engineId: 'stockfish', engineName: 'Stockfish 18', moveTimeMs: 50, multiPV: 1, smartAnalysis: true, highlightAnalysis: true, analysisVersion: 'version' });
   assert.equal(normalizeSiteAnalysis({ engine: 'lozza', time: '1500', lines: '3', smart: false }).multiPV, 1);
   assert.equal(normalizeSiteAnalysis({ engine: 'lozza', time: '1500', lines: '3', smart: false }).smartAnalysis, false);
   assert.equal(normalizeSiteAnalysis({ engine: 'evil', time: 100000, lines: -1 }).moveTimeMs, 50);
+  assert.equal(normalizeSiteAnalysis({ highlights: false }).highlightAnalysis, false);
+  assert.equal(normalizeSiteAnalysis({ highlights: 'false' }).highlightAnalysis, true);
+});
+
+test('highlight preference is part of the page job identity and reaches its analysis payload', async () => {
+  const { broker, state, check } = setup();
+  const enabled = await check();
+  assert.equal((await broker.handle({ type: 'meowl:site-payload', token: enabled.token }, frame())).analysis.highlightAnalysis, true);
+  state.settings.reviewSettings = { highlights: false };
+  const disabled = await check();
+  assert.notEqual(disabled.token, enabled.token);
+  assert.equal((await broker.handle({ type: 'meowl:site-payload', token: enabled.token }, frame())).status, 'expired');
+  assert.equal((await broker.handle({ type: 'meowl:site-payload', token: disabled.token }, frame())).analysis.highlightAnalysis, false);
+});
+
+test('enabling highlights upgrades a saved fast review; disabling them reuses richer saved analysis', async () => {
+  const fixture = bridgeFixture(), enabledAnalysis = normalizeSiteAnalysis(), disabledAnalysis = normalizeSiteAnalysis({ highlights: false });
+  const fast = await finishedResult({ highlightAnalysis: false });
+  const saved = await fixture.library.saveReview(game(), fast, disabledAnalysis);
+  const active = async () => {};
+  const enabledJob = { game: game(), analysis: enabledAnalysis }, disabledJob = { game: game(), analysis: disabledAnalysis };
+  assert.equal((await fixture.bridge.loadReview(disabledJob, active)).id, saved.id);
+  assert.equal(await fixture.bridge.loadReview(enabledJob, active), null);
+  const upgraded = await fixture.bridge.saveReview(enabledJob, await finishedResult(), active);
+  assert.equal(upgraded.savedFresh, true); assert.equal(upgraded.analysis.highlightAnalysis, true);
+  assert.equal((await fixture.bridge.loadReview(disabledJob, active)).id, saved.id);
+  const reused = await fixture.bridge.saveReview(disabledJob, fast, active);
+  assert.equal(reused.savedFresh, false); assert.equal(reused.analysis.highlightAnalysis, true);
+  assert.equal(fixture.writes(), 2);
+});
+
+test('saved settings cannot claim highlight checks absent from their analysis result', async () => {
+  const fixture = bridgeFixture(), fast = await finishedResult({ highlightAnalysis: false });
+  await assert.rejects(fixture.library.saveReview(game(), fast, normalizeSiteAnalysis()), /engine settings do not match/i);
+  const stored = await fixture.library.saveReview(game(), fast, normalizeSiteAnalysis({ highlights: false }));
+  assert.equal((await fixture.library.loadReview(stored.id)).analysis.highlightAnalysis, false);
+  fixture.records.get(stored.id).analysis.highlightAnalysis = true;
+  await assert.rejects(fixture.library.loadReview(stored.id), /damaged|unsupported/);
 });
 
 test('archives need the configured player, legal completed PGN, trustworthy URL, and past timestamp', () => {
@@ -1022,7 +1060,7 @@ test('background registers only opted-in permitted sites and disables a site aft
   const settings = { siteReviewSettings: { chesscom: { enabled: true, username: 'Alice' }, lichess: { enabled: false, username: '' } } };
   const event = name => ({ addListener: listener => { listeners[name] = listener; } });
   globalThis.chrome = {
-    runtime: { id: ID, getURL: extensionUrl, onInstalled: event('installed'), onStartup: event('startup'), onMessage: event('message') },
+    runtime: { id: ID, getURL: extensionUrl, getManifest: () => ({ version: '1.11.0' }), onInstalled: event('installed'), onStartup: event('startup'), onMessage: event('message') },
     action: { onClicked: event('action') },
     storage: { local: { get: async () => settings, set: async value => Object.assign(settings, value) }, session: { get: async () => ({ siteReviewSession: structuredClone(sessionSnapshot) }), set: async value => { sessionSnapshot = value.siteReviewSession; } }, onChanged: event('storage') },
     permissions: { contains: async ({ permissions, origins }) => grant && permissions.includes('scripting') && origins.includes('https://www.chess.com/*'), onAdded: event('added'), onRemoved: event('removed') },

@@ -128,6 +128,8 @@ try {
   await lichess.evaluate(() => location.reload());
   await lichess.locator('#summary-retry').waitFor({ state: 'visible' });
   assert.match(await lichess.locator('#summary-status').innerText(), /expired/);
+  assert.equal(await lichess.locator('#summary-refresh').isVisible(), true, 'An expired panel offers an explicit page refresh.');
+  await poll(() => page.locator(HOST).getAttribute('data-busy').then(value => value === 'false'), 'expired frame releases refresh deferral');
   await lichess.locator('#summary-retry').click();
   await poll(() => lichess.isDetached(), 'failed summary frame replaced');
   const recovered = await summary();
@@ -156,8 +158,13 @@ try {
   assert.match(await restarted.locator('#summary-status').innerText(), /Review complete/);
   assert.deepEqual(errors, []);
   console.log('Retry UI passed: waiting recovery, in-flight disabling, cooldown, route reset, no drag, Lichess error recovery, expired iframe restart, and canceled analysis restart.');
-} catch (error) { console.error('Retry UI failed at:', stage); throw error; }
+} catch (error) {
+  console.error('Retry UI failed at:', stage, error);
+  console.error('Panel state:', await page?.locator(HOST).evaluate(element => ({ state: element.dataset.state, busy: element.dataset.busy })).catch(() => null), await shadow('.body', 'this.textContent').catch(() => null));
+  console.error('Frame URLs:', page?.frames().map(item => item.url()), 'Page errors:', errors);
+  throw error;
+}
 finally {
-  if (context) await closeTestContext(context, profile);
+  if (context) await closeTestContext(context, profile, 'meowlchess-retry-test-');
   const absolute = resolve(bundle); if (absolute.startsWith(temporaryRoot + '\\') || absolute.startsWith(temporaryRoot + '/')) await rm(absolute, { recursive: true, force: true });
 }

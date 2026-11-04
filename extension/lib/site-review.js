@@ -115,6 +115,7 @@ export function normalizeSiteAnalysis(value) {
     moveTimeMs: [50, 150, 500, 1500, 3000].includes(time) ? time : 50,
     multiPV: Number.isInteger(lines) && lines >= 1 && lines <= 3 ? Math.min(lines, engine.maxLines) : 1,
     smartAnalysis: typeof value?.smart === 'boolean' ? value.smart : true,
+    highlightAnalysis: value?.highlights !== false,
     analysisVersion: ANALYSIS_VERSION,
   };
 }
@@ -172,7 +173,10 @@ export function createSiteReviewLibraryBridge({ library, idForGame }) {
     async loadReview(job, assertActive) {
       const id = await idForGame(job.game);
       await assertActive();
-      return library.loadReview(id);
+      const saved = await library.loadReview(id);
+      // A richer saved review already satisfies a faster request. The reverse
+      // needs a new pass so enabling extra checks actually takes effect.
+      return saved && job.analysis?.highlightAnalysis !== false && saved.analysis?.highlightAnalysis === false ? null : saved;
     },
     async saveReview(job, result, assertActive) {
       const id = await idForGame(job.game);
@@ -181,7 +185,7 @@ export function createSiteReviewLibraryBridge({ library, idForGame }) {
         await assertActive();
         const saved = await library.loadReview(id);
         await assertActive();
-        if (saved && !saved.stale) return { ...saved, savedFresh: false };
+        if (saved && !saved.stale && (job.analysis?.highlightAnalysis === false || saved.analysis?.highlightAnalysis !== false)) return { ...saved, savedFresh: false };
         // Return the atomic save outcome: another tab may have won the race.
         // saveReview validates complete PGN/result correspondence, every line, and storage limits.
         const outcome = await library.saveReview(job.game, result, job.analysis, { preserveCurrent: true, reportOutcome: true });

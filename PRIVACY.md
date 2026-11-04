@@ -1,6 +1,6 @@
 # MeowlChess privacy notice
 
-MeowlChess is an independent browser extension for local analysis of completed chess games. It is not affiliated with Chess.com or Lichess. This notice describes version 1.10.0.
+MeowlChess is an independent browser extension for local analysis of completed chess games. It is not affiliated with Chess.com or Lichess. This notice describes the extension distributed with this document.
 
 ## Game data
 
@@ -44,11 +44,24 @@ The installed extension requests public archive data from `api.chess.com` and fi
 
 The support popup does not contact GitHub automatically or check whether you have starred the project. **Star on GitHub** opens the public repository in a new tab, where starring is your choice.
 
+### Optional update checks
+
+The **Updates & backups** page can request the latest public release metadata from `api.github.com/repos/ThuyTran735/MeowlChess/releases/latest`. **Check now** starts a manual request after optional API permission is granted. **Check for updates automatically** is off by default; enabling it allows a check when you open MeowlChess, at most once a day. Failed or rate-limited requests are delayed before another attempt. GitHub receives ordinary connection information, including your IP address, but no game PGNs, reviews, player names, coach questions, or backup files. Requests omit account cookies and authentication tokens. GitHub's handling is described in its [privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).
+
+The extension keeps the update preference, last-check information, cached release details, and a dismissed-release choice locally. Turning automatic checks off stops future automatic checks. Download and release-note links open GitHub in your browser when selected. An update check does not install code, alter saved reviews, or reload a game page. Browser-managed store updates, if the extension is installed from a store in the future, use the browser's own update service.
+
+### Backup and restore
+
+Choosing to save a backup downloads a JSON file to your computer. It contains saved review records and bookmarks, coach unlock progress, and supported preferences, including remembered usernames and on-site review account entries. The file contains personal game details and is not encrypted. It stays local unless you choose to share it or save it in a folder synced by another service.
+
+Restoring reads the file locally and shows a summary before you confirm. Analysis already present is retained; missing bookmarks are added while existing bookmark notes are kept. Preferences are restored only if selected, and remembered accounts are merged. Browser permission grants, cached release metadata, and temporary review/session data are not included. A new installation may require you to grant optional site, notification, or GitHub API permissions again. Neither export nor restore uploads the backup or contacts a chess website. Coach chat conversations and unfinished reviews are not part of a backup.
+
 Opening an original game, the GitHub repository, documentation, or policy link makes a normal browser navigation to that site. MeowlChess itself has no developer-operated servers, analytics, advertising, telemetry, or paid analysis APIs. Saved PGNs, reviews, bookmarks, variations, and practice answers are not uploaded by MeowlChess.
 
 ## Permissions
 
 - Optional `notifications`: requested only when you enable completion alerts. Used for newly saved reviews that finish while you are away from their tab.
+- Optional `https://api.github.com/*`: requested when you choose to check for updates or enable automatic update checks. Used only to retrieve public MeowlChess release metadata.
 - `storage`: local preferences. Saved reviews also use the browser's built-in IndexedDB storage for the extension.
 - `https://api.chess.com/*`: public Chess.com game archives.
 - `https://lichess.org/api/games/user/*` and `https://lichess.org/game/export/*`: Lichess public game exports. Chrome host permissions apply to the origin, even when a manifest entry includes a path.
@@ -67,8 +80,10 @@ Turning a site off removes its panel and reopen button and stops future injectio
 - **Turn off on-site reviews:** uncheck the site in Settings → On-site reviews. Existing saved reviews remain in your local library. You can also revoke the optional site access through the browser's extension settings.
 - **Turn off completion alerts:** uncheck the setting or revoke the optional notification permission. Existing saved reviews remain available.
 - **Update preferences:** change Settings or enter a replacement website username or game link and load games.
+- **Turn off automatic update checks:** disable the option in Updates & backups, or revoke the optional GitHub API access in your browser's extension settings.
+- **Keep a portable copy:** use Updates & backups to export or restore your study data. Delete an exported backup through your file manager when you no longer need it; removing the extension does not delete downloaded backup files.
 - **Remove all local extension data:** uninstall MeowlChess from that browser profile. This removes its local preferences and saved library. Closing or reloading a review tab does not delete saved reviews; reloading the unpacked extension is an update step, not a deletion step.
 
-Deleting local data does not delete public games from Chess.com or Lichess, or remove the original PGN files from your computer. MeowlChess has no server copy from which to restore deleted reviews. Browser profile removal or browser-managed storage loss can also remove local data; MeowlChess's no-eviction rule applies to its own library management. See Chrome's documentation on [extension storage](https://developer.chrome.com/docs/extensions/reference/api/storage) and [web storage in extensions](https://developer.chrome.com/docs/extensions/develop/concepts/storage-and-cookies).
+Deleting local data does not delete public games from Chess.com or Lichess, or remove the original PGN files or exported backups from your computer. MeowlChess has no server copy from which to restore deleted reviews; recovery requires a backup you previously exported. Browser profile removal or browser-managed storage loss can also remove local data; MeowlChess's no-eviction rule applies to its own library management. See Chrome's documentation on [extension storage](https://developer.chrome.com/docs/extensions/reference/api/storage) and [web storage in extensions](https://developer.chrome.com/docs/extensions/develop/concepts/storage-and-cookies).
 
 Modified versions may behave differently.

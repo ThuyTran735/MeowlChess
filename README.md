@@ -13,7 +13,7 @@
   </p>
 </div>
 
-**Version 1.11.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.11.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
+**Version 1.12.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.12.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
 
 > Your game, explained. Follow the turning points, explore engine suggestions, and study with an animated Meowl coach—all on your own device.
 
@@ -100,14 +100,29 @@ MeowlChess is currently installed as an unpacked extension; it is not in the Chr
 
 ### Updating without starting over
 
-Unpacked installations **do not update automatically**.
+Open **Updates & backups** from Settings or the review page's footer. This page has the latest-version check, update instructions, and a backup of your saved study data.
 
-1. Download and extract the latest **MeowlChess.zip**.
-2. Copy the new contents into the **same folder you originally installed from**, replacing the old files. For example, replace the contents of `Documents\MeowlChess\extension` with the new `extension` contents; avoid creating an extra `extension\extension` folder.
-3. Open your browser's extensions page and click **Reload** on the existing MeowlChess card. If you are unsure which folder is installed, open the card's **Details** and check its source path where available.
-4. Refresh open Chess.com or Lichess tabs and reopen the MeowlChess review page.
+**Check now** asks GitHub for the latest public release. You can also enable **Check for updates automatically**: when you open MeowlChess, it checks at most once a day. The setting is off by default and requests permission to contact GitHub's API. A new release appears as a small notice with download and release-note links; dismissing it keeps it out of your way. Checks send no game data, player names, or saved reviews.
+
+Unpacked installations **do not install updates automatically**. To update:
+
+1. Open **Updates & backups** and save a backup before changing the installation.
+2. Download and extract the latest **MeowlChess.zip** using the update screen.
+3. Copy the new contents into the **same folder you originally installed from**, replacing the old files. For example, replace the contents of `Documents\MeowlChess\extension` with the new `extension` contents; avoid creating an extra `extension\extension` folder.
+4. Open your browser's extensions page and click **Reload** on the existing MeowlChess card. If you are unsure which folder is installed, open the card's **Details** and check its source path where available.
+5. After your current game or review has finished, refresh open Chess.com or Lichess tabs and reopen the MeowlChess review page. An outdated panel offers a refresh prompt; it does not refresh the website automatically.
 
 Keep the existing installation in the same browser profile and folder. **Do not remove the extension to update it**—removing it can delete its local data. Saved reviews and preferences live in browser storage, separately from the extension files.
+
+### Back up or move your reviews
+
+Use **Updates & backups** to download a local JSON backup containing saved reviews, bookmarks, settings, remembered accounts, and coach unlock progress. Keep this file somewhere you trust: it contains player names and game PGNs, and is not encrypted or uploaded.
+
+To restore, choose the backup file, review its contents summary, and select **Restore**. Existing saved analysis is kept when the same game appears in both places; missing bookmarks are added, while existing bookmark notes are kept. **Restore preferences too** is optional; leave it unchecked if you want to keep your current settings. Remembered accounts are merged. Browser permissions are not included in a backup, so on a new installation, enable on-site reviews and completion alerts again through Settings.
+
+Backup files can be up to **42 MiB** and must fit the library's **100-review / 40 MiB** limits. Invalid files are rejected before anything is restored. If review restoration succeeds but saving preferences fails, the page explains which part finished; you can retry without duplicating reviews.
+
+If a future store version uses a different extension identity, export from the old installation and import into the new one. Confirm your reviews are available **before removing the old installation**. The same process can move your library to another browser or computer; it does not set up automatic syncing.
 
 ## Your first review
 
@@ -123,6 +138,7 @@ Keep the existing installation in the same browser profile and folder. **Do not 
 | **Practice** | Your saved mistakes and bookmarked positions. |
 | **Games → Saved reviews** | Previous analysis, ready to reopen without running the engine again. |
 | **Settings** | Analysis, board and playback, notifications, and automatic on-site reviews. |
+| **Updates & backups** | Release notifications, guided updating, and local backup or restore. |
 
 To get reviews directly on a website, open **Settings → On-site reviews**, enter your username, enable Chess.com or Lichess, and accept its browser permission prompt. A finished game's panel shows **Finding game → Analyzing → Saving**, followed by its summary. You can move or resize the panel and reopen it from the small MeowlChess button after closing it.
 
@@ -178,7 +194,7 @@ The panel shows each step clearly:
 
 If loading is waiting or fails, select **Retry loading** to check the current game again without refreshing the page. The button shows when another attempt is available; repeated clicks share the current request and respect the site's retry delay. An unfinished game cannot start a review; an unavailable completed game keeps waiting until its archive record or matching completed export is available. Failed or stopped summary frames also offer Retry loading.
 
-A current saved review goes straight to Summary without another engine run or saving stage. New reviews use your saved engine settings, or **Fast / one line** until you save preferences. **Open full review** opens the saved game at move 0 on Summary.
+A current saved review goes straight to Summary without another engine run or saving stage. If you enable **Recheck highlights** after saving a review with those checks off, the panel can upgrade that review. New reviews use your saved engine settings, or **Fast / one line** until you save preferences. **Open full review** opens the saved game at move 0 on Summary.
 
 The panel keeps both study scores visible above **Overview** and **Move ratings**. Overview shows the game-rating estimates and performance by phase; Move ratings shows each player's counts. Switch tabs with a click or the arrow keys, and use Home / End to reach the first / last tab. **Open full review** stays within reach while scrolling a small panel.
 
@@ -228,10 +244,12 @@ Both engines are bundled. Switching engines downloads nothing. Lozza is a weaker
 
 **Recheck key mistakes** is on by default. It makes a quick first pass, then spends more time on the most important estimated losses or mate changes. Short searches and selective rechecks can still miss tactics.
 
+**Settings → Analysis → Recheck highlights** controls the separate, deeper checks for likely Brilliant and Great moves. It is on by default. Turn it off to save time in both the full review and on-site panel; normal move ratings still work, but shorter searches can miss standout moves. This choice is remembered and included in backups. Already-saved richer reviews reopen immediately; enabling highlights can upgrade an on-site review previously saved with those checks off.
+
 <details>
 <summary><strong>Speeds and selective rechecks</strong></summary>
 
-| Speed | Per position, rechecks off | First pass, rechecks on |
+| Speed | Key-mistake rechecks off | First pass, key-mistake rechecks on |
 | --- | --- | --- |
 | Fast | 0.05 seconds | 0.05 seconds |
 | Quick | 0.15 seconds | 0.15 seconds |
@@ -241,7 +259,7 @@ Both engines are bundled. Switching engines downloads nothing. Lozza is a weaker
 
 With rechecks enabled, the first pass is capped at 0.15 seconds per nonterminal position. Rechecks search both sides of each selected move before assigning its final label, using the chosen time with a minimum of 0.5 seconds and maximum of 3 seconds per position. At most eight moves are revisited, fewer in short games; shared positions are searched once. Progress separates the initial scan, optional mistake rechecks, and deeper checks of likely standout moves. Each stage can be canceled; standout checks can run even with mistake rechecks turned off. The review page and on-site panel show an approximate time remaining based on actual progress. First-pass estimates exclude later mistake and standout checks, whose length is known only after candidate moves are selected; engine startup and saving have no countdown. After completion, **Reviewed in** shows the actual time spent on local analysis, including engine startup, mistake rechecks, and standout checks, but excluding game retrieval and saving. The duration is retained with saved reviews; older reviews without a recorded duration omit it.
 
-Fast automatically selects one line. For 100 nonterminal positions, its first pass uses about five seconds of engine time, plus startup and processing. Mistake rechecks and standout checks add time. Turning mistake rechecks off gives every nonterminal position the full chosen time in the first pass; likely standout moves can still receive a deeper check afterward.
+Fast automatically selects one line. For 100 nonterminal positions, its first pass uses about five seconds of engine time, plus startup and processing. Mistake rechecks and standout checks add time. Turning mistake rechecks off gives every nonterminal position the full chosen time in the first pass. Turn **Recheck highlights** off as well to skip deeper standout checks afterward.
 
 </details>
 
@@ -357,7 +375,7 @@ Phase grades use mean non-Book expected-score loss with the same Excellent / Goo
 | Mistake | A significant reduction in estimated chances. |
 | Blunder | A large reduction in estimated chances. |
 
-Every review speed checks a bounded set of likely standout moves more deeply, including Fast mode. The highlight pass uses at least two seconds per checked position to reduce unstable labels from the quick scan, with at most eight candidate moves. Brilliant and Great require depth 12 or greater in the relevant positions and stable evaluations. Brilliant considers legal captures and recaptures, including exchange sacrifices and offers that the engine declines. A recapture can qualify when the recapturing piece itself is offered at a net material loss; ordinary equal trades do not qualify.
+With **Recheck highlights** enabled, every review speed checks a bounded set of likely standout moves more deeply, including Fast mode. The highlight pass uses at least two seconds per checked position to reduce unstable labels from the quick scan, with at most eight candidate moves. Turning it off skips this extra pass; Brilliant and Great can still appear when the normal search supplies enough evidence. Brilliant and Great require depth 12 or greater in the relevant positions and stable evaluations. Brilliant considers legal captures and recaptures, including exchange sacrifices and offers that the engine declines. A recapture can qualify when the recapturing piece itself is offered at a net material loss; ordinary equal trades do not qualify.
 
 Great requires coherent alternative engine lines showing an only-good move, a critical choice, or a near-best tactical continuation after an opponent's error. Tactical continuations must demonstrate a lasting material gain in a legal engine line. Stockfish checks at least two lines for likely highlights even if the review displays one; shallow positions before the opponent's error are also checked when needed. Lozza cannot confirm these comparative claims because it supplies one line.
 
@@ -380,7 +398,7 @@ The reference includes traps and unsound lines. **Book** applies only when a rec
 
 Analysis stays on your device. MeowlChess has no analytics, advertising, remote analysis server, or developer-operated service. Saved PGNs, reviews, and bookmarks are not uploaded by MeowlChess.
 
-Public game retrieval contacts Chess.com or Lichess. Optional page access is requested only when you enable on-site reviews. Preferences use `chrome.storage.local`; the study library uses local IndexedDB. Browser host permissions apply to an origin even when a manifest entry contains a path. See the [privacy notice](PRIVACY.md) for permissions, retention, and deletion details.
+Public game retrieval contacts Chess.com or Lichess. Optional update checks contact GitHub for release metadata only. Optional page access is requested only when you enable on-site reviews. Preferences use `chrome.storage.local`; the study library uses local IndexedDB. Browser host permissions apply to an origin even when a manifest entry contains a path. See the [privacy notice](PRIVACY.md) for permissions, retention, and deletion details.
 
 Use only completed games and follow [Chess.com's Fair Play rules](https://www.chess.com/legal/fair-play) and [Lichess fair play](https://lichess.org/page/fair-play). API references: [Chess.com Published-Data API](https://www.chess.com/news/view/published-data-api) and [Lichess API documentation](https://lichess.org/api) (Games → Export games of a user / Export one game).
 
@@ -396,6 +414,8 @@ npm run package
 The build refreshes pinned chess.js and Stockfish assets. Lozza, artwork, and generated opening data are checked in. Regenerate openings from the bundled pinned TSV sources with `node scripts/build-openings.mjs`.
 
 Packaging writes **`dist/MeowlChess.zip`** with the ready-to-load extension, project source, tests, notices, opening sources, and Stockfish's corresponding source and evaluation network. Dependencies, generated test results, and Git data are excluded.
+
+`npm run package:store` separately creates **`dist/MeowlChess-store.zip`**, with `manifest.json` at the archive root, runtime assets, notices, and bundled engine source materials. This command prepares a store upload; it does not publish one or change an existing unpacked installation. See the [store submission guide](docs/MeowlChess-store-submission.md) for listing text, package details, and the remaining submission work.
 
 <details>
 <summary><strong>Browser checks</strong></summary>

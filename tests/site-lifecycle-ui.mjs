@@ -34,7 +34,7 @@ try {
         shadow(id) { return roots.get(document.getElementById(id)); },
       };
       window.chrome ??= {};
-      chrome.runtime = { getURL: path => 'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/' + path, sendMessage: async message => {
+      chrome.runtime = { id: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', getURL: path => 'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/' + path, sendMessage: async message => {
         lifecycle.calls.push(message);
         if (lifecycle.hold) await new Promise(resolve => lifecycle.pending.push(resolve));
         return { status: 'waiting', retryAfterMs: 15000, message: 'Waiting for this completed game.' };
@@ -125,6 +125,36 @@ try {
     if (fixture.finished) await page.locator('#meowlchess-site-review').waitFor();
     else assert.equal(await page.locator('#meowlchess-site-review').count(), 0);
   }
+  await setup();
+  await page.evaluate(value => lifecycle.reads.shift()({ siteReviewSettings: value }), settings(true));
+  await page.locator('#meowlchess-site-review').waitFor();
+  const originalUrl = page.url();
+  await page.evaluate(() => {
+    document.getElementById('meowlchess-site-review').dataset.busy = 'true';
+    chrome.runtime.id = undefined;
+  });
+  await page.locator('#MeowlChess-page-refresh').waitFor();
+  assert.equal(page.url(), originalUrl, 'An invalidated helper never refreshes automatically.');
+  assert.equal(await page.evaluate(() => lifecycle.shadow('MeowlChess-page-refresh').querySelector('button').disabled), true, 'Refresh waits for active review completion.');
+  assert.equal(await page.locator('#meowlchess-site-review').count(), 1, 'The existing review remains visible.');
+  await page.evaluate(() => { document.getElementById('meowlchess-site-review').dataset.busy = 'false'; });
+  await poll(() => page.evaluate(() => !lifecycle.shadow('MeowlChess-page-refresh').querySelector('button').disabled), 'refresh enabled after review');
+  await page.evaluate(() => lifecycle.shadow('MeowlChess-page-refresh').querySelectorAll('button')[1].click());
+  assert.equal(await page.locator('#MeowlChess-page-refresh').count(), 0, 'Later dismisses the notice.');
+  assert.equal(page.url(), originalUrl);
+  await page.evaluate(() => { delete globalThis.__meowlChessSiteReview; chrome.runtime.id = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; document.getElementById('meowlchess-site-review').dataset.busy = 'true'; });
+  await page.addScriptTag({ content: scripts[1] });
+  assert.equal(await page.locator('#meowlchess-site-review').count(), 1, 'Reinjection never duplicates an old panel.');
+  assert.equal(await page.locator('#MeowlChess-page-refresh').count(), 1);
+  await page.evaluate(() => lifecycle.shadow('MeowlChess-page-refresh').querySelectorAll('button')[2].click());
+  assert.equal(page.url(), originalUrl, 'Choosing stuck-review recovery still needs explicit refresh confirmation.');
+  assert.equal(await page.evaluate(() => lifecycle.shadow('MeowlChess-page-refresh').querySelector('button').textContent), 'Stop review and refresh');
+  await Promise.all([
+    page.waitForEvent('domcontentloaded'),
+    page.evaluate(() => lifecycle.shadow('MeowlChess-page-refresh').querySelector('button').click()),
+  ]);
+  assert.equal(page.url(), originalUrl, 'Explicit refresh keeps the current game URL.');
+  assert.equal(await page.locator('#meowlchess-site-review').count(), 0, 'Only the explicit refresh replaced the old document.');
   assert.deepEqual(errors, []);
   console.log('Site lifecycle assertions passed.');
 } finally { await closeTestContext(context, profile, prefix); }

@@ -65,6 +65,45 @@ test('already confirmed deep highlights do not spend time repeating the search',
   assert.deepEqual(result.analysis.highlightMoves, []);
 });
 
+test('turning highlight rechecks off skips extra searches and their reserved progress', async () => {
+  const fixture = engineFixture([score(80, 'd3h7', 8), score(80, 'g8h8', 8)], [], { failDeep: true });
+  const progress = [];
+  const result = await analyzeGame(GIFT, { moveTimeMs: 50, highlightAnalysis: false, engineFactory: fixture.engineFactory, onProgress: event => progress.push(event) });
+  assert.equal(fixture.calls.length, 2);
+  assert(fixture.calls.every(call => call.moveTimeMs === 50 && call.multiPV === 1));
+  assert.equal(result.analysis.highlightAnalysis, false);
+  assert.equal(result.analysis.highlightTimeMs, 0);
+  assert.equal(result.analysis.highlightPositionCount, 0);
+  assert.deepEqual(result.analysis.highlightMoves, []);
+  assert.equal(result.moves[0].label, 'Best');
+  assert(!progress.some(event => event.phase === 'highlights'));
+  assert(progress.every(event => event.total === 2));
+  assert.equal(progress.at(-1).phase, 'complete');
+  assert.equal(fixture.engine.disposed, true);
+});
+
+test('highlight rechecks off keeps Brilliant and Great labels supported by the normal search', async () => {
+  const brilliant = engineFixture([score(80, 'd3h7'), score(80, 'g8h8')], [], { failDeep: true });
+  const result = await analyzeGame(GIFT, { highlightAnalysis: false, engineFactory: brilliant.engineFactory });
+  assert.equal(result.moves[0].label, 'Brilliant'); assert.equal(brilliant.calls.length, 2);
+  const before = score(200, 'g1f3');
+  before.candidates = [{ ...before, rank: 1 }, { ...score(-100, 'b1c3'), rank: 2 }];
+  const great = engineFixture([before, score(200, 'b8c6')], [], { failDeep: true });
+  const other = await analyzeGame(TURN, { highlightAnalysis: false, engineFactory: great.engineFactory, recognizeOpenings: false });
+  assert.equal(other.moves[0].label, 'Great'); assert.equal(great.calls.length, 2);
+});
+
+test('mistake rechecks remain independent when highlight rechecks are off', async () => {
+  const evidence = [score(80, 'd3h7', 8), score(-400, 'g8h8', 8)];
+  const fixture = engineFixture(evidence, evidence.map(value => ({ ...value, depth: 16 })));
+  const progress = [];
+  const result = await analyzeGame(GIFT, { moveTimeMs: 50, smartAnalysis: true, highlightAnalysis: false, engineFactory: fixture.engineFactory, onProgress: event => progress.push(event) });
+  assert.equal(result.analysis.recheckedPositionCount, 2); assert.equal(result.analysis.highlightPositionCount, 0);
+  assert.deepEqual(fixture.calls.map(call => call.moveTimeMs), [50, 50, 500, 500]);
+  assert(progress.some(event => event.phase === 'recheck')); assert(!progress.some(event => event.phase === 'highlights'));
+  assert.equal(progress.at(-1).total, 4);
+});
+
 test('a turning-point check includes the shallow position before the opponent error and its full history', async () => {
   const pgn = '[SetUp "1"]\n[FEN "r2qkb1r/p1pb1pp1/1pn2n1p/6Q1/4p3/2P1P1P1/PP1P1PBP/RNB1K1NR w KQkq - 0 9"]\n[Result "0-1"]\n\n9. Qf4 Bd6 0-1';
   const previous = score(-200, 'g5b5');
