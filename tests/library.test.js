@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createReviewLibrary, createIndexedDBReviewStore, reviewIdForGame, LibraryError, LIBRARY_SCHEMA_VERSION } from '../extension/lib/library.js';
 import { analyzeGame } from '../extension/lib/review.js';
+import { ACCURACY_VERSION } from '../extension/lib/accuracy.js';
 import { importPgn } from '../extension/lib/pgn.js';
 
 const PGN = '[Event "Local library"]\n[White "Alice"]\n[Black "Bob"]\n[Result "1-0"]\n\n1. e4 e5 2. Nf3 1-0';
@@ -31,10 +32,9 @@ function memoryStore() {
   };
 }
 async function fixture(pgn = PGN) {
-  let position = 0;
   const result = await analyzeGame(pgn, { smartAnalysis: false, engineFactory: () => ({
     async init() {}, dispose() {},
-    async evaluate() { return { cp: [0, -400, -400, -700][position++] ?? 0, mate: null, bestMove: null, pv: [], candidates: [], depth: 8 }; },
+    async evaluate(_fen, { moves }) { return { cp: [0, -400, -400, -700][moves.length] ?? 0, mate: null, bestMove: null, pv: [], candidates: [], depth: 8 }; },
   }) });
   if (result.analysis) result.analysis.version = SETTINGS.analysisVersion;
   return { game: importPgn(pgn), result };
@@ -116,6 +116,60 @@ test('analysis version changes mark saved results and bookmarks stale without de
   const fresh = await changed.saveReview(data.game, reanalyzed, { ...SETTINGS, analysisVersion: 'test-v2' });
   assert.equal(fresh.stale, false);
   assert.equal(fresh.bookmarks.length, 1);
+});
+
+test('legacy arithmetic scores remain readable after upgrading without rewriting reviews or bookmarks', async () => {
+  const store = memoryStore(), data = await fixture();
+  const legacy = copy(data.result);
+  delete legacy.analysis.accuracyVersion;
+  legacy.analysis.version = 'legacy-arithmetic';
+  for (const color of ['w', 'b']) {
+    const scores = legacy.moves.filter(move => move.color === color && move.accuracy !== null).map(move => move.accuracy);
+    legacy.summary[color].accuracy = scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length * 10) / 10 : null;
+  }
+  assert.notEqual(legacy.summary.w.accuracy, data.result.summary.w.accuracy, 'The fixture must distinguish the two score calculations.');
+  const oldLibrary = create(store, { analysisVersion: 'legacy-arithmetic', now: () => 1000 });
+  const saved = await oldLibrary.saveReview(data.game, legacy, { ...SETTINGS, analysisVersion: 'legacy-arithmetic' });
+  await oldLibrary.toggleBookmark(saved.id, 1, { note: 'Keep the original score' });
+  const beforeUpgrade = copy(store.records.get(saved.id));
+
+  const upgraded = create(store, { analysisVersion: 'current-weighted' });
+  const loaded = await upgraded.loadReview(saved.id);
+  assert.equal(loaded.stale, true);
+  assert.deepEqual(loaded.result.summary, legacy.summary);
+  assert.equal(loaded.result.analysis.accuracyVersion, undefined);
+  assert.equal(loaded.bookmarks[0].note, 'Keep the original score');
+  assert.equal((await upgraded.listReviews())[0].invalid, undefined);
+  assert.equal((await upgraded.listBookmarks())[0].stale, true);
+  assert.deepEqual(store.records.get(saved.id), beforeUpgrade, 'Reading with the new version must not silently rewrite the saved result.');
+});
+
+test('weighted scores and their calculation version survive saving and reopening', async () => {
+  const store = memoryStore(), data = await fixture();
+  assert.equal(data.result.analysis.accuracyVersion, ACCURACY_VERSION);
+  const saved = await create(store).saveReview(data.game, data.result, SETTINGS);
+  const loaded = await create(store).loadReview(saved.id);
+  assert.deepEqual(loaded.result.summary, data.result.summary);
+  assert.equal(loaded.result.analysis.accuracyVersion, ACCURACY_VERSION);
+  assert.equal((await create(store).listReviews())[0].invalid, undefined);
+});
+
+test('tampered weighted scores and unsupported calculations cannot enter or reopen from the library', async () => {
+  const data = await fixture();
+  for (const tamper of [
+    result => { result.summary.w.accuracy += 0.1; },
+    result => { delete result.analysis.accuracyVersion; },
+    result => { result.analysis.accuracyVersion = 'future-accuracy'; },
+  ]) {
+    const store = memoryStore(), library = create(store);
+    const invalid = copy(data.result); tamper(invalid);
+    await assert.rejects(library.saveReview(data.game, invalid, SETTINGS), error => error.code === 'invalid');
+    assert.equal(store.records.size, 0);
+    const saved = await library.saveReview(data.game, data.result, SETTINGS);
+    tamper(store.records.get(saved.id).result);
+    await assert.rejects(library.loadReview(saved.id), error => error.code === 'corrupt');
+    assert.equal((await library.listReviews())[0].invalid, true);
+  }
 });
 
 test('practice collections contain original mistake plies and obey their bounded limit', async () => {

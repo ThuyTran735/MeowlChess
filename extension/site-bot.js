@@ -10,8 +10,9 @@
       && (/^\/play\/computer(?:\/|$)/.test(location.pathname) || /^\/(?:analysis\/)?game\/computer\/[^/]+\/?$/.test(location.pathname));
   }
   function isGamePage() {
+    const path = location.pathname.replace(/^(\/analysis\/game\/(?:(?:live|daily)\/)?\d+)\/review\/?$/, '$1');
     return ['www.chess.com', 'chess.com'].includes(location.hostname) && location.protocol === 'https:'
-      && /^\/(?:analysis\/)?game\/(?:(?:live|daily)\/)?\d+\/?$/.test(location.pathname);
+      && /^\/(?:analysis\/)?game\/(?:(?:live|daily)\/)?\d+\/?$/.test(path);
   }
   function readExportFor(eligible) {
     if (!eligible()) return null;

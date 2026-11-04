@@ -117,7 +117,7 @@ export async function renderSummaryImage({ game, result, analysis = {}, hidePlay
     text(ctx, 'OPENING', 56, 820, 15, COLORS.muted, 600);
     wrapped(ctx, [clean(result.opening?.eco, 8), opening].filter(Boolean).join(' · '), 56, 850, 455, 22, COLORS.text, 500, 3, 1.35);
   }
-  wrapped(ctx, 'Game ratings are approximate, not account Elo. A dash means there were not enough eligible moves.', 56, 973, 455, 18, COLORS.muted, 400, 3, 1.35);
+  wrapped(ctx, 'Game ratings are experimental study estimates, not account Elo or calibrated Chess.com ratings. A dash means insufficient data.', 56, 973, 455, 18, COLORS.muted, 400, 3, 1.35);
 
   const tableX = 576, tableWidth = 568;
   text(ctx, 'Move ratings', tableX, 466, 27, COLORS.text, 650);

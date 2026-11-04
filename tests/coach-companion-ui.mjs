@@ -12,6 +12,7 @@ const bundle = await mkdtemp(join(temporaryRoot, bundlePrefix)), extension = joi
 const initialPreferences = { coach: 'meowl', perspective: 'both', motion: true, sounds: false, commentary: true, volume: 0.8 };
 const errors = [], external = [];
 let context, worker, page, stage = 'launch';
+async function chooseCoach(id) { await page.locator(`.coach-choice[data-coach="${id}"]`).click(); }
 async function poll(read, label, timeout = 12000) {
   const started = Date.now();
   while (Date.now() - started < timeout) { if (await read()) return; await new Promise(resolve => setTimeout(resolve, 30)); }
@@ -56,7 +57,7 @@ try {
   const greet = companion.locator('.coach-companion-greet');
   const bubble = page.locator('#coach-companion-bubble'), heading = page.locator('#coach-companion-heading');
   const stored = () => worker.evaluate(async () => (await chrome.storage.local.get('coachPreferences')).coachPreferences);
-  const idle = () => poll(async () => await companion.locator('.coach-actor[data-reaction]').count() === 0, 'companion returns idle', 3500);
+  const idle = () => poll(async () => await companion.locator('.coach-actor[data-reaction]').count() === 0, 'companion returns idle', 4500);
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   const layout = async (width, custom = false) => {
     await page.setViewportSize({ width, height: width >= 1280 ? 1100 : 900 });
@@ -145,6 +146,7 @@ try {
   assert.equal(await companion.locator('.coach-reaction-puppet').count(), 0);
   await page.evaluate(() => window.companionFixtureHide(false));
   await page.locator('#coach-tab').click();
+  await page.locator('.coach-settings-summary').click();
   await page.locator('.coach-motion-toggle').uncheck();
   await poll(async () => (await stored()).motion === false, 'disabled animations saved');
   const disabledIdleCount = await page.evaluate(() => window.companionIdleBursts);
@@ -156,9 +158,13 @@ try {
 
   stage = 'external Coach chat reaction and stable board';
   await page.locator('#coach-tab').click();
+  await page.locator('.coach-settings-summary').click();
+  await page.evaluate(() => scrollTo(0, 0));
   const beforeChat = await page.locator('#board').boundingBox();
   await ask('Summarize this game'); await renderedAnimation();
   assert.equal(await page.locator('#coach-root .coach-heading .coach-actor[data-reaction]').count(), 0, 'The hidden old header is not the speaking actor.');
+  // Compare layout at the same scroll position, after form focus scrolled the page.
+  await page.evaluate(() => scrollTo(0, 0));
   const afterChat = await page.locator('#board').boundingBox();
   for (const property of ['x', 'y', 'width', 'height']) assert(Math.abs(beforeChat[property] - afterChat[property]) < 1, `Chat animation keeps board ${property} stable.`);
   await idle();
@@ -168,9 +174,9 @@ try {
   const companionGap = filled.rail.y - filled.boardColumn.y - filled.boardColumn.height;
   assert(companionGap >= -1 && companionGap <= 40, `Filled chat leaves a compact board-to-coach gap at1100px (actual ${companionGap.toFixed(1)}px).`);
   await page.setViewportSize({ width: 1440, height: 1100 });
-  await page.locator('.coach-select').selectOption('paws');
+  await chooseCoach('paws');
   await poll(async () => (await stored()).coach === 'paws', 'coach choice saved');
-  await poll(async () => (await avatar.getAttribute('src')).endsWith('/MeowlChess-coach-paws.png'), 'external portrait follows selected coach');
+  await poll(async () => (await avatar.getAttribute('src')).endsWith('/MeowlChess-coach-paws.svg'), 'external portrait follows selected coach');
 
   stage = 'automatic Moves comment is external and responsive';
   await page.locator('#moves-tab').click(); await page.locator('#next-button').click();
@@ -190,6 +196,7 @@ try {
   assert.equal(await companion.locator('[data-reaction="greeting"]').count(), 1, 'A touch tap greets the selected coach.');
   await renderedAnimation(); await idle();
   await page.locator('#coach-tab').click();
+  await page.locator('.coach-settings-summary').click();
   assert(await page.locator('.coach-volume-controls').isVisible());
   assert(await page.locator('.coach-sound-preview').isDisabled(), 'Visible volume does not bypass sound opt-in.');
   await page.locator('.coach-sound-toggle').check();

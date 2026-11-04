@@ -32,10 +32,11 @@ dxc4 22. Qxc4 b5 23. Qc2 b4 24. Ng3 Nd5 25. Nxe4 Qg6 26. f3 Nxe3 27. Qf2 Nxd1
 
 function exportFixture(options = {}) {
   const { modalAt = 0, tabAt = 0, pgnAt = 0, pgn = exportedPgn, alreadyOpen = false,
-    cancelAt = Infinity, navigateAt = Infinity, navigateOnOpen = false, wallClock = elapsed => elapsed } = options;
+    cancelAt = Infinity, navigateAt = Infinity, navigateOnOpen = false, wallClock = elapsed => elapsed,
+    initialPath = '/game/live/186378605424' } = options;
   let elapsed = 0, clicked = false, closed = false, destinationClosed = false;
   const calls = { downloads: 0, tabs: 0, closes: 0, destinationCloses: 0 };
-  const location = { hostname: 'www.chess.com', protocol: 'https:', origin: 'https://www.chess.com', pathname: '/game/live/186378605424' };
+  const location = { hostname: 'www.chess.com', protocol: 'https:', origin: 'https://www.chess.com', pathname: initialPath };
   const rectangle = () => ({ width: 100, height: 40 });
   const close = { getBoundingClientRect: rectangle, click() { closed = true; calls.closes++; } };
   const destinationClose = { getBoundingClientRect: rectangle, click() { destinationClosed = true; calls.destinationCloses++; } };
@@ -45,7 +46,7 @@ function exportFixture(options = {}) {
     return elapsed >= tabAt ? tab : null;
   } };
   const destinationModal = { getBoundingClientRect: rectangle, querySelector() { return destinationClose; } };
-  const isDestination = () => location.pathname !== '/game/live/186378605424';
+  const isDestination = () => location.pathname !== initialPath;
   const currentModal = () => isDestination() ? destinationClosed ? null : destinationModal
     : (clicked || alreadyOpen) && !closed && elapsed >= modalAt ? modal : null;
   const download = { getBoundingClientRect: rectangle, disabled: false, click() {
@@ -90,6 +91,22 @@ test('a completed public export survives delayed dialog, tab, and PGN mounting',
     assert.equal(completedPageGame(pgn, gameUrl, 'dillpicklechips1').url, gameUrl);
     assert(fixture.elapsed() >= delays.pgnAt && fixture.elapsed() <= delays.pgnAt + 100);
     assert.deepEqual(fixture.calls, { downloads: 1, tabs: 1, closes: 1, destinationCloses: 0 });
+  }
+});
+
+test('completed analysis review routes can read the exact exported game', async () => {
+  for (const initialPath of ['/analysis/game/live/186378605424/review', '/analysis/game/186378605424/review/', '/analysis/game/daily/186378605424/review']) {
+    const fixture = exportFixture({ initialPath });
+    assert.equal(await fixture.request(), exportedPgn);
+    assert.deepEqual(fixture.calls, { downloads: 1, tabs: 1, closes: 1, destinationCloses: 0 });
+  }
+});
+
+test('malformed review routes do not open the export dialog', async () => {
+  for (const initialPath of ['/analysis/game/live/186378605424/review/extra', '/analysis/game/live/186378605424/review/review', '/analysis/game/computer/186378605424/review', '/game/live/186378605424/review']) {
+    const fixture = exportFixture({ initialPath });
+    assert.equal(await fixture.request(), null);
+    assert.equal(fixture.calls.downloads, 0);
   }
 });
 

@@ -114,3 +114,15 @@ test('configured thinking time is normalized and long estimates stay readable', 
   const fastRecheck = createReviewProgressEstimator({ moveTimeMs: 50, smartAnalysis: true, now: () => 0 });
   assert.equal(fastRecheck.update({ phase: 'recheck', phaseCompleted: 0, phaseTotal: 10 }).remainingMs, 5000);
 });
+
+test('fast review stays active through the highlight pass and ignores late scan events', () => {
+  const estimate = createReviewProgressEstimator({ moveTimeMs: 50, now: () => 0 });
+  const scanned = estimate.update({ phase: 'scan', phaseCompleted: 20, phaseTotal: 20, moreWork: true });
+  assert.equal(scanned.complete, false);
+  const checking = estimate.update({ phase: 'highlights', phaseCompleted: 0, phaseTotal: 4 });
+  assert.equal(checking.remainingMs, 8000);
+  assert.match(checking.text, /checking highlights/);
+  assert.deepEqual(estimate.update({ phase: 'scan', phaseCompleted: 20, phaseTotal: 20 }), checking);
+  const done = estimate.update({ phase: 'complete' });
+  assert.equal(done.complete, true);
+});

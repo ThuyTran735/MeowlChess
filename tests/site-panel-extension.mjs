@@ -263,6 +263,13 @@ try {
   const automaticBox = await hostBox();
   await resizePanel(0, 320 - automaticBox.height, 'chesscom', 'short keyboard focus check');
   await overviewTab.focus(); await page.keyboard.press('Tab'); await page.keyboard.press('Tab');
+  const coachClearance = await frame.evaluate(() => ({
+    focused: document.activeElement === document.querySelector('#summary-coach'),
+    bottom: document.activeElement.getBoundingClientRect().bottom,
+    footerTop: document.querySelector('footer').getBoundingClientRect().top,
+  }));
+  assert(coachClearance.focused && coachClearance.bottom <= coachClearance.footerTop + 1, 'Ask coach stays visible above sticky actions when reached by keyboard.');
+  await page.keyboard.press('Tab');
   const focusClearance = await frame.evaluate(() => ({
     focused: document.activeElement === document.querySelector('.estimate-note summary'),
     bottom: document.activeElement.getBoundingClientRect().bottom,

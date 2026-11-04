@@ -46,7 +46,7 @@ try {
   assert(text.some(row=>row.value==='1–0 · White won')===false);
   assert(text.some(row=>row.value.startsWith('½–½ · Draw')));
   assert(text.some(row=>row.value==='Brilliant'));assert(text.some(row=>row.value==='Blunder'));
-  assert(text.some(row=>row.value.includes('not account Elo')));
+  assert(text.map(row=>row.value).join(' ').includes('not account Elo'));
   for(const row of text){const left=row.x-(row.align==='center'?row.width/2:row.align==='right'?row.width:0);assert(left>=52&&left+row.width<=1148,`Text overflow: ${row.value}`);}
   await mkdir(join(root,'test-results'),{recursive:true});
   await page.screenshot({path:join(root,'test-results','share-dialog-desktop.png')});

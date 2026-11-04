@@ -1,8 +1,9 @@
 import { COACH_MEOW_CLIPS } from './coach-audio-clips.js';
+import { createCoachMouthEnvelope } from './coach-mouth-envelope.js';
 
 // Real cat recordings bundled with the extension. No microphone or remote audio.
 const KINDS = new Set(['talk', 'brilliant', 'celebrate', 'curious', 'greeting']);
-const COACHES = new Set(['meowl', 'owl', 'paws', 'mellow', 'scout']);
+const COACHES = new Set(['meowl', 'owl', 'paws', 'mellow', 'scout', 'evil']);
 const MASTER_GAIN = 0.65;
 
 export function createCoachSounds({
@@ -19,7 +20,7 @@ export function createCoachSounds({
     && all.findIndex(item => item?.id === clip.id) === index
   ).map(clip => ({ ...clip, kinds: Array.isArray(clip.kinds) ? [...clip.kinds] : [] })) : [];
   let context = null, voice = null, pendingLoad = null, revision = 0, disposed = false, lastClip = null;
-  const buffers = new Map(), variations = new Map(), lastByCoach = new Map();
+  const buffers = new Map(), mouthEnvelopes = new Map(), variations = new Map(), lastByCoach = new Map();
   const allowed = () => !disposed && isEnabled() && isVisible() && globalThis.document?.visibilityState !== 'hidden';
 
   function volumeLevel() {
@@ -43,7 +44,12 @@ export function createCoachSounds({
 
   function nextClip(coach, kind) {
     const matching = catalog.filter(clip => clip.kinds.includes(kind));
-    const bank = matching.length ? matching : catalog;
+    const available = matching.length ? matching : catalog;
+    // Short real chirps suit Evil Meowl's asides; celebrations use full meows.
+    // Keep every recording at its original pitch and fall back for older banks.
+    const preferred = coach === 'evil' ? available.filter(clip => clip.sound ===
+      (kind === 'brilliant' || kind === 'celebrate' ? 'meow' : 'chirp')) : [];
+    const bank = preferred.length >= 2 ? preferred : available;
     if (!bank.length) return null;
     const key = `${coach}:${kind}`;
     let remaining = variations.get(key);
@@ -79,7 +85,7 @@ export function createCoachSounds({
   async function ready() {
     if (!allowed() || !catalog.length) return null;
     try {
-      if (!context || context.state === 'closed') { context = createContext(); buffers.clear(); }
+      if (!context || context.state === 'closed') { context = createContext(); buffers.clear(); mouthEnvelopes.clear(); }
       const audio = context;
       if (audio.state === 'suspended') await audio.resume();
       return allowed() && context === audio && audio.state === 'running' ? audio : null;
@@ -99,6 +105,7 @@ export function createCoachSounds({
       const buffer = await audio.decodeAudioData(bytes);
       if (!current() || !Number.isFinite(buffer?.duration) || buffer.duration <= 0 || buffer.duration > 5) return null;
       buffers.set(clip.id, buffer);
+      mouthEnvelopes.set(clip.id, createCoachMouthEnvelope(buffer, clip.sound));
       return buffer;
     } catch { return null; }
     finally { if (pendingLoad === controller) pendingLoad = null; }
@@ -110,8 +117,9 @@ export function createCoachSounds({
   return {
     unlock() { return ready(); },
     stop,
-    async play({ kind = 'talk', coach = 'meowl' } = {}) {
+    async play({ kind = 'talk', coach = 'meowl', onStart } = {}) {
       stop();
+      if (kind === 'idle') return false;
       if (!allowed() || !volumeLevel() || !catalog.length) return false;
       const currentRevision = revision;
       const audio = await ready();
@@ -140,6 +148,17 @@ export function createCoachSounds({
         source.onended = () => release(current);
         source.start(start); source.stop(end);
         lastClip = clip.id; lastByCoach.set(coach, clip.id);
+        const isPlaying = () => !current.released && voice === current && context === audio
+          && audio.state === 'running' && allowed() && volumeLevel() > 0 && audio.currentTime < end;
+        const mouth = mouthEnvelopes.get(clip.id) || (() => 0);
+        // Notify only after decoding and starting playback. Loading time never
+        // starts a silent mouth animation, and an old source cannot keep talking.
+        if (typeof onStart === 'function') {
+          try {
+            onStart(Object.freeze({ durationMs: buffer.duration * 1000, isPlaying,
+              getMouth: () => isPlaying() ? mouth(audio.currentTime - start) : 0 }));
+          } catch { /* A detached view must not interrupt an already-playing clip. */ }
+        }
         return true;
       } catch {
         release(current, true);
@@ -148,7 +167,7 @@ export function createCoachSounds({
     },
     dispose() {
       if (disposed) return;
-      disposed = true; stop(); buffers.clear(); variations.clear(); lastByCoach.clear();
+      disposed = true; stop(); buffers.clear(); mouthEnvelopes.clear(); variations.clear(); lastByCoach.clear();
       globalThis.document?.removeEventListener?.('visibilitychange', visibilityChanged);
       const previous = context; context = null;
       try { if (previous) Promise.resolve(previous.close()).catch(() => {}); } catch { /* Shutdown is best effort. */ }

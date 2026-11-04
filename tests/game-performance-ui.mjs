@@ -10,7 +10,9 @@ import { openImport, openLibrary, closeLibrary, closeTestContext } from './ui-he
 const root = resolve(import.meta.dirname, '..');
 const extension = join(root, 'extension');
 const profile = await mkdtemp(join(tmpdir(), 'meowlchess-performance-test-'));
-const pgn = '[Event "Performance summary"]\n[White "White player"]\n[Black "Black player"]\n[Result "1/2-1/2"]\n\n1. e4 e5 2. Nf3 Nc6 3. d4 exd4 4. Nxd4 Nf6 5. Nc3 Bb4 6. Nxc6 bxc6 7. Bd3 d5 8. exd5 cxd5 9. O-O O-O 10. Bg5 c6 11. Qf3 Be7 12. Rfe1 Be6 13. Rad1 Qc7 14. Kh1 Kh8 15. Re2 Rfe8 1/2-1/2';
+const pgn = '[Event "Performance summary"]\n[White "White player"]\n[Black "Black player"]\n[WhiteElo "980"]\n[BlackElo "1200"]\n[Result "1/2-1/2"]\n\n1. e4 e5 2. Nf3 Nc6 3. d4 exd4 4. Nxd4 Nf6 5. Nc3 Bb4 6. Nxc6 bxc6 7. Bd3 d5 8. exd5 cxd5 9. O-O O-O 10. Bg5 c6 11. Qf3 Be7 12. Rfe1 Be6 13. Rad1 Qc7 14. Kh1 Kh8 15. Re2 Rfe8 1/2-1/2';
+const unrated = pgn.replace('Performance summary', 'Unrated performance').replace(/\[(?:White|Black)Elo "\d+"\]\n/g, '');
+const shortRated = '[Event "Short rated game"]\n[White "White"]\n[Black "Black"]\n[WhiteElo "980"]\n[BlackElo "1200"]\n[Result "0-1"]\n\n1. f3 e5 2. g4 Qh4# 0-1';
 const ending = '[Event "Custom endgame"]\n[SetUp "1"]\n[FEN "7k/P7/8/8/8/8/8/7K w - - 0 27"]\n[White "Promotion White"]\n[Black "Promotion Black"]\n[Result "1-0"]\n\n27. a8=Q+ Kh7 1-0';
 let context, page, stage = 'launch';
 try {
@@ -62,8 +64,13 @@ try {
       if (expected.rating === null) { assert.equal(text, '—'); assert.equal(await value.getAttribute('title'), expected.reason); }
       else {
         assert(text.startsWith('≈')); assert.equal(Number(text.replace(/\D/g, '')), expected.rating);
-        assert(expected.rating >= 300 && expected.rating <= 2800);
-        assert.match(await value.getAttribute('title'), /Not an account rating/);
+        assert(expected.rating >= 100 && expected.rating <= 4000);
+        assert(Math.abs(expected.rating - expected.baseline) <= 400, 'A game estimate stays near its recorded player rating.');
+        const title = await value.getAttribute('title');
+        assert(title.includes(`recorded rating of ${expected.baseline}`));
+        assert(title.includes(`${expected.eligibleMoves} reviewable decisions`));
+        assert.match(title, /(?:Limited|Broader) analysis coverage/);
+        assert.match(title, /study estimate, not an account rating/);
       }
     }
     for (const phase of expectedPhases) {
@@ -100,6 +107,7 @@ try {
   for (const color of ['w', 'b']) {
     assert(expected.ratings[color].eligibleMoves >= 8, 'Fixture must contain enough competitive non-book decisions.');
     assert.notEqual(expected.ratings[color].rating, null);
+    assert.equal(expected.ratings[color].baseline, color === 'w' ? 980 : 1200);
   }
   for (const id of ['opening', 'middlegame']) for (const color of ['w', 'b']) assert.notEqual(expected.phases.find(item => item.id === id)[color].label, null);
   for (const color of ['w', 'b']) assert.equal(expected.phases.find(item => item.id === 'endgame')[color].label, null);
@@ -121,7 +129,23 @@ try {
   await page.setViewportSize({ width: 1366, height: 900 });
   console.log('PASS: saved review derives identical performance without engine work; table fits desktop and mobile');
 
+  stage = 'missing recorded ratings';
+  await importGame(unrated); await review();
+  const noRatings = await assertResult(await storedReview('Unrated performance'));
+  for (const color of ['w', 'b']) {
+    assert(noRatings.ratings[color].eligibleMoves >= 8, 'The missing-rating case must have enough reviewable decisions.');
+    assert.equal(noRatings.ratings[color].rating, null);
+    assert.equal(noRatings.ratings[color].reason, 'Player rating unavailable');
+  }
+  assert.match(await page.locator('.game-performance-note').innerText(), /recorded player rating/);
+
   stage = 'short game unavailable estimates';
+  await importGame(shortRated); await review();
+  const shortWithRatings = await assertResult(await storedReview('Short rated game'));
+  for (const color of ['w', 'b']) {
+    assert.equal(shortWithRatings.ratings[color].rating, null);
+    assert.equal(shortWithRatings.ratings[color].reason, 'Not enough moves');
+  }
   await openLibrary(page); await page.locator('#demo-button').click(); await review();
   const short = await assertResult(await storedReview('MeowlChess sample'));
   for (const color of ['w', 'b']) assert.equal(short.ratings[color].rating, null);

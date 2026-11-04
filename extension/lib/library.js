@@ -1,6 +1,8 @@
 import { Chess } from '../vendor/chess.js';
 import { MOVE_LABELS } from './review.js';
+import { ACCURACY_VERSION, gameAccuracy } from './accuracy.js';
 import { importPgn, parseCompletedPgn, safeOriginalGameUrl } from './pgn.js';
+import { COACH_UNLOCK_RECORD_ID, COACH_REVIEW_UNLOCK_GOAL, initializedCoachMilestone, mergeCoachMilestone, coachUnlockProgress, coachGameMilestoneKey, notifyCoachUnlockProgress } from './coach-unlocks.js';
 
 export const LIBRARY_SCHEMA_VERSION = 1;
 export const LIBRARY_LIMITS = Object.freeze({ maxReviews: 100, maxBytes: 40 * 1024 * 1024, maxRecordBytes: 4 * 1024 * 1024 });
@@ -32,7 +34,7 @@ function jsonCopy(value) {
 }
 function byteSize(value) { return encoder.encode(JSON.stringify(value)).byteLength; }
 
-/** Local IndexedDB only. transact's synchronous callback must return {put,remove,value}. */
+/** Local IndexedDB only. transact receives reviews + milestone and returns {put,remove,coachProgress,value}. */
 export function createIndexedDBReviewStore({ indexedDB = globalThis.indexedDB, databaseName = 'meowlchess-review-library' } = {}) {
   let connection;
   const open = () => {
@@ -40,8 +42,11 @@ export function createIndexedDBReviewStore({ indexedDB = globalThis.indexedDB, d
     if (connection) return connection;
     const pending = new Promise((resolve, reject) => {
       let request, blocked = false;
-      try { request = indexedDB.open(databaseName, 1); } catch (error) { reject(storageError(error)); return; }
-      request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains('reviews')) request.result.createObjectStore('reviews', { keyPath: 'id' }); };
+      try { request = indexedDB.open(databaseName, 2); } catch (error) { reject(storageError(error)); return; }
+      request.onupgradeneeded = () => {
+        if (!request.result.objectStoreNames.contains('reviews')) request.result.createObjectStore('reviews', { keyPath: 'id' });
+        if (!request.result.objectStoreNames.contains('coachProgress')) request.result.createObjectStore('coachProgress', { keyPath: 'id' });
+      };
       request.onerror = () => reject(storageError(request.error));
       request.onblocked = () => { blocked = true; reject(new LibraryError('unavailable', 'Close other MeowlChess review tabs, then try saving again.')); };
       request.onsuccess = () => {
@@ -57,37 +62,41 @@ export function createIndexedDBReviewStore({ indexedDB = globalThis.indexedDB, d
     void pending.catch(() => { if (connection === pending) connection = null; });
     return pending;
   };
-  const read = async (id, all = false) => {
+  const read = async (id, all = false, storeName = 'reviews') => {
     const db = await open();
     return new Promise((resolve, reject) => {
       let request;
-      try { const store = db.transaction('reviews', 'readonly').objectStore('reviews'); request = all ? store.getAll() : store.get(id); }
+      try { const store = db.transaction(storeName, 'readonly').objectStore(storeName); request = all ? store.getAll() : store.get(id); }
       catch (error) { reject(storageError(error)); return; }
       request.onsuccess = () => resolve(request.result ?? null);
       request.onerror = () => reject(storageError(request.error));
     });
   };
   return {
-    read: id => read(id), readAll: () => read(null, true),
+    read: id => read(id), readAll: () => read(null, true), readCoachProgress: () => read(COACH_UNLOCK_RECORD_ID, false, 'coachProgress'),
     async transact(update) {
       const db = await open();
       return new Promise((resolve, reject) => {
         let transaction, result, failure;
-        try { transaction = db.transaction('reviews', 'readwrite'); } catch (error) { reject(storageError(error)); return; }
+        try { transaction = db.transaction(['reviews', 'coachProgress'], 'readwrite'); } catch (error) { reject(storageError(error)); return; }
         transaction.oncomplete = () => resolve(result);
         transaction.onabort = () => reject(failure || storageError(transaction.error));
         transaction.onerror = event => { failure ||= storageError(event.target?.error || transaction.error); };
-        const store = transaction.objectStore('reviews');
-        const request = store.getAll();
-        request.onsuccess = () => {
+        const store = transaction.objectStore('reviews'), metadata = transaction.objectStore('coachProgress');
+        const request = store.getAll(), progress = metadata.get(COACH_UNLOCK_RECORD_ID);
+        let pending = 2;
+        const ready = () => {
+          if (--pending) return;
           try {
-            const changes = update(request.result);
+            const changes = update(request.result, progress.result ?? null);
             if (!changes || typeof changes.then === 'function') throw new TypeError('The library transaction must be synchronous.');
             for (const id of changes.remove || []) store.delete(id);
             for (const record of changes.put || []) store.put(record);
+            if (changes.coachProgress) metadata.put(changes.coachProgress);
             result = changes.value;
           } catch (error) { failure = storageError(error); transaction.abort(); }
         };
+        request.onsuccess = ready; progress.onsuccess = ready;
       });
     },
     async close() { const pending = connection; connection = null; if (pending) (await pending).close(); },
@@ -163,11 +172,12 @@ function normalizeResult(input, parsed, deep = true) {
     return { ...move, ...actual, ply: index + 1, evalAfter: result.positions[index + 1] };
   });
   if (!plain(result.summary)) invalid('The saved review summary is invalid.');
+  if (result.analysis?.accuracyVersion != null && result.analysis.accuracyVersion !== ACCURACY_VERSION) invalid('The saved accuracy calculation is unsupported.');
   for (const color of ['w', 'b']) {
     const side = result.summary[color];
     const moves = result.moves.filter(move => move.color === color);
     const scored = moves.filter(move => move.accuracy !== null);
-    const expected = scored.length ? Math.round(scored.reduce((sum, move) => sum + move.accuracy, 0) / scored.length * 10) / 10 : null;
+    const expected = gameAccuracy(result.moves, result.positions, color, result.analysis?.accuracyVersion ?? null);
     if (!plain(side) || side.total !== moves.length || !plain(side.counts) || side.accuracy !== expected) invalid('The saved review summary does not match its moves.');
     if (side.scoredTotal !== undefined && side.scoredTotal !== scored.length || side.bookTotal !== undefined && side.bookTotal !== moves.length - scored.length) invalid('The saved book-move counts are inconsistent.');
     for (const label of LABELS) if ((side.counts[label] || 0) !== moves.filter(move => move.label === label).length) invalid('The saved move counts are inconsistent.');
@@ -206,6 +216,45 @@ export function createReviewLibrary({ store = createIndexedDBReviewStore(), anal
     if (records.length > maxReviews) throw new LibraryError('limit', `Your library already has ${maxReviews} games. Delete a saved game before adding another. Bookmarked games are never removed automatically.`);
     if (records.some(record => byteSize(record) > LIBRARY_LIMITS.maxRecordBytes) || records.reduce((bytes, record) => bytes + byteSize(record), 0) > maxBytes) throw new LibraryError('limit', 'Your saved-review library is full. Delete a saved review before saving this one. Nothing has been removed.');
   };
+  const reviewFingerprint = record => JSON.stringify([record.schemaVersion, record.id, record.game, record.analysis, record.result]);
+  const prepareUnlockSeed = async () => {
+    const progress = store.readCoachProgress ? await call('readCoachProgress') : null;
+    if (initializedCoachMilestone(progress)) return new Map();
+    const candidates = new Map(), keys = new Set();
+    for (const raw of await call('readAll')) {
+      try {
+        // Migration uses the same full validation as reopening a saved review.
+        const record = normalizeRecord(raw);
+        if (await reviewIdForGame(record.game) !== record.id) continue;
+        const key = coachGameMilestoneKey(record.game, record.result.game, record.id);
+        if (!key) continue;
+        candidates.set(record.id, { key, fingerprint: reviewFingerprint(raw) }); keys.add(key);
+        if (keys.size >= COACH_REVIEW_UNLOCK_GOAL) break;
+      } catch { /* Damaged, incomplete, or unsupported saved rows earn no progress. */ }
+    }
+    return candidates;
+  };
+  const withMilestone = async (update, reviewedKey = null) => {
+    const seed = await prepareUnlockSeed();
+    let changed = false;
+    const value = await call('transact', (records, current) => {
+      const keys = [];
+      if (!initializedCoachMilestone(current)) for (const raw of records) {
+        const candidate = seed.get(raw.id);
+        if (!candidate || candidate.fingerprint !== reviewFingerprint(raw)) continue;
+        try { normalizeRecord(raw, false); keys.push(candidate.key); }
+        catch { /* A changed or deleted row cannot slip into the migration. */ }
+      }
+      if (reviewedKey) keys.push(reviewedKey);
+      const next = mergeCoachMilestone(current, keys);
+      const changes = update(records, coachUnlockProgress(next));
+      changed = JSON.stringify(current) !== JSON.stringify(next);
+      // The review mutation and progress put commit or abort together.
+      return { ...changes, ...(changed ? { coachProgress: next } : {}) };
+    });
+    if (changed) notifyCoachUnlockProgress();
+    return value;
+  };
   const validRecords = async () => {
     const records = await call('readAll');
     return Promise.all(records.map(async raw => {
@@ -217,6 +266,11 @@ export function createReviewLibrary({ store = createIndexedDBReviewStore(), anal
     }));
   };
   return {
+    async getCoachUnlockProgress() {
+      const progress = store.readCoachProgress ? await call('readCoachProgress') : null;
+      if (initializedCoachMilestone(progress)) return coachUnlockProgress(progress);
+      return withMilestone((_records, migrated) => ({ value: migrated }));
+    },
     async listReviews() { return (await validRecords()).map(record => record.invalid ? record : summary(record)).sort((a, b) => b.updatedAt - a.updatedAt); },
     async loadReview(id) {
       const raw = await call('read', id); if (!raw) return null;
@@ -232,7 +286,7 @@ export function createReviewLibrary({ store = createIndexedDBReviewStore(), anal
       if (normalizedResult.analysis?.version && normalizedResult.analysis.version !== analysis.analysisVersion || normalizedResult.analysis?.smartAnalysis !== undefined && normalizedResult.analysis.smartAnalysis !== analysis.smartAnalysis) invalid('The engine settings do not match this analysis result.');
       const id = await reviewIdForGame(normalizedGame);
       const timestamp = now(); if (!number(timestamp, 1, Number.MAX_SAFE_INTEGER)) invalid('The system clock cannot timestamp this review.');
-      return call('transact', records => {
+      return withMilestone(records => {
         const previous = records.find(record => record.id === id);
         let old = null;
         if (previous) {
@@ -263,9 +317,9 @@ export function createReviewLibrary({ store = createIndexedDBReviewStore(), anal
         const record = { schemaVersion: LIBRARY_SCHEMA_VERSION, id, game: normalizedGame, result: normalizedResult, analysis, bookmarks: old?.bookmarks || [], createdAt: old?.createdAt || timestamp, updatedAt: Math.max(timestamp, old?.updatedAt || 0) };
         capacity([...records.filter(item => item.id !== id), record]);
         return { put: [record], value: reportOutcome ? { record: expose(clone(record)), savedFresh: true } : expose(clone(record)) };
-      });
+      }, coachGameMilestoneKey(normalizedGame, parsed, id));
     },
-    async deleteReview(id) { return call('transact', records => ({ remove: [id], value: records.some(record => record.id === id) })); },
+    async deleteReview(id) { return withMilestone(records => ({ remove: [id], value: records.some(record => record.id === id) })); },
     async toggleBookmark(id, ply, { note = '' } = {}) {
       if (!integer(ply, 0, 1000) || !text(note, 2000)) invalid('Choose a valid game position and a note shorter than 2,000 characters.');
       const timestamp = now(); if (!number(timestamp, 1, Number.MAX_SAFE_INTEGER)) invalid('The system clock cannot timestamp this bookmark.');

@@ -9,11 +9,13 @@ const second = '[Event "Second"]\n[White "Carol"]\n[Black "Dan"]\n[Result "0-1"]
 
 test('Chess.com short and analysis links preserve the exact live game identity in PGN imports', () => {
   const canonical = 'https://www.chess.com/game/live/186247007610';
-  for (const url of ['https://www.chess.com/game/186247007610', 'https://chess.com/game/186247007610/', 'https://www.chess.com/analysis/game/186247007610', 'https://www.chess.com/analysis/game/live/186247007610/', canonical]) {
+  for (const url of ['https://www.chess.com/game/186247007610', 'https://chess.com/game/186247007610/', 'https://www.chess.com/analysis/game/186247007610', 'https://www.chess.com/analysis/game/live/186247007610/', 'https://www.chess.com/analysis/game/live/186247007610/review', 'https://chess.com/analysis/game/186247007610/review/', canonical]) {
     assert.equal(safeOriginalGameUrl(url), canonical);
     assert.equal(importPgn(`[Link "${url}"]\n${second}`).url, canonical);
   }
   assert.equal(safeOriginalGameUrl('https://www.chess.com/analysis/game/daily/186247007610'), 'https://www.chess.com/game/daily/186247007610');
+  assert.equal(safeOriginalGameUrl('https://www.chess.com/analysis/game/daily/186247007610/review/'), 'https://www.chess.com/game/daily/186247007610');
+  for (const path of ['analysis/game/live/123/review/extra', 'analysis/game/live/123/review/review', 'game/live/123/review', 'analysis/game/future/123/review', 'analysis/game/computer/123/review']) assert.equal(safeOriginalGameUrl(`https://www.chess.com/${path}`), null);
   for (const url of ['https://www.chess.com/game/186247007610?redirect=evil', 'https://www.chess.com/game/186247007610#other', 'https://www.chess.com.evil.test/game/186247007610', 'https://www.chess.com/game/not-a-game', 'https://www.chess.com/game/186247007610/extra', 'https://user@www.chess.com/game/186247007610']) assert.equal(safeOriginalGameUrl(url), null);
 });
 

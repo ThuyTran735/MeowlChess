@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="extension/icons/logo.png" alt="Crowned Meowl, featuring Melonpi Cat, on a green-and-cream chessboard" width="200">
+  <img src="extension/icons/logo.png" alt="Meowl with a paper crown and green cape, featuring Melonpi Cat, on a green-and-cream chessboard" width="200">
   <h1>MeowlChess</h1>
   <p><strong>Free chess reviews. Local engines. Your own games.</strong></p>
   <p>Review completed games from Chess.com, Lichess, or a PGN file in Brave, Chrome, and Edge.</p>
@@ -13,9 +13,9 @@
   </p>
 </div>
 
-**Version 1.10.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.10.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
+**Version 1.11.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.11.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
 
-> New in 1.10.0: five local Meowl coaches, move-by-move commentary, animated companions, optional real cat sounds with volume control, and improved completed-game retrieval.
+> Your game, explained. Follow the turning points, explore engine suggestions, and study with an animated Meowl coach—all on your own device.
 
 MeowlChess runs Stockfish or Lozza on your device. No subscription, analysis-service account, or chess-site login is required. Once a game is loaded, its analysis works offline.
 
@@ -33,29 +33,102 @@ MeowlChess is independent of Chess.com and Lichess. Use it **only after a game i
 
 ## Install
 
-1. Download [**MeowlChess.zip**](https://github.com/ThuyTran735/MeowlChess/releases/latest/download/MeowlChess.zip) and extract it to a folder you will keep. See the [latest release](https://github.com/ThuyTran735/MeowlChess/releases/latest) for release notes.
-2. Open your browser's extensions page:
+**Works with desktop Brave, Chrome, and Edge.** You do not need Node.js, a terminal, or a build step to install the release.
 
-   | Browser | Address |
-   | --- | --- |
-   | Brave | `brave://extensions` |
-   | Chrome | `chrome://extensions` |
-   | Edge | `edge://extensions` |
+### 1. Download the ready-to-use ZIP
 
-3. Enable **Developer mode**, choose **Load unpacked**, and select the extracted **`extension/`** folder. It contains `manifest.json`.
-4. Pin MeowlChess and click its toolbar icon to open the review page.
+[**Download MeowlChess.zip →**](https://github.com/ThuyTran735/MeowlChess/releases/latest/download/MeowlChess.zip)
 
-**Updating:** replace the files in the installed folder, click **Reload** on the extension card, refresh open Chess.com or Lichess pages, and reopen the review tab. The installed folder must be the one you updated.
+Or open the [latest release](https://github.com/ThuyTran735/MeowlChess/releases/latest), expand **Assets**, and select **MeowlChess.zip**. Choose that file rather than GitHub's **Source code** downloads.
 
-MeowlChess is distributed as an unpacked extension. It is not listed in the Chrome Web Store or Edge Add-ons store.
+### 2. Extract it to a permanent folder
+
+On Windows, right-click the ZIP → **Extract All…**. Choose a folder you will keep, such as `Documents\MeowlChess`, and finish extracting. On macOS, double-click the ZIP and move the extracted folder somewhere permanent.
+
+Open the extracted folder. You should find this structure:
+
+```text
+MeowlChess/
+├── extension/          ← select THIS folder in the next step
+│   ├── manifest.json
+│   ├── review.html
+│   └── ...
+├── README.md
+└── ...
+```
+
+The folder to load is **`extension`**, directly containing **`manifest.json`**. If extraction creates an extra outer folder, open it until you see `extension`. Keep these files in place; the browser loads MeowlChess from this location.
+
+### 3. Load it in your browser
+
+Copy the address for your browser into its address bar and press Enter:
+
+| Browser | Extensions page |
+| --- | --- |
+| Brave | `brave://extensions` |
+| Chrome | `chrome://extensions` |
+| Edge | `edge://extensions` |
+
+**A. Turn on Developer mode.** On the extensions page, look for the switch labeled **Developer mode** and turn it on. In Brave and Chrome, look at the top right; in Edge, look in the left sidebar. This makes **Load unpacked** available.
+
+**B. Click Load unpacked.** A folder-selection window opens. You are choosing a **folder**, not opening a ZIP or selecting a file.
+
+**C. Open the folder you extracted in step 2.** For the Windows example above:
+
+1. Open **Documents**.
+2. Double-click **MeowlChess**.
+3. Double-click the **extension** folder inside it.
+4. Click **Select Folder** at the bottom of the window. On macOS, the button may say **Open** or **Select**.
+
+If you extracted somewhere else, use that location instead. The selected path should end in **`MeowlChess\extension`**. If you see another outer `MeowlChess` folder, open it first until you reach `extension`.
+
+![Folder guide: open MeowlChess, open extension, then choose Select Folder](docs/MeowlChess-install-folder.svg)
+
+**You might not see `manifest.json` in this window. That's normal.** A folder picker can hide files. You only need to select the `extension` folder. To check its contents beforehand, open it in File Explorer or Finder, where `manifest.json` should be visible.
+
+**D. Check that it loaded.** Back on the extensions page, a **MeowlChess — Free Post-Game Analysis** card should appear. Leave its enabled switch on.
+
+**“Manifest file is missing or unreadable”?** You selected the wrong folder or the ZIP is still compressed. Extract the ZIP first, then select the folder containing `manifest.json`, not the ZIP or its parent folder.
+
+**No Load unpacked button?** Make sure you are on the extensions page listed above and that **Developer mode** is on. Browser references: [Chrome's installation guide](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked), [Edge's installation guide](https://learn.microsoft.com/en-us/microsoft-edge/extensions/getting-started/extension-sideloading#locally-installing-and-running-an-extension).
+
+### 4. Pin it and open a game
+
+Open your browser's **Extensions** menu (the puzzle-piece icon), find MeowlChess, and pin it or choose **Show in toolbar**. Click the MeowlChess icon to open the review page. The support prompt and tutorial can both be skipped, with separate **Never show again** checkboxes.
+
+MeowlChess is currently installed as an unpacked extension; it is not in the Chrome Web Store or Edge Add-ons store. These installation steps are for desktop browsers. The review page adapts to narrow screens, but that does not make the extension installable in a mobile browser that lacks extension support.
+
+### Updating without starting over
+
+Unpacked installations **do not update automatically**.
+
+1. Download and extract the latest **MeowlChess.zip**.
+2. Copy the new contents into the **same folder you originally installed from**, replacing the old files. For example, replace the contents of `Documents\MeowlChess\extension` with the new `extension` contents; avoid creating an extra `extension\extension` folder.
+3. Open your browser's extensions page and click **Reload** on the existing MeowlChess card. If you are unsure which folder is installed, open the card's **Details** and check its source path where available.
+4. Refresh open Chess.com or Lichess tabs and reopen the MeowlChess review page.
+
+Keep the existing installation in the same browser profile and folder. **Do not remove the extension to update it**—removing it can delete its local data. Saved reviews and preferences live in browser storage, separately from the extension files.
 
 ## Your first review
 
-1. Open **Games** and choose a website, import a PGN, or try the four-move **Sample**.
-2. Choose a completed game. Adjust the engine and speed in **Settings** if you want, then select **Review game**.
-3. The finished review opens at **move 0** on **Summary**. Switch to **Moves** to explore the game.
+1. Click **Games** in the top bar. Enter a Chess.com or Lichess username and select **Find games**, choose **Import PGN**, or use **Try a sample game**.
+2. Choose a completed game. Open **Settings** in the top bar to choose your engine and review speed, then select **Review game** beside the board.
+3. When analysis finishes, the game opens at **move 0** on **Summary** and is saved on this device.
 
-**Settings → Board size** changes the board independently of the review controls. Choose a preferred size or select **Auto** to fit it to the window. Your choice is remembered, and larger boards still shrink to fit smaller screens.
+| Where to go | What you will find |
+| --- | --- |
+| **Summary** | Both players' study scores, estimated game ratings, move counts, and evaluation graph. |
+| **Moves** | Move-by-move explanations, key moments, engine lines, and ways to try a better move. |
+| **Coach** | A local Meowl coach, selectable personalities, questions, sound, and animation controls. |
+| **Practice** | Your saved mistakes and bookmarked positions. |
+| **Games → Saved reviews** | Previous analysis, ready to reopen without running the engine again. |
+| **Settings** | Analysis, board and playback, notifications, and automatic on-site reviews. |
+
+To get reviews directly on a website, open **Settings → On-site reviews**, enter your username, enable Chess.com or Lichess, and accept its browser permission prompt. A finished game's panel shows **Finding game → Analyzing → Saving**, followed by its summary. You can move or resize the panel and reopen it from the small MeowlChess button after closing it.
+
+With **Engine arrows** enabled, suggestions follow the reviewed board on every review tab. Use **Board arrows → All engine moves** to see every available candidate, or keep the best move and hover an engine line for alternatives. Arrows stay hidden while you solve a practice retry and when the position has no legal continuation.
+
+**Settings → Board size** changes the board independently of the review controls. Drag to choose a size, then release to apply it; the size readout updates while the slider stays in place. Keyboard changes apply immediately. Select **Auto** to fit the window. Your choice is remembered, and larger boards still shrink to fit smaller screens.
 
 **Settings → Move sounds** enables quiet local sounds when you navigate moves, explore variations, or use Play. Sounds are off by default and stay silent in hidden tabs.
 
@@ -63,7 +136,7 @@ Captured pieces appear beside each player and follow the position you are viewin
 
 Move notation uses small filled piece symbols for White and outlined symbols for Black, including promotions. Pawn moves and castling keep their usual notation. Hover over shortened player names in the board header, score cards, game lists, or saved reviews to see the full names.
 
-The game picker remembers your entry separately for Chess.com and Lichess, including when you open Settings from the on-site panel. Edits are remembered when you leave the field or switch websites, and submitting an entry saves it even if the lookup fails. Clear the field to forget that entry. Successful username lookups also add a shortcut under **Saved accounts**, with up to 10 names per website. Choosing one fills the entry; select the arrow to find its games. **Forget** removes the shortcut and its matching remembered entry. Saved reviews and the separately configured on-site account stay in place.
+The game picker remembers your entry separately for Chess.com and Lichess, including when you open Settings from the on-site panel. Edits are remembered when you leave the field or switch websites, and submitting an entry saves it even if the lookup fails. Clear the field to forget that entry. Successful username lookups also add a shortcut under **Saved accounts**, with up to 10 names per website. Choosing one fills the entry; select **Find games** to load its games. **Forget** removes the shortcut and its matching remembered entry. Saved reviews and the separately configured on-site account stay in place.
 
 The game picker closes after selection. Move through the review with the move list, arrow keys, evaluation graph, key moments, or **Play**. Select a move-rating count on **Summary** to jump to that player’s matching moves, then use the matching-move arrows or **Clear** to return to normal navigation. Hover or focus the evaluation graph to preview a move’s evaluation before selecting it. **Engine lines** stays collapsed until you open it.
 
@@ -166,9 +239,9 @@ Both engines are bundled. Switching engines downloads nothing. Lozza is a weaker
 | Deep | 1.5 seconds | 0.15 seconds |
 | Thorough | 3 seconds | 0.15 seconds |
 
-With rechecks enabled, the first pass is capped at 0.15 seconds per nonterminal position. Rechecks search both sides of each selected move before assigning its final label, using the chosen time with a minimum of 0.5 seconds and maximum of 3 seconds per position. At most eight moves are revisited, fewer in short games; shared positions are searched once. Progress separates the two passes, and either can be canceled. The review page and on-site panel show an approximate time remaining based on actual progress. First-pass estimates exclude the later recheck, whose length is known only after key moves are selected; engine startup and saving have no countdown. After completion, **Reviewed in** shows the actual time spent on local analysis, including engine startup and rechecks, but excluding game retrieval and saving. The duration is retained with saved reviews; older reviews without a recorded duration omit it.
+With rechecks enabled, the first pass is capped at 0.15 seconds per nonterminal position. Rechecks search both sides of each selected move before assigning its final label, using the chosen time with a minimum of 0.5 seconds and maximum of 3 seconds per position. At most eight moves are revisited, fewer in short games; shared positions are searched once. Progress separates the initial scan, optional mistake rechecks, and deeper checks of likely standout moves. Each stage can be canceled; standout checks can run even with mistake rechecks turned off. The review page and on-site panel show an approximate time remaining based on actual progress. First-pass estimates exclude later mistake and standout checks, whose length is known only after candidate moves are selected; engine startup and saving have no countdown. After completion, **Reviewed in** shows the actual time spent on local analysis, including engine startup, mistake rechecks, and standout checks, but excluding game retrieval and saving. The duration is retained with saved reviews; older reviews without a recorded duration omit it.
 
-Fast automatically selects one line. For 100 nonterminal positions, its first pass uses about five seconds of engine time, plus startup and processing. Rechecks add time. Turn rechecks off to spend the full chosen time on every nonterminal position.
+Fast automatically selects one line. For 100 nonterminal positions, its first pass uses about five seconds of engine time, plus startup and processing. Mistake rechecks and standout checks add time. Turning mistake rechecks off gives every nonterminal position the full chosen time in the first pass; likely standout moves can still receive a deeper check afterward.
 
 </details>
 
@@ -187,15 +260,17 @@ Use **Share summary** from the main Summary tab or the panel's share icon to pre
 - **Show why:** follow a legal continuation with concrete evidence such as checkmate, a verified fork, or lasting material loss. If no simple consequence can be verified, MeowlChess shows the line without inventing an explanation. These are limited engine observations, not a human coach's assessment.
 - **Search further:** **Quick look** spends 0.15 seconds on the displayed position; **Analyze deeper** spends at least 1.5 seconds. Both update that position's evaluation and lines. **Review again** recalculates the full game's labels and scores.
 
-The Moves tab shows the best engine arrow by default; Summary leaves the board clear. Hover over or keyboard-focus another line to preview it, or enable **All engine moves**: green is first, blue second, orange third. Knight arrows turn at a right angle. Arrows always describe the displayed position and side to move; terminal positions have no continuation.
+With Engine arrows enabled, the best suggestion follows the displayed board on every review tab, including Summary and Coach. Hover over or keyboard-focus another line to preview it, or enable **All engine moves**: green is first, blue second, orange third. Knight arrows turn at a right angle. Arrows always describe the displayed position and side to move; terminal positions have no continuation.
 
 **Face my side** uses your entered or remembered username to put your pieces at the bottom. You can disable it or flip the board manually. Retry mode faces the player whose move is being retried. Display choices and playback speed are saved locally, and motion respects reduced-motion preferences.
 
 ## Ask your coach
 
-**Explain moves automatically** is on by default. As you step through a completed review in Moves or Coach, one short comment follows the selected move without filling your chat. It follows **Focus on**, pauses during practice or variations, and skips past positions when you scrub quickly. Turn it off in the Coach tab; animation and sound preferences remain separate.
+**Explain moves automatically** is on by default. As you step through a completed review in Moves or Coach, one short comment follows the selected move without filling your chat. It follows **Focus on**, pauses during practice or variations, and skips past positions when you scrub quickly. Turn it off under **Coach settings**; animation and sound preferences remain separate.
 
-After reviewing a game, open **Coach** beside Summary and Moves. Choose from five Meowl personalities: encouraging **Meowl**, precise **Professor Meowl**, playful **Captain Paws**, patient **Mellow Meowl**, or tactics-focused **Scout Meowl**. Your selected coach appears beside the board on larger screens and below it on smaller screens, with small portraits in chat replies. The two newer personalities share the existing Meowl artwork and have their own colors, wording, and gesture timing. All five use the same saved analysis; personality changes how an answer is phrased, not its chess assessment.
+After reviewing a game, open **Coach** beside Summary and Moves. Start with curious **Meowl**, precise **Professor Meowl**, spirited **Captain Paws**, patient **Mellow Meowl**, or tactics-focused **Scout Meowl**. Every coach has the same round, dark Meowl eyes. Regular Meowl is crown-free; Professor wears glasses; Captain has bold brows; Mellow wears a soft cardigan; Scout has cheek freckles and field gear. Their outfits, expressions, and gestures give each character a distinct personality. The same facial features appear in the portraits and stay with the head during talking, blinking, and glances. Your selected coach appears beside the board on larger screens and below it on smaller screens, with small portraits in chat replies. Choose a portrait in the coach picker. Every coach uses the same saved analysis, with their own approach to explaining it: Meowl explores ideas with playful curiosity; Professor asks for evidence; Captain sets small challenges; Mellow offers one reassuring next step; Scout investigates tactical clues. Their tips respond to checks, captures, castling, promotions, and the available engine line. Chat discussions about openings, material, and game phases also follow the selected personality. Move ratings, scores, and legal continuations remain the same across coaches.
+
+**Evil Meowl** unlocks after **10 different completed games** have been reviewed and saved. Existing valid saved reviews count, re-reviewing the same game adds no extra progress, and the built-in Sample does not count. Progress stays on this device when you delete saved reviews; clearing the extension's data resets it. The coach picker shows your progress. Evil Meowl has charcoal fur, a silvery muzzle, curved devil horns, and a sly little smirk. His dark-red outfit and wing-held pitchfork complete the look. He turns study into playful little schemes: test the opponent's reply before the evil laugh. Starring the GitHub repository is optional and has no effect on unlocking coaches.
 
 Choose **White**, **Black**, or **Both** to set the side you want to discuss. Ask a question or start with a suggested prompt:
 
@@ -207,13 +282,19 @@ Choose **White**, **Black**, or **Both** to set the side you want to discuss. As
 
 Ask **“Show Brilliant and Great moves”**, **“How many brilliants did White play?”**, or **“Show Black's mistakes”** to search the whole reviewed game. The coach recognizes every move rating, shows the actual matching labels and counts, and links to those moves. Asking why a specific move received its rating still explains that exact move. It reports the saved review's labels without inventing new awards.
 
-The coach follows the position displayed on the board. Move links in its answers take you to that moment while keeping the conversation open. On a game website, **Ask coach** opens that saved game's Coach tab in the full review.
+The coach follows the position displayed on the board. **Ask about this move** beside the Meowl opens the conversation for that position. **Explain this position** gives a brief account of the side to move, the saved evaluation, and a legal continuation. **Next key moment** finds the next saved highlight or mistake for your selected side. Move links in its answers take you to that moment while keeping the conversation open. On a game website, **Ask coach** opens that saved game's Coach tab in the full review.
 
 Coaching is free and entirely local. It uses built-in question matching, legal engine continuations, and the completed review; it is not an open-ended AI model. Unrecognized questions get suggested alternatives, and explanations stay within the available evidence. Re-reviewing more deeply can change its assessment. Coach answers are unavailable during retry practice and while exploring an unsaved variation.
 
-Coaches animate the same 2D drawing with mouth movements, blinks, wing gestures, and personality-specific timing. **Brilliant** moves get a hop and wing-flapping celebration; **Great** and **Best** moves get a smaller celebration, while missed opportunities get a thoughtful reaction. **Focus on** controls whose moves get these reactions. Tap or keyboard-activate your coach to get a friendly wing wave. Between comments, the companion occasionally blinks and takes a small breath. **Coach animations** can be turned off, and reduced-motion settings keep reactions still. Move commentary stops on Summary; reactions pause during practice attempts, variations, loading, and hidden tabs.
+Each coach has a repertoire of greetings, thinking gestures, celebrations, encouragement, and quiet talking motions, with three takes for each reaction. Meowl follows feathers and takes little playful steps; Professor checks his book and glasses; Captain salutes and waves a pennant; Mellow cradles a warm cup and tidies his scarf; Scout follows clues with a magnifying glass; Evil Meowl plots with conspiratorial glances and small villainous flourishes. Wings, feet, ears, and heads move separately while the characters keep their proportions. Their eyes and heads follow the action, including reading a page, lifting a cup, or watching a feather. Wings grip the book and cup, and Professor's open pages face toward him. **Brilliant**, **Great**, and **Best** moves have distinct reactions, good moves get approval, and mistakes get encouragement. Reactions show the move's saved rating icon. **Focus on** controls whose moves get these reactions. Tap or keyboard-activate your coach to see his greeting.
 
-**Meow volume** is always visible in Coach and remembers your chosen level. **Meow sounds** stays off by default; enable it to hear reactions or use **Preview**. Coaches use 25 real cat recordings: 19 meows, five chirps, and one purring chirrup, played at their original pitch and speed. The clips rotate between comments, celebrations, curious reactions, and greetings without immediate repeats. Recordings are bundled for offline playback; idle blinks are silent. See the [recording credits](THIRD_PARTY_NOTICES.md#recorded-coach-meows).
+Between comments, each Meowl has **40 quiet idle routines**: listening, investigating a feather, adjusting glasses, checking a book, standing at ease, warming a cup, tidying an outfit, or scanning for clues. The newer scenes add toe inspections, careful shuffles, quiet marches, cup balancing, and pitchfork antics. Each coach uses a shuffled rotation that visits every routine before repeating, with varied pauses between actions. Idles continue while you read Summary and remain silent. Talking uses quieter gestures, moving eyes, and mouth movements; longer replies keep the coach talking for a short, complete phrase. New comments briefly settle an unfinished gesture before the next reaction begins. **Coach animations** can be turned off, and reduced-motion settings keep reactions still. Move commentary stops on Summary; animations pause during practice attempts, variations, loading, and hidden tabs.
+
+The coach has a dedicated card to the left of the board on wide screens and below the review content on smaller screens, keeping the game results easy to reach. Change coaches from its selector, toggle move tips or sound, open coach settings, or ask about the current move without hunting through tabs. The chat button also stays available on Summary.
+
+In **Coach settings → Animation preview**, choose a signature routine, greeting, talking or thinking gesture, move reaction, or **While waiting** idle. Select **Play** to see it; replaying cycles through three takes for reactions or draws another action from the idle rotation. The menu shows action names and the idle count for your selected coach. Previews are silent and do not change the game, its ratings, or the conversation.
+
+**Coach settings** keeps commentary, animation, sound, and **Meow volume** controls together. The volume remembers your chosen level. **Meow sounds** stays off by default; enable it to hear reactions or use **Preview**. Coaches use 35 real cat recordings: 23 meows, 11 chirps and trills, and one purring chirrup, played at their original pitch and speed. When animations are enabled, mouth movement follows the recording and closes during quiet gaps. The clips rotate between comments, celebrations, curious reactions, and greetings without immediate repeats. Recordings are bundled for offline playback; idle gestures are silent. Each coach also blinks and makes small glances between idle gestures. See the [recording credits](THIRD_PARTY_NOTICES.md#recorded-coach-meows).
 
 Coach, side, automatic-commentary, animation, sound, and volume preferences are remembered on this device. Chats keep the most recent 12 question-and-answer pairs in the open tab, and clear when you switch games, re-review, reload, or select **Clear chat**. Messages are not saved to your library or sent to a service.
 
@@ -245,11 +326,11 @@ The full review and on-site summary also show **Game rating** for each player an
 <details>
 <summary><strong>Game-rating estimates and phase icons</strong></summary>
 
-Game rating is a rough, **uncalibrated MeowlChess study heuristic**, not an account rating, official Elo, or Chess.com's formula. The concept is similar to [single-game performance in Chess.com's Game Review](https://support.chess.com/en/articles/10773754-how-is-game-rating-calculated-in-game-review), but the numbers need not match. Engine choice and search time can affect the result.
+Game rating is an **experimental, uncalibrated MeowlChess study heuristic**, not an account rating, official Elo, or Chess.com's formula. The concept is similar to [single-game performance in Chess.com's Game Review](https://support.chess.com/en/articles/10773754-how-is-game-rating-calculated-in-game-review), but the numbers need not match. It has not been calibrated to Chess.com or Torch Human. Engine choice and search time can affect the result.
 
-Each player needs at least **8 eligible decisions**. Known Book moves, forced moves with fewer than two legal choices, positions already showing mate, and positions with an estimated expected score outside 10–90% are excluded. A move that loses a competitive position or allows mate still counts. An unavailable estimate displays **—**. Custom starting positions are supported when enough decisions are present; the estimate then covers only the supplied play.
+Each player needs a **rating recorded in the PGN** and at least **8 eligible decisions**. Book moves, forced moves, and inconsequential moves in already decisive positions are excluded. Giving away a winning advantage or losing a forced mate still counts. Missing ratings or too few decisions display **—**. Custom starting positions are supported when enough decisions and a recorded rating are present.
 
-For eligible moves, let `m` be mean expected-score loss (0 to 1). The estimate is `2800 × exp(-20 × m)`, clamped to 300–2800 and rounded to the nearest 50. These constants are project design choices, not a fitted prediction of human Elo. Account ratings and website names are not inputs. Existing study scores and individual move labels are unchanged.
+The estimate starts from that player's recorded rating, with an adjustment bounded to ±400 points and rounded to 50. Short reviews and shallow searches reduce the adjustment; hover the value for its baseline, decision count, and analysis coverage. Ratings retain their source's scale: a Lichess rating is not converted into a Chess.com rating. The reference loss, adjustment limit, and coverage rules are project choices, not a fitted prediction of human Elo. A clean game no longer implies master strength on its own.
 
 Phases use the position **before** each move:
 
@@ -266,8 +347,8 @@ Phase grades use mean non-Book expected-score loss with the same Excellent / Goo
 
 | Label | Meaning |
 | --- | --- |
-| Brilliant | The preferred piece sacrifice, with compensation and lasting material investment in the engine continuation. |
-| Great | The preferred response preserving a substantial opportunity after an opponent's error. |
+| Brilliant | A sound piece or exchange sacrifice supported by deeper analysis and a legal material-gaining capture for the opponent. |
+| Great | A critical choice, or a best or nearly best continuation that converts an opponent's error into a verified tactical gain. |
 | Best | The engine's preferred move. |
 | Excellent | Almost no estimated loss. |
 | Good | Little estimated loss. |
@@ -276,11 +357,13 @@ Phase grades use mean non-Book expected-score loss with the same Excellent / Goo
 | Mistake | A significant reduction in estimated chances. |
 | Blunder | A large reduction in estimated chances. |
 
-Brilliant and Great require depth 12 or greater in relevant positions. Brilliant also requires at least four legal continuation plies, an accepted non-pawn sacrifice with two pawn-equivalents of lasting investment, near-equal or better prospects, and no meaningful loss. Ordinary exchanges and already decisive wins are excluded.
+Every review speed checks a bounded set of likely standout moves more deeply, including Fast mode. The highlight pass uses at least two seconds per checked position to reduce unstable labels from the quick scan, with at most eight candidate moves. Brilliant and Great require depth 12 or greater in the relevant positions and stable evaluations. Brilliant considers legal captures and recaptures, including exchange sacrifices and offers that the engine declines. A recapture can qualify when the recapturing piece itself is offered at a net material loss; ordinary equal trades do not qualify.
 
-Great requires an opportunity of at least 12 expected-score percentage points, at most one point lost, a nonlosing position, and a legal alternative. Automatic same-square recaptures are excluded. These conservative rules can miss good moves. Miss artwork is included, but there is no separate missed-win classification.
+Great requires coherent alternative engine lines showing an only-good move, a critical choice, or a near-best tactical continuation after an opponent's error. Tactical continuations must demonstrate a lasting material gain in a legal engine line. Stockfish checks at least two lines for likely highlights even if the review displays one; shallow positions before the opponent's error are also checked when needed. Lozza cannot confirm these comparative claims because it supplies one line.
 
-Study scores average `100 × exp(-5 × expected-score loss)` over a player's **non-Book moves**, with engine-preferred moves scoring 100. Book moves count in the move totals but not this average. A player with no scored moves shows **—**.
+Already won positions normally need evidence that simpler alternatives lose the overwhelming advantage. A verified mating combination can also earn Brilliant when the opponent accepts a material sacrifice and the complete legal engine line ends in checkmate. These are independent MeowlChess rules and can differ from Chess.com's labels. Miss artwork is included, but there is no separate missed-win classification.
+
+New study scores use the [public Lichess accuracy method](https://lichess.org/page/accuracy): move scores derived from lost chances, then an average of a volatility-weighted mean and a harmonic mean. This gives critical mistakes more influence than a simple average of many easy moves. Engine-preferred moves score 100; Book moves are excluded, and a player with no scored moves shows **—**. These are local estimates, not Chess.com's CAPS2 scores. Existing saved scores keep their original calculation until the game is reviewed again.
 
 </details>
 

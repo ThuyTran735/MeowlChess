@@ -22,6 +22,8 @@ Optional move sounds are generated locally using browser audio, without download
 
 ## Local coach
 
+Evil Meowl unlock progress is stored locally in IndexedDB. It keeps at most 10 normalized game identifiers for successfully saved completed reviews, so reviewing the same game twice does not add progress. Existing valid saved reviews contribute to the milestone. This small progress record survives deletion of individual saved reviews and resets when the extension's data is cleared. It is not uploaded, and no GitHub account, star check, or authentication is involved.
+
 The Coach tab answers supported questions using built-in rules and the selected completed review. It does not use a remote AI service, download a language model, or start additional engine searches. Questions, responses, and conversation context remain in the open tab's memory, limited to the latest 12 question-and-answer pairs. They are not written to the saved-game library or uploaded. Switching games, re-reviewing, reloading or closing the tab, or choosing **Clear chat** discards the conversation.
 
 Optional coach meows use short cat recordings bundled with the extension and played locally using browser audio. They are off by default and require no microphone access, remote audio downloads, or speech service. Coach reactions animate the bundled drawings on your device and respect reduced-motion preferences. Sound variations are selected locally; no sound is recorded from your device or uploaded.

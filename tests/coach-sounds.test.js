@@ -65,11 +65,33 @@ test('real recordings play at their original speed through the volume envelope',
   f.sounds.dispose();
 });
 
+test('Evil uses real chirps for asides and meows for celebrations without pitch alteration', async () => {
+  const f=fixture({catalog:clips.map((clip,index)=>({...clip,sound:index<3?'chirp':'meow'}))});
+  for(const kind of ['talk','curious','greeting','brilliant','celebrate']){
+    const heard=new Set();
+    for(let index=0;index<3;index++){
+      assert.equal(await f.sounds.play({coach:'evil',kind}),true);
+      const source=f.sources.at(-1),recording=source.buffer.recording;
+      assert.equal(recording<3,!['brilliant','celebrate'].includes(kind));heard.add(recording);
+      assert.deepEqual(source.playbackRate.calls,[['set',1,8]]);
+    }
+    assert.equal(heard.size,3);
+  }
+  f.sounds.dispose();
+});
+
+test('idle never allocates or plays audio, even when sound is enabled for Evil', async () => {
+  const f=fixture();
+  for(const coach of ['evil','meowl','owl','paws','mellow','scout'])assert.equal(await f.sounds.play({coach,kind:'idle'}),false);
+  assert.equal(f.creations,0);assert.equal(f.fetches.length,0);assert.equal(f.sources.length,0);
+  f.sounds.dispose();
+});
+
 test('all kinds and coaches shuffle the recordings without consecutive repeats', async () => {
   let seed = 123;
   const f = fixture({ random: () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296) });
   let last;
-  for (const coach of ['meowl', 'owl', 'paws', 'mellow', 'scout']) {
+  for (const coach of ['meowl', 'owl', 'paws', 'mellow', 'scout', 'evil']) {
     for (const kind of kinds) {
       for (let cycle = 0; cycle < 3; cycle++) {
         const heard = new Set();
@@ -186,4 +208,37 @@ test('closed contexts clear decoded buffers and dispose cannot revive audio', as
   assert.equal(f.creations, 2); assert.equal(f.decodes.length, 2);
   f.sounds.dispose(); f.sounds.dispose(); assert.equal(f.audio.closes, 1);
   assert.equal(await f.sounds.play(), false); assert.equal(await f.sounds.unlock(), null);
+});
+
+test('mouth playback begins with actual sound and follows its clock through stop and replacement', async () => {
+  const gate = deferred(), sampleRate = 10000, data = Float32Array.from({ length: 10000 }, (_, index) =>
+    index > 1500 && index < 4500 ? Math.sin(index * .5) * .5 : 0);
+  const f = fixture({ decode: () => gate.promise });
+  const callbacks = [];
+  const playing = f.sounds.play({ onStart(playback) { callbacks.push(playback); } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(callbacks.length, 0, 'A pending decode has no voice or mouth to animate.');
+  gate.resolve({ duration: 1, sampleRate, numberOfChannels: 1, getChannelData: () => data });
+  assert.equal(await playing, true);
+  const first = callbacks[0];
+  assert.equal(first.durationMs, 1000); assert(first.isPlaying());
+  f.audio.currentTime = 8.05; assert.equal(first.getMouth(), 0);
+  f.audio.currentTime = 8.3; assert(first.getMouth() > .7);
+  f.audio.currentTime = 8.7; assert.equal(first.getMouth(), 0);
+  f.sounds.stop(); assert.equal(first.isPlaying(), false); assert.equal(first.getMouth(), 0);
+  await f.sounds.play({ onStart(playback) { callbacks.push(playback); } });
+  assert.equal(callbacks.length, 2); assert(callbacks[1].isPlaying());
+  f.sources[0].onended(); assert(callbacks[1].isPlaying(), 'An old ended callback cannot close a newer mouth.');
+  f.audio.currentTime = 9; assert(callbacks[1].getMouth() > .7);
+  f.sources[1].onended(); assert.equal(callbacks[1].getMouth(), 0);
+  f.sounds.dispose();
+});
+
+test('blocked or canceled sound never notifies the mouth; a view callback failure leaves sound usable', async () => {
+  let called = 0;
+  const f = fixture(); f.enabled(false);
+  assert.equal(await f.sounds.play({ onStart() { called++; } }), false);
+  assert.equal(called, 0); f.enabled(true);
+  assert.equal(await f.sounds.play({ onStart() { throw Error('View removed'); } }), true);
+  f.sounds.dispose();
 });

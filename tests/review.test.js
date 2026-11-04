@@ -64,21 +64,24 @@ function sacrificeFixture(color = 'w') {
     ? 'r1bq1rk1/pppnbppp/4p3/3p4/3P4/3BPN2/PPP2PPP/RNBQK2R w KQ - 0 1'
     : 'rnbqk2r/ppp2ppp/3bpn2/3p4/3P4/4P3/PPPNBPPP/R1BQ1RK1 b kq - 0 1';
   const move = new Chess(fen).move(color === 'w' ? 'Bxh7+' : 'Bxh2+');
-  const before = { ...evaluation(color === 'w' ? 80 : -80), depth: 16 };
-  const after = { ...before, pv: color === 'w' ? ['g8h7', 'f3g5', 'h7g8', 'd1h5'] : ['g1h2', 'f6g4', 'h2g1', 'd8h4'] };
+  const before = { ...evaluation(color === 'w' ? 80 : -80, null, move.from + move.to), depth: 16 };
+  const pv = color === 'w' ? ['g8h7', 'f3g5', 'h7g8', 'd1h5'] : ['g1h2', 'f6g4', 'h2g1', 'd8h4'];
+  const after = { ...before, bestMove: pv[0], pv };
   return { move, before, after };
 }
 
-test('Brilliant requires a sound engine-preferred piece sacrifice for either color', () => {
+test('Brilliant requires a sound engine-backed piece sacrifice for either color', () => {
   for (const color of ['w', 'b']) {
     const { move, before, after } = sacrificeFixture(color);
     assert.equal(isSoundSacrifice(move, before, after), true);
     assert.equal(classifyMove(before, after, color, true, { move }).label, 'Brilliant');
-    assert.notEqual(classifyMove(before, after, color, false, { move }).label, 'Brilliant');
+    const alternative = new Chess(move.before).moves({ verbose: true }).find(candidate => candidate.from + candidate.to !== move.from + move.to);
+    const nearBest = { ...before, bestMove: alternative.from + alternative.to };
+    assert.equal(classifyMove(nearBest, after, color, false, { move }).label, 'Brilliant');
   }
 });
 
-test('Brilliant rejects shallow, missing, losing, unstable, truncated, and illegal engine evidence', () => {
+test('Brilliant rejects shallow, missing, losing, unstable, and illegal engine evidence', () => {
   const { move, before, after } = sacrificeFixture();
   const cases = [
     [{ ...before, depth: 8 }, after],
@@ -88,7 +91,7 @@ test('Brilliant rejects shallow, missing, losing, unstable, truncated, and illeg
     [before, { ...after, cp: 0 }],
     [{ ...before, cp: 900 }, { ...after, cp: 900 }],
     [{ ...before, mate: 3 }, after],
-    [before, { ...after, pv: after.pv.slice(0, 3) }],
+    [before, { ...after, pv: [] }],
     [before, { ...after, pv: ['g8h7', 'f3g5', 'h7g8', 'd1h9'] }],
     [before, { ...after, pv: ['g8h8', 'f3g5', 'h8g8', 'd1h5'] }],
   ];
@@ -103,18 +106,22 @@ test('Brilliant rejects ordinary exchanges and material recovered in the continu
   assert.equal(isSoundSacrifice(temporary, before, { ...before, pv: ['b7a7', 'b6a7', 'h8g8', 'h1g1'] }), false);
 });
 
-test('Great requires preserving a substantial opportunity, not just any best move', () => {
+function greatFixture() {
   const move = parseGame(SHORT).moves[2];
-  const previousEvaluation = { ...evaluation(0), depth: 16 };
-  const before = { ...evaluation(200), depth: 16 };
-  const after = { ...before };
-  assert.equal(classifyMove(before, after, 'w', true, { move, previousEvaluation }).label, 'Great');
-  assert.equal(classifyMove(before, after, 'w', false, { move, previousEvaluation }).label, 'Excellent');
-  assert.equal(classifyMove(before, after, 'w', true, { move }).label, 'Best');
-  assert.equal(classifyMove(before, after, 'w', true, { move, previousEvaluation: before }).label, 'Best');
-  assert.equal(classifyMove(before, { ...after, cp: 0 }, 'w', true, { move, previousEvaluation }).label, 'Best');
-  assert.equal(classifyMove(before, after, 'w', true, { move, previousEvaluation: { ...previousEvaluation, depth: 4 } }).label, 'Best');
-  assert.equal(classifyMove(before, after, 'w', true, { move, previousEvaluation, previousMove: { captured: 'n', to: move.to } }).label, 'Best');
+  const before = { ...evaluation(200, null, 'g1f3'), depth: 16, pv: ['g1f3'] };
+  before.candidates = [{ ...before, rank: 1 }, { ...evaluation(-100, null, 'b1c3'), depth: 16, rank: 2, pv: ['b1c3'] }];
+  const after = { ...evaluation(200, null, 'b8c6'), depth: 16, pv: ['b8c6'] };
+  return { move, before, after };
+}
+
+test('Great requires coherent alternatives proving a critical choice', () => {
+  const { move, before, after } = greatFixture();
+  assert.equal(classifyMove(before, after, 'w', true, { move }).label, 'Great');
+  assert.equal(classifyMove(before, after, 'w', false, { move }).label, 'Great', 'Verified engine evidence determines the highlight even when the caller flag disagrees.');
+  assert.equal(classifyMove({ ...before, candidates: [] }, after, 'w', true, { move, previousEvaluation: evaluation(0) }).label, 'Best');
+  assert.equal(classifyMove(before, { ...after, cp: 0 }, 'w', true, { move }).label, 'Best');
+  assert.equal(classifyMove({ ...before, depth: 4 }, after, 'w', true, { move }).label, 'Best');
+  assert.equal(classifyMove(before, after, 'w', true, { move, previousMove: { captured: 'n', to: move.to } }).label, 'Best');
 });
 
 test('review includes special classifications in summaries with explicit explanations', async () => {
@@ -128,14 +135,15 @@ test('review includes special classifications in summaries with explicit explana
   assert.deepEqual(Object.keys(result.summary.w.counts), MOVE_LABELS);
   assert.match(result.moves[0].explanation, /offers a piece.*compensation/);
   assert.match(result.moves[0].explanation, /MeowlChess estimate/);
+  const greatEvidence = greatFixture();
   const great = fakeEngine([
     { ...evaluation(0), depth: 16 }, { ...evaluation(0), depth: 16 },
-    { ...evaluation(200, null, 'g1f3'), depth: 16 }, { ...evaluation(200), depth: 16 },
+    greatEvidence.before, greatEvidence.after,
   ]);
   const second = await analyzeGame(SHORT, { engineFactory: great.engineFactory, recognizeOpenings: false });
   assert.equal(second.moves[2].label, 'Great');
   assert.equal(second.summary.w.counts.Great, 1);
-  assert.match(second.moves[2].explanation, /best reply.*opponent’s error/);
+  assert.match(second.moves[2].explanation, /critical choice.*tactical opportunity/);
   assert.match(second.moves[2].explanation, /MeowlChess estimate/);
 });
 
@@ -149,16 +157,20 @@ test('mate and checkmate scores respect their winning side', () => {
 });
 
 test('review passes complete replay history and calculates player summaries', async () => {
-  const fixture = fakeEngine([evaluation(0, null, 'e2e4'), evaluation(10, null, 'c7c5'), evaluation(400, null, 'g1f3'), evaluation(400)]);
+  const fixture = fakeEngine([evaluation(0, null, 'e2e4'), evaluation(10, null, 'c7c5'), evaluation(400, null, 'g1f3'), evaluation(400), evaluation(10, null, 'c7c5'), evaluation(400, null, 'g1f3'), evaluation(400)]);
   const progress = [];
   const controller = new AbortController();
   const result = await analyzeGame(SHORT, { engineFactory: fixture.engineFactory, recognizeOpenings: false, moveTimeMs: 500, signal: controller.signal, onProgress: value => progress.push(value) });
   assert.equal(fixture.engine.initialized, true);
   assert.equal(fixture.engine.disposed, true);
-  assert.equal(fixture.calls.length, 4);
-  assert.deepEqual(fixture.calls.map(call => call.options.moves), [[], ['e2e4'], ['e2e4', 'e7e5'], ['e2e4', 'e7e5', 'g1f3']]);
-  assert.ok(fixture.calls.every(call => call.options.initialFen === result.game.positions[0] && call.options.moveTimeMs === 500 && call.options.signal === controller.signal));
-  assert.deepEqual(progress, [1, 2, 3, 4].map(completed => ({ completed, total: 4 })));
+  assert.equal(fixture.calls.length, 7);
+  assert.deepEqual(fixture.calls.map(call => call.options.moves), [[], ['e2e4'], ['e2e4', 'e7e5'], ['e2e4', 'e7e5', 'g1f3'], ['e2e4'], ['e2e4', 'e7e5'], ['e2e4', 'e7e5', 'g1f3']]);
+  assert.ok(fixture.calls.every(call => call.options.initialFen === result.game.positions[0] && call.options.signal === controller.signal));
+  assert.deepEqual(fixture.calls.map(call => call.options.moveTimeMs), [500, 500, 500, 500, 2000, 2000, 2000]);
+  assert.deepEqual(progress.filter(event => event.phase === 'scan').map(event => event.phaseCompleted), [1, 2, 3, 4]);
+  assert.equal(progress.at(-1).phase, 'complete');
+  assert.equal(progress.at(-1).completed, progress.at(-1).total);
+  assert(progress.every((event, index) => !index || event.completed / event.total >= progress[index - 1].completed / progress[index - 1].total));
   assert.equal(result.moves[0].bestSan, 'e4');
   assert.equal(result.moves[1].bestSan, 'c5');
   assert.equal(result.moves[1].label, 'Blunder');
@@ -229,8 +241,10 @@ test('initialization and evaluation failures always dispose the engine', async (
 
 test('review forwards candidate count and thinking time, retaining lines per position', async () => {
   const candidate = { rank: 1, cp: 25, mate: null, bestMove: 'e2e4', pv: ['e2e4', 'e7e5'], depth: 12 };
-  const fixture = fakeEngine([{ ...evaluation(25, null, 'e2e4'), candidates: [candidate] }]);
+  const initial = { ...evaluation(25, null, 'e2e4'), candidates: [candidate] };
+  const fixture = fakeEngine([initial, evaluation(), evaluation(), evaluation(), initial, evaluation()]);
   const result = await analyzeGame(SHORT, { engineFactory: fixture.engineFactory, moveTimeMs: 3000, multiPV: 3 });
-  assert(fixture.calls.every(call => call.options.multiPV === 3 && call.options.moveTimeMs === 3000));
+  assert(fixture.calls.every(call => call.options.multiPV === 3));
+  assert.deepEqual(fixture.calls.map(call => call.options.moveTimeMs), [3000, 3000, 3000, 3000, 3000, 3000]);
   assert.deepEqual(result.positions[0].candidates, [candidate]);
 });

@@ -47,3 +47,51 @@ include trailing silence padding. Original pitch and speed are unchanged.
 provenance.json records exact excerpts and hashes.
 
 Credits do not imply endorsement of MeowlChess by the recordists.
+
+Additional recordings checked 2026-11-04
+
+MeowlChess-meow-26.wav
+"Cat trill 1" by MBPL
+https://freesound.org/people/MBPL/sounds/668822/
+
+MeowlChess-meow-27.wav
+"Cat trill 2" by MBPL
+https://freesound.org/people/MBPL/sounds/668821/
+
+MeowlChess-meow-28.wav
+"Cat trill 3" by MBPL
+https://freesound.org/people/MBPL/sounds/668820/
+
+MeowlChess-meow-29.wav
+"Cat trill 4" by MBPL
+https://freesound.org/people/MBPL/sounds/668825/
+
+MeowlChess-meow-30.wav
+"Cat trill 5" by MBPL
+https://freesound.org/people/MBPL/sounds/668824/
+
+MeowlChess-meow-31.wav
+"Cat trill 6" by MBPL
+https://freesound.org/people/MBPL/sounds/668823/
+
+MeowlChess-meow-32.wav
+"Cat Meow" by d.n.audio.uk
+https://freesound.org/people/d.n.audio.uk/sounds/264507/
+
+MeowlChess-meow-33.wav
+"mew.wav" by Ayana225
+https://freesound.org/people/Ayana225/sounds/615893/
+
+MeowlChess-meow-34.wav
+"Cat meow" by Sadiquecat
+https://freesound.org/people/Sadiquecat/sounds/689324/
+
+MeowlChess-meow-35.wav
+"cat meow II" by tuberatanka
+https://freesound.org/people/tuberatanka/sounds/110010/
+
+These ten additional recordings are separate real cat calls, released under
+CC0 1.0. Their complete short public high-quality MP3 previews were converted
+to mono 32 kHz PCM with DC removal, bounded level matching, and 8 ms edge
+fades. No pitch or playback-speed changes, synthesized calls, or duplicates
+were added. Exact source and bundled-file hashes appear in provenance.json.

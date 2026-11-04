@@ -4,7 +4,7 @@ import { deflateRawSync } from 'node:zlib';
 
 // Dependency-free ZIP packaging works on Windows, macOS, and Linux.
 const root = resolve(import.meta.dirname, '..');
-const items = ['extension', 'scripts', 'tests', 'third-party-source', '.gitignore', 'package.json', 'package-lock.json', 'README.md', 'PRIVACY.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md'];
+const items = ['extension', 'docs', 'scripts', 'tests', 'third-party-source', '.gitignore', 'package.json', 'package-lock.json', 'README.md', 'PRIVACY.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md'];
 const crcTable = Array.from({ length: 256 }, (_, n) => {
   for (let bit = 0; bit < 8; bit++) n = n & 1 ? 0xedb88320 ^ (n >>> 1) : n >>> 1;
   return n >>> 0;

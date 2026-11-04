@@ -86,6 +86,7 @@ test('page export links accept canonical Chess.com navigation aliases without ch
     'https://www.chess.com/game/123',
     'https://www.chess.com/game/live/123?move=0',
     'https://chess.com/analysis/game/live/123/?move=2#review',
+    'https://www.chess.com/analysis/game/live/123/review?move=55',
   ]) {
     const pgn = pageExportPgn.replace(game().url, link);
     const { broker } = setup();
@@ -94,6 +95,27 @@ test('page export links accept canonical Chess.com navigation aliases without ch
     const payload = await broker.handle({ type: 'meowl:site-payload', token: ready.token }, frame(game().url));
     assert.equal(payload.game.pgn, pgn); assert.equal(payload.game.url, game().url);
   }
+});
+
+test('analysis review routes fetch the exact completed game and preserve its review across move navigation', async () => {
+  const calls = [];
+  const reviewUrl = 'https://www.chess.com/analysis/game/live/123/review?move=55';
+  const { broker, check } = setup({ fetchGames: async (source, username, options) => {
+    calls.push({ source, username, options });
+    return [game('999', { end_time: 1700000001 }), game()];
+  } });
+  const ready = await check(content(reviewUrl));
+  assert.equal(ready.status, 'ready'); assert.equal(ready.gameUrl, game().url);
+  assert.deepEqual(calls, [{ source: 'chesscom', username: 'alice', options: { gameUrl: game().url } }]);
+  broker.pageChanged(5, 'https://www.chess.com/analysis/game/live/123/review?move=56');
+  assert.equal((await check(content('https://www.chess.com/analysis/game/live/123/review?move=56'))).token, ready.token);
+  assert.equal((await check(content(game().url))).token, ready.token);
+  assert.equal(calls.length, 1);
+});
+
+test('analysis review URLs do not authorize unfinished games or fall back to another game', async () => {
+  const { check } = setup({ fetchGames: async () => [game('999'), game('123', { pgn: completedPgn.replaceAll('1-0', '*'), white: { username: 'Alice', result: 'unknown' }, black: { username: 'Bob', result: 'unknown' } })] });
+  assert.equal((await check(content('https://www.chess.com/analysis/game/live/123/review?move=55'))).status, 'waiting');
 });
 
 test('page export imports require an authenticated top-level exact Chess.com game and opt-in', async () => {
@@ -223,6 +245,8 @@ test('only trusted HTTPS origins are eligible and page URLs remove player secret
   assert.equal(gameUrlForPage('https://www.chess.com/game/186247007610'), 'https://www.chess.com/game/live/186247007610');
   assert.equal(gameUrlForPage('https://chess.com/analysis/game/186247007610/?move=20#review'), 'https://www.chess.com/game/live/186247007610');
   assert.equal(gameUrlForPage('https://www.chess.com/game/daily/456/'), 'https://www.chess.com/game/daily/456');
+  for (const [path, canonical] of [['analysis/game/live/123/review?move=55', 'live/123'], ['analysis/game/123/review/?move=0#review', 'live/123'], ['analysis/game/daily/456/review', 'daily/456']]) assert.equal(gameUrlForPage(`https://www.chess.com/${path}`), `https://www.chess.com/game/${canonical}`);
+  for (const path of ['analysis/game/live/123/review/extra', 'analysis/game/live/123/review/review', 'analysis/game/rapid/123/review', 'analysis/game/computer/123/review', 'game/live/123/review']) assert.equal(gameUrlForPage(`https://www.chess.com/${path}`), null);
   assert.equal(gameUrlForPage('https://lichess.org/Abcdef12wXyZ/black?token=secret#18'), 'https://lichess.org/Abcdef12');
   for (const path of ['analysis', 'training', 'practice', 'features', 'settings', 'registration', 'abcdefgh/anything', 'abc', 'abcdefghijk', 'abcdefghijklm', 'study/abcdefgh']) assert.equal(gameUrlForPage(`https://lichess.org/${path}`), null);
 });

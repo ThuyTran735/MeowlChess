@@ -130,7 +130,7 @@
         0.18,
         0.68
       ],
-      "silence_padding_seconds": 0.0,
+      "silence_padding_seconds": 0,
       "sound": "meow",
       "sha256": "0c21fcb995beff17b78c53fff08513b0303c64e3793e8b93af0104d1051ce360"
     },
@@ -151,7 +151,7 @@
         0.86,
         1.55
       ],
-      "silence_padding_seconds": 0.0,
+      "silence_padding_seconds": 0,
       "sound": "meow",
       "sha256": "78770b27c9e260b4058b377828591bcc6edf74ed635c3cd3fa79de6fdfd2c51e"
     },
@@ -172,7 +172,7 @@
         1.84,
         2.42
       ],
-      "silence_padding_seconds": 0.0,
+      "silence_padding_seconds": 0,
       "sound": "meow",
       "sha256": "7b93d51aa84123727f04592c8d8b611a193e17dad792c407cc5b883b0f4de050"
     },
@@ -193,7 +193,7 @@
         2.68,
         3.18
       ],
-      "silence_padding_seconds": 0.0,
+      "silence_padding_seconds": 0,
       "sound": "meow",
       "sha256": "22e264fc1e1d418a68dbe73e635039ebc1d2fca8804907f57e7655cb28b62fd1"
     },
@@ -214,7 +214,7 @@
         3.46,
         4.16
       ],
-      "silence_padding_seconds": 0.0,
+      "silence_padding_seconds": 0,
       "sound": "meow",
       "sha256": "2065c095c731fd6f38e8fea6667eeb292947b0a9007e6b708ddadbc3d9b776cb"
     },
@@ -235,7 +235,7 @@
         4.32,
         5.06
       ],
-      "silence_padding_seconds": 0.0,
+      "silence_padding_seconds": 0,
       "sound": "meow",
       "sha256": "2bab63f65a3d8a3c9298de3eb87d4680c0df55cb10e4c4dfa262d3948f73411c"
     },
@@ -256,7 +256,7 @@
         5.46,
         6.04
       ],
-      "silence_padding_seconds": 0.0,
+      "silence_padding_seconds": 0,
       "sound": "meow",
       "sha256": "3b6f32d9009d19ff8b2308abc4671b4d20233d2a1c2f5493e272bb5be83ef233"
     },
@@ -277,7 +277,7 @@
         9.32,
         10.02
       ],
-      "silence_padding_seconds": 0.0,
+      "silence_padding_seconds": 0,
       "sound": "meow",
       "sha256": "7c08a3fe773ec0bc9dcf670438c354328d60ed67a5d584e4abb41ef50735374a"
     },
@@ -298,7 +298,7 @@
         0.02,
         1.42
       ],
-      "silence_padding_seconds": 0.0,
+      "silence_padding_seconds": 0,
       "sound": "meow",
       "sha256": "8d6a516380970607df6bd2a10777084b017661bdd782d97596bd5b2757a11924"
     },
@@ -319,7 +319,7 @@
         5.72,
         7.02
       ],
-      "silence_padding_seconds": 0.0,
+      "silence_padding_seconds": 0,
       "sound": "meow",
       "sha256": "01db52a614e2ca57afab0ea643a01ffd82f79faf998d68a007bad67429631675"
     },
@@ -340,7 +340,7 @@
         9.94,
         11.32
       ],
-      "silence_padding_seconds": 0.0,
+      "silence_padding_seconds": 0,
       "sound": "meow",
       "sha256": "9396e9992d1281b74d2a2d828dd5b0500b8fa6bf475bc662327dccf3ba1e9e2e"
     },
@@ -358,7 +358,7 @@
         "sha256": "eeb7ba7b09a97d4654835a936b58546bf46d641cb50316e72b3b3c7096e8b852"
       },
       "excerpt_seconds": [
-        0.0,
+        0,
         0.38
       ],
       "silence_padding_seconds": 0.04,
@@ -422,7 +422,7 @@
       },
       "excerpt_seconds": [
         1.72,
-        2.0
+        2
       ],
       "silence_padding_seconds": 0.14,
       "sound": "chirp",
@@ -445,7 +445,7 @@
         0.12,
         1.2
       ],
-      "silence_padding_seconds": 0.0,
+      "silence_padding_seconds": 0,
       "sound": "meow",
       "sha256": "1dba00d2a419e5ac19527c063f622f36caa8a90e7de7bebd0cad05ea0686ea76"
     },
@@ -466,7 +466,7 @@
         2.7,
         3.32
       ],
-      "silence_padding_seconds": 0.0,
+      "silence_padding_seconds": 0,
       "sound": "chirp",
       "sha256": "bfb2b142c2a1ae33db0788ff0fc1f25d1923fad0386e40fcc913816e0ebaa66d"
     },
@@ -487,9 +487,219 @@
         10.57,
         11.35
       ],
-      "silence_padding_seconds": 0.0,
+      "silence_padding_seconds": 0,
       "sound": "purr-chirp",
       "sha256": "d63caaf663f6b0ab5e82c6c68761d975c0c7d9fab1758e235e82505b96bbcf99"
+    },
+    {
+      "file": "MeowlChess-meow-26.wav",
+      "source": {
+        "checked": "2026-11-04",
+        "id": "668822",
+        "audio": "https://cdn.freesound.org/previews/668/668822_14585550-hq.mp3",
+        "author": "MBPL",
+        "page": "https://freesound.org/people/MBPL/sounds/668822/",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "d62104c084d78a2cdb7953ecc22efc6513432dcedcd7440a0cbb3bc31fdba656",
+        "title": "Cat trill 1"
+      },
+      "excerpt_seconds": [
+        0,
+        1.2205625
+      ],
+      "sound": "chirp",
+      "sha256": "4ce602bfd9d1abaa72ca026341c6aad93db4361bdbdfbfe424a3364873729b47",
+      "processing": "Complete short call; mono 32 kHz PCM conversion, DC removal, bounded peak normalization, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-27.wav",
+      "source": {
+        "checked": "2026-11-04",
+        "id": "668821",
+        "audio": "https://cdn.freesound.org/previews/668/668821_14585550-hq.mp3",
+        "author": "MBPL",
+        "page": "https://freesound.org/people/MBPL/sounds/668821/",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "aec720842948734c4d1d0435b77c752e284c9d230dc8a2f0a9ae13078707d5e3",
+        "title": "Cat trill 2"
+      },
+      "excerpt_seconds": [
+        0,
+        0.80446875
+      ],
+      "sound": "chirp",
+      "sha256": "fceb013a68468e86e3e66fca64695d753913aebdc7f3114e8b8fe0c736e9973b",
+      "processing": "Complete short call; mono 32 kHz PCM conversion, DC removal, bounded peak normalization, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-28.wav",
+      "source": {
+        "checked": "2026-11-04",
+        "id": "668820",
+        "audio": "https://cdn.freesound.org/previews/668/668820_14585550-hq.mp3",
+        "author": "MBPL",
+        "page": "https://freesound.org/people/MBPL/sounds/668820/",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "82755135d1731bf13c39ea94475a63b19225b019bf9700299a1f2a7ecb566240",
+        "title": "Cat trill 3"
+      },
+      "excerpt_seconds": [
+        0,
+        0.319
+      ],
+      "sound": "chirp",
+      "sha256": "0848a97aaf917a95177c0ae3c8450addf1bdb0349ef175dd14ddeab1d433e6ad",
+      "processing": "Complete short call; mono 32 kHz PCM conversion, DC removal, bounded peak normalization, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-29.wav",
+      "source": {
+        "checked": "2026-11-04",
+        "id": "668825",
+        "audio": "https://cdn.freesound.org/previews/668/668825_14585550-hq.mp3",
+        "author": "MBPL",
+        "page": "https://freesound.org/people/MBPL/sounds/668825/",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "f3dfb2c8d71e0a5446887cd66f918598eae5ac0b3c07cd527da50b51aca74743",
+        "title": "Cat trill 4"
+      },
+      "excerpt_seconds": [
+        0,
+        0.8599375
+      ],
+      "sound": "chirp",
+      "sha256": "a35b141454596000d7ba3ddd3bf1cd76adcd72e3d6d8c7af1edcf4ac644bf4e1",
+      "processing": "Complete short call; mono 32 kHz PCM conversion, DC removal, bounded peak normalization, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-30.wav",
+      "source": {
+        "checked": "2026-11-04",
+        "id": "668824",
+        "audio": "https://cdn.freesound.org/previews/668/668824_14585550-hq.mp3",
+        "author": "MBPL",
+        "page": "https://freesound.org/people/MBPL/sounds/668824/",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "d695bae2ab09962032a795587b92bb8e39944ba96632de3da2ad542050f7a489",
+        "title": "Cat trill 5"
+      },
+      "excerpt_seconds": [
+        0,
+        0.4594375
+      ],
+      "sound": "chirp",
+      "sha256": "62adc530314ca53bc30fd71525cc4ea218790159ce3ee2d06b13565d572bf3e2",
+      "processing": "Complete short call; mono 32 kHz PCM conversion, DC removal, bounded peak normalization, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-31.wav",
+      "source": {
+        "checked": "2026-11-04",
+        "id": "668823",
+        "audio": "https://cdn.freesound.org/previews/668/668823_14585550-hq.mp3",
+        "author": "MBPL",
+        "page": "https://freesound.org/people/MBPL/sounds/668823/",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "5d2c052d32d916bc0194026255b4a530117360e126e5a3a682cbd209456cc360",
+        "title": "Cat trill 6"
+      },
+      "excerpt_seconds": [
+        0,
+        0.735125
+      ],
+      "sound": "chirp",
+      "sha256": "b225c99ab026f69db8982ea34ede186a7155d91a6450197d85a32e4864b6a848",
+      "processing": "Complete short call; mono 32 kHz PCM conversion, DC removal, bounded peak normalization, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-32.wav",
+      "source": {
+        "checked": "2026-11-04",
+        "id": "264507",
+        "audio": "https://cdn.freesound.org/previews/264/264507_147613-hq.mp3",
+        "author": "d.n.audio.uk",
+        "page": "https://freesound.org/people/d.n.audio.uk/sounds/264507/",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "d1c316a3dbe8b24f7b699eba133320476d0d6428497df24433448b12f8f71f15",
+        "title": "Cat Meow"
+      },
+      "excerpt_seconds": [
+        0,
+        1.96046875
+      ],
+      "sound": "meow",
+      "sha256": "4542f4e0b7f5b2241f5a5c8e278b0b16c260f515f3553d30d3a42b1b53fef9b0",
+      "processing": "Complete short call; mono 32 kHz PCM conversion, DC removal, bounded peak normalization, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-33.wav",
+      "source": {
+        "checked": "2026-11-04",
+        "id": "615893",
+        "audio": "https://cdn.freesound.org/previews/615/615893_13661217-hq.mp3",
+        "author": "Ayana225",
+        "page": "https://freesound.org/people/Ayana225/sounds/615893/",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "282143ad560aa29f90dea53d4e6c3c8bd69931b28e58509c358ee7c6d1361fba",
+        "title": "mew.wav"
+      },
+      "excerpt_seconds": [
+        0,
+        1.0100625
+      ],
+      "sound": "meow",
+      "sha256": "e52b19e01a4d806716e2226dc6bb89bafce779e2b4f817e770815b0526164b22",
+      "processing": "Complete short call; mono 32 kHz PCM conversion, DC removal, bounded peak normalization, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-34.wav",
+      "source": {
+        "checked": "2026-11-04",
+        "id": "689324",
+        "audio": "https://cdn.freesound.org/previews/689/689324_5287430-hq.mp3",
+        "author": "Sadiquecat",
+        "page": "https://freesound.org/people/Sadiquecat/sounds/689324/",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "5c65de44ce25de57450aa08d32d8cd05f69ce686e3ebc0a3b1570b6a3442ddd1",
+        "title": "Cat meow"
+      },
+      "excerpt_seconds": [
+        0,
+        0.8773125
+      ],
+      "sound": "meow",
+      "sha256": "3e4309f1dd5780f884510a53ab421ee75044821476540a1f22936a72f8aa1249",
+      "processing": "Complete short call; mono 32 kHz PCM conversion, DC removal, bounded peak normalization, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-35.wav",
+      "source": {
+        "checked": "2026-11-04",
+        "id": "110010",
+        "audio": "https://cdn.freesound.org/previews/110/110010_1537422-hq.mp3",
+        "author": "tuberatanka",
+        "page": "https://freesound.org/people/tuberatanka/sounds/110010/",
+        "license": "CC0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "da06e40c6beaaee40651a34506ad216ad3e88dee05afcbda8ef888aea0d50619",
+        "title": "cat meow II"
+      },
+      "excerpt_seconds": [
+        0,
+        0.8488125
+      ],
+      "sound": "meow",
+      "sha256": "bf1db2169e385cca3beccc5de9244edf34e81cf0f9ec3622891514ea4b3921c4",
+      "processing": "Complete short call; mono 32 kHz PCM conversion, DC removal, bounded peak normalization, 8 ms edge fades. Original pitch and speed preserved."
     }
   ]
 }

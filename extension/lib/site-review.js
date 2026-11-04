@@ -97,7 +97,8 @@ export function gameUrlForPage(value) {
   const source = providerForUrl(value);
   if (!url || !source) return null;
   if (source === 'chesscom') {
-    const match = url.pathname.match(/^\/(?:analysis\/)?game\/(?:(live|daily)\/)?(\d+)\/?$/);
+    const path = url.pathname.replace(/^(\/analysis\/game\/(?:(?:live|daily)\/)?\d+)\/review\/?$/, '$1');
+    const match = path.match(/^\/(?:analysis\/)?game\/(?:(live|daily)\/)?(\d+)\/?$/);
     return match ? `https://www.chess.com/game/${match[1] || 'live'}/${match[2]}` : null;
   }
   const match = url.pathname.match(/^\/([a-zA-Z0-9]{8}(?:[a-zA-Z0-9]{4})?)(?:\/(?:white|black))?\/?$/);

@@ -21,7 +21,7 @@
   const botPage = () => source === 'chesscom' && bot?.isPage() === true;
 
   function pageKey() {
-    const path = location.pathname;
+    const path = location.pathname.replace(/^(\/analysis\/game\/(?:(?:live|daily)\/)?\d+)\/review\/?$/, '$1');
     if (source === 'chesscom') {
       const game = path.match(/^\/(?:analysis\/)?game\/(?:(live|daily)\/)?(\d+)\/?$/);
       return game ? `/game/${game[1] || 'live'}/${game[2]}` : path;
@@ -76,7 +76,7 @@
     launcher.style.cssText = 'all:initial!important;position:fixed!important;right:16px!important;bottom:16px!important;z-index:2147483646!important;display:block!important;color-scheme:dark!important;';
     const root = launcher.attachShadow({ mode: 'closed' });
     const style = document.createElement('style');
-    style.textContent = `button{display:flex;align-items:center;gap:9px;box-sizing:border-box;max-width:calc(100vw - 32px);padding:8px 13px 8px 8px;border:1px solid #ffffff26;border-radius:28px;background:#2c2b27;color:#f1f0e9;box-shadow:0 4px 20px #0005;font:600 13px/1.4 'Segoe UI',Arial,sans-serif;cursor:pointer;transition:background-color .16s,border-color .16s}button:hover{background:#393832;border-color:#ffffff40}button:focus-visible{outline:2px solid #a4ce77;outline-offset:3px}button:focus:not(:focus-visible){outline:none}img{display:block;width:28px;height:28px;flex:none;border-radius:50%;object-fit:cover}span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(prefers-reduced-motion:reduce){button{transition:none}}`;
+    style.textContent = `button{display:flex;align-items:center;gap:9px;box-sizing:border-box;max-width:calc(100vw - 32px);padding:8px 13px 8px 8px;border:1px solid #ffffff26;border-radius:28px;background:#202320;color:#f1f2ec;box-shadow:0 4px 20px #0005;font:600 13px/1.4 'Segoe UI',Arial,sans-serif;cursor:pointer;transition:background-color .16s,border-color .16s}button:hover{background:#30362e;border-color:#ffffff40}button:focus-visible{outline:2px solid #a8bd94;outline-offset:3px}button:focus:not(:focus-visible){outline:none}img{display:block;width:28px;height:28px;flex:none;border-radius:50%;object-fit:cover}span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(prefers-reduced-motion:reduce){button{transition:none}}`;
     const open = button('Open MeowlChess review', '', () => { void reopenPanel(); });
     const icon = document.createElement('img'); icon.src = chrome.runtime.getURL('icons/icon48.png'); icon.alt = ''; icon.draggable = false;
     const label = document.createElement('span'); label.textContent = 'MeowlChess'; open.append(icon, label);
@@ -130,46 +130,46 @@
     shadow = host.attachShadow({ mode: 'closed' });
     const style = document.createElement('style');
     style.textContent = `
-      :host{font-family:'Segoe UI',Arial,sans-serif;color:#f1f0e9}
-      .panel{background:#2c2b27;border:1px solid #ffffff26;border-radius:12px;box-shadow:0 12px 40px #0005,0 2px 7px #0003;overflow:hidden;font:13px/1.5 'Segoe UI',Arial,sans-serif;color:#f1f0e9;-webkit-font-smoothing:antialiased}
-      .head{display:flex;align-items:center;gap:8px;padding:11px 12px;background:#252420;border-bottom:1px solid #ffffff12}
+      :host{font-family:'Segoe UI',Arial,sans-serif;color:#f1f2ec}
+      .panel{background:#202320;border:1px solid #ffffff26;border-radius:14px;box-shadow:0 16px 48px #0006,0 2px 8px #0003;overflow:hidden;font:13px/1.5 'Segoe UI',Arial,sans-serif;color:#f1f2ec;-webkit-font-smoothing:antialiased}
+      .head{display:flex;align-items:center;gap:8px;padding:12px;background:#272b26;border-bottom:1px solid #ffffff12}
       .brand-icon{width:28px;height:28px;flex:none;border-radius:7px;object-fit:cover;user-select:none;-webkit-user-drag:none}
       .brand{font-size:14px;font-weight:650;flex:1;min-width:0;letter-spacing:-.25px;white-space:nowrap}
-      .brand span{color:#a4c580}
-      button{display:inline-flex;align-items:center;justify-content:center;flex:none;border:0;border-radius:6px;background:transparent;color:#b2afa5;font:inherit;cursor:pointer;width:28px;height:28px;padding:0;transition:background-color .16s,color .16s}
-      button:hover{background:#ffffff0c;color:#f1f0e9}
-      button:focus-visible{outline:2px solid #a4ce77;outline-offset:2px;background:#ffffff0c;color:#f1f0e9}
+      .brand span{color:#a8bd94}
+      button{display:inline-flex;align-items:center;justify-content:center;flex:none;border:0;border-radius:6px;background:transparent;color:#b4bcb0;font:inherit;cursor:pointer;width:28px;height:28px;padding:0;transition:background-color .16s,color .16s}
+      button:hover{background:#ffffff0c;color:#f1f2ec}
+      button:focus-visible{outline:2px solid #a8bd94;outline-offset:2px;background:#ffffff0c;color:#f1f2ec}
       button:focus:not(:focus-visible){outline:none}
       .control-icon{display:block;width:16px;height:16px;pointer-events:none;flex:none}
       button.settings{margin-right:2px}
-      .body{max-height:calc(100vh - 140px);overflow:auto;scrollbar-color:#66645d transparent;scrollbar-width:thin;overscroll-behavior:contain}
+      .body{max-height:calc(100vh - 140px);overflow:auto;scrollbar-color:#65705f transparent;scrollbar-width:thin;overscroll-behavior:contain}
       .waiting{padding:20px}
-      .waiting p{margin:0 0 16px;font-size:12px;line-height:1.65;color:#d3d0c6;overflow-wrap:anywhere}
-      .waiting .retry-loading{width:auto;height:auto;min-height:34px;padding:7px 11px;margin-top:14px;border:1px solid #ffffff26;color:#e0dfd5;font-size:11px;font-weight:600}
+      .waiting p{margin:0 0 18px;font-size:12px;line-height:1.65;color:#d2d9cc;overflow-wrap:anywhere}
+      .waiting .retry-loading{width:auto;height:auto;min-height:34px;padding:7px 11px;margin-top:14px;border:1px solid #ffffff26;color:#e1e8dc;font-size:11px;font-weight:600}
       .waiting .retry-loading:disabled{opacity:.55;cursor:default}
-      .waiting small{display:block;color:#99968b;margin-top:12px;font-size:11px;line-height:1.6}
-      .loading-steps{display:flex;justify-content:space-between;gap:8px;padding:0;margin:0 0 23px;list-style:none}
-      .loading-steps li{display:flex;align-items:center;gap:5px;color:#99968b;font-size:10px;white-space:nowrap}
+      .waiting small{display:block;color:#929c8f;margin-top:12px;font-size:11px;line-height:1.6}
+      .loading-steps{display:flex;justify-content:space-between;gap:8px;padding:0;margin:0 0 25px;list-style:none}
+      .loading-steps li{display:flex;align-items:center;gap:5px;color:#929c8f;font-size:10px;white-space:nowrap}
       .loading-steps .step-number{display:grid;place-items:center;box-sizing:border-box;width:20px;height:20px;border:1px solid #ffffff20;border-radius:50%;font-size:9px;font-weight:600}
-      .loading-steps [aria-current]{color:#f1f0e9}
-      .loading-steps [aria-current] .step-number{background:#a1c97b;border-color:#a1c97b;color:#18220e}
+      .loading-steps [aria-current]{color:#f1f2ec}
+      .loading-steps [aria-current] .step-number{background:#a8bd94;border-color:#a8bd94;color:#20291c}
       :host([data-state="error"]) .loading-steps{display:none}
       :host([data-state="error"]) .waiting p{color:#eab98f}
-      progress{display:block;width:100%;height:6px;border:0;border-radius:6px;overflow:hidden;accent-color:#81b64c;background:#1e1e1b}
-      progress::-webkit-progress-bar{background:#1e1e1b;border-radius:6px}
-      progress::-webkit-progress-value{background:#81b64c;border-radius:6px}
-      iframe{display:block;width:100%;border:0;background:#2c2b27;min-height:0;max-height:calc(100vh - 140px)}
+      progress{display:block;width:100%;height:7px;border:0;border-radius:6px;overflow:hidden;accent-color:#a8bd94;background:#161b16}
+      progress::-webkit-progress-bar{background:#161b16;border-radius:6px}
+      progress::-webkit-progress-value{background:#a8bd94;border-radius:6px}
+      iframe{display:block;width:100%;border:0;background:#202320;min-height:0;max-height:calc(100vh - 140px)}
       [hidden]{display:none!important}
-      .bot-import .bot-action{display:flex;width:100%;height:auto;min-height:38px;padding:9px 12px;margin-top:12px;background:#81b64c;color:#17210d;font:650 12px/1.5 'Segoe UI',Arial,sans-serif}
-      .bot-import .bot-action:hover:enabled{background:#92c45e}
+      .bot-import .bot-action{display:flex;width:100%;height:auto;min-height:38px;padding:9px 12px;margin-top:12px;background:#a8bd94;color:#20291c;font:650 12px/1.5 'Segoe UI',Arial,sans-serif}
+      .bot-import .bot-action:hover:enabled{background:#bbd0a8}
       .bot-import details{margin-top:16px;padding-top:14px;border-top:1px solid #ffffff12}
-      .bot-import summary{cursor:pointer;color:#b2afa5;font-size:11px}
-      .bot-import summary:hover{color:#f1f0e9}
-      .bot-import textarea,.bot-import input{box-sizing:border-box;width:100%;margin-top:10px;font:12px/1.5 'Segoe UI',Arial,sans-serif;color:#f1f0e9}
-      .bot-import textarea{resize:vertical;max-height:180px;background:#252420;border:1px solid #ffffff26;border-radius:6px;padding:10px}
-      .bot-import input::file-selector-button{padding:7px 9px;margin-right:9px;border:1px solid #ffffff26;border-radius:5px;background:#34332f;color:#f1f0e9;font:inherit;cursor:pointer}
-      .bot-import :is(summary,textarea,input):focus-visible{outline:2px solid #a4ce77;outline-offset:3px}
-      .bot-import .bot-feedback{font-size:11px;margin:12px 0 0;color:#b7c7a5}
+      .bot-import summary{cursor:pointer;color:#b4bcb0;font-size:11px}
+      .bot-import summary:hover{color:#f1f2ec}
+      .bot-import textarea,.bot-import input{box-sizing:border-box;width:100%;margin-top:10px;font:12px/1.5 'Segoe UI',Arial,sans-serif;color:#f1f2ec}
+      .bot-import textarea{resize:vertical;max-height:180px;background:#272b26;border:1px solid #ffffff26;border-radius:6px;padding:10px}
+      .bot-import input::file-selector-button{padding:7px 9px;margin-right:9px;border:1px solid #ffffff26;border-radius:5px;background:#30362e;color:#f1f2ec;font:inherit;cursor:pointer}
+      .bot-import :is(summary,textarea,input):focus-visible{outline:2px solid #a8bd94;outline-offset:3px}
+      .bot-import .bot-feedback{font-size:11px;margin:12px 0 0;color:#bacdaf}
       .bot-feedback:empty{display:none}
       .bot-import button:disabled{opacity:.5;cursor:wait}
       @media(max-width:340px){.head{gap:6px;padding:10px}.waiting{padding:16px}.loading-steps{gap:5px}.loading-steps li{font-size:9px}}
@@ -196,13 +196,13 @@
       .resize-handle[data-resize-direction="ne"]{top:-5px;right:-5px;cursor:nesw-resize}
       .resize-handle[data-resize-direction="sw"]{bottom:-5px;left:-5px;cursor:nesw-resize}
       .resize-handle[data-resize-direction="se"]{right:0;bottom:0;width:20px;height:20px;z-index:3;cursor:nwse-resize;border-radius:0 0 11px 0}
-      .resize-handle[data-resize-direction="se"]::after{content:'';position:absolute;right:4px;bottom:4px;width:10px;height:10px;background:repeating-linear-gradient(135deg,transparent 0 3px,#99968b 3px 5px,transparent 5px 7px);clip-path:polygon(100% 0,100% 100%,0 100%);opacity:.7}
+      .resize-handle[data-resize-direction="se"]::after{content:'';position:absolute;right:4px;bottom:4px;width:10px;height:10px;background:repeating-linear-gradient(135deg,transparent 0 3px,#929c8f 3px 5px,transparent 5px 7px);clip-path:polygon(100% 0,100% 100%,0 100%);opacity:.7}
       .resize-handle:hover::after,.resize-handle:focus-visible::after{opacity:1}
       .resize-handle:focus{outline:none}
-      .resize-handle:focus-visible{outline:2px solid #a4ce77;outline-offset:-3px}
+      .resize-handle:focus-visible{outline:2px solid #a8bd94;outline-offset:-3px}
       .resize-handle[data-pointer-focus="true"]:focus{outline:none}
-      .waiting .loading-stage{font-size:19px;font-weight:650;letter-spacing:-.35px;line-height:1.3;margin:0 0 9px}
-      .brand:focus{outline:none}.brand:focus-visible{outline:2px solid #a4ce77;outline-offset:3px;border-radius:2px}.brand[data-pointer-focus="true"]:focus{outline:none}
+      .waiting .loading-stage{font-size:22px;font-weight:650;letter-spacing:-.55px;line-height:1.25;margin:0 0 11px}
+      .brand:focus{outline:none}.brand:focus-visible{outline:2px solid #a8bd94;outline-offset:3px;border-radius:2px}.brand[data-pointer-focus="true"]:focus{outline:none}
       :host([data-restored="true"]) .panel{animation:none}
     `;
     const panel = document.createElement('section'); panel.className = 'panel'; panel.setAttribute('aria-label', 'MeowlChess game review');
@@ -385,7 +385,8 @@
     try {
       const url = new URL(value);
       if (url.protocol !== 'https:' || !['www.chess.com', 'chess.com'].includes(url.hostname) || url.port || url.username || url.password || url.search || url.hash) return null;
-      const match = url.pathname.match(/^\/game\/(?:(live|daily)\/)?(\d+)\/?$/);
+      const path = url.pathname.replace(/^(\/analysis\/game\/(?:(?:live|daily)\/)?\d+)\/review\/?$/, '$1');
+      const match = path.match(/^\/(?:analysis\/)?game\/(?:(live|daily)\/)?(\d+)\/?$/);
       return match ? `https://www.chess.com/game/${match[1] || 'live'}/${match[2]}` : null;
     } catch { return null; }
   }

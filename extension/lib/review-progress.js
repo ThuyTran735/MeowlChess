@@ -1,7 +1,7 @@
 // Remaining time is based on completed work in the current analysis pass.
 // Recheck candidates are unknown during the scan, so its estimate never claims
 // to include that later pass. No engine or saved-review state is changed here.
-const PHASE_ORDER = { scan: 0, recheck: 1, complete: 2 };
+const PHASE_ORDER = { scan: 0, recheck: 1, highlights: 2, complete: 3 };
 const validCount = value => Number.isInteger(value) && value >= 0 && value <= 100_000;
 
 function duration(milliseconds) {
@@ -40,7 +40,7 @@ export function createReviewProgressEstimator({ moveTimeMs = 150, smartAnalysis 
       if (nextPhase === phase && nextCompleted < completed) return result();
       const stamp = time();
       if (nextPhase !== phase) {
-        phase = nextPhase; rate = phase === 'recheck' ? recheckTime : scanTime;
+        phase = nextPhase; rate = phase === 'highlights' ? Math.max(2000, Math.min(selectedTime, 3000)) : phase === 'recheck' ? recheckTime : scanTime;
         // The first event can include engine startup. Begin observation here
         // instead of treating initialization as the cost of every position.
         completed = nextCompleted; total = nextTotal; lastTime = stamp;
@@ -60,11 +60,11 @@ export function createReviewProgressEstimator({ moveTimeMs = 150, smartAnalysis 
       }
       const remaining = total - completed;
       if (remaining === 0) {
-        const choosingRechecks = smart && phase === 'scan';
+        const choosingRechecks = progress.moreWork === true || smart && phase === 'scan';
         snapshot = { phase, remainingMs: null, text: choosingRechecks ? 'Choosing key moves to recheck…' : 'Finishing review…', complete: !choosingRechecks };
       } else {
         const remainingMs = Math.max(1, Math.ceil(rate * remaining));
-        const suffix = smart && phase === 'scan' ? ' in first pass' : phase === 'recheck' ? ' in recheck' : '';
+        const suffix = (smart || progress.moreWork) && phase === 'scan' ? ' in first pass' : phase === 'recheck' ? ' in recheck' : phase === 'highlights' ? ' checking highlights' : '';
         snapshot = { phase, remainingMs, text: `About ${duration(remainingMs)} left${suffix}`, complete: false };
       }
       return result();

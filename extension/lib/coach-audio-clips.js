@@ -260,5 +260,125 @@ export const COACH_MEOW_CLIPS = Object.freeze([
       "curious"
     ],
     "sound": "purr-chirp"
+  },
+  {
+    "id": "meow-26",
+    "file": "MeowlChess-meow-26.wav",
+    "kinds": [
+      "talk",
+      "curious",
+      "greeting",
+      "celebrate",
+      "brilliant"
+    ],
+    "sound": "chirp"
+  },
+  {
+    "id": "meow-27",
+    "file": "MeowlChess-meow-27.wav",
+    "kinds": [
+      "talk",
+      "curious",
+      "greeting",
+      "celebrate",
+      "brilliant"
+    ],
+    "sound": "chirp"
+  },
+  {
+    "id": "meow-28",
+    "file": "MeowlChess-meow-28.wav",
+    "kinds": [
+      "talk",
+      "curious",
+      "greeting",
+      "celebrate",
+      "brilliant"
+    ],
+    "sound": "chirp"
+  },
+  {
+    "id": "meow-29",
+    "file": "MeowlChess-meow-29.wav",
+    "kinds": [
+      "talk",
+      "curious",
+      "greeting",
+      "celebrate",
+      "brilliant"
+    ],
+    "sound": "chirp"
+  },
+  {
+    "id": "meow-30",
+    "file": "MeowlChess-meow-30.wav",
+    "kinds": [
+      "talk",
+      "curious",
+      "greeting",
+      "celebrate",
+      "brilliant"
+    ],
+    "sound": "chirp"
+  },
+  {
+    "id": "meow-31",
+    "file": "MeowlChess-meow-31.wav",
+    "kinds": [
+      "talk",
+      "curious",
+      "greeting",
+      "celebrate",
+      "brilliant"
+    ],
+    "sound": "chirp"
+  },
+  {
+    "id": "meow-32",
+    "file": "MeowlChess-meow-32.wav",
+    "kinds": [
+      "talk",
+      "curious",
+      "greeting",
+      "celebrate",
+      "brilliant"
+    ],
+    "sound": "meow"
+  },
+  {
+    "id": "meow-33",
+    "file": "MeowlChess-meow-33.wav",
+    "kinds": [
+      "talk",
+      "curious",
+      "greeting",
+      "celebrate",
+      "brilliant"
+    ],
+    "sound": "meow"
+  },
+  {
+    "id": "meow-34",
+    "file": "MeowlChess-meow-34.wav",
+    "kinds": [
+      "talk",
+      "curious",
+      "greeting",
+      "celebrate",
+      "brilliant"
+    ],
+    "sound": "meow"
+  },
+  {
+    "id": "meow-35",
+    "file": "MeowlChess-meow-35.wav",
+    "kinds": [
+      "talk",
+      "curious",
+      "greeting",
+      "celebrate",
+      "brilliant"
+    ],
+    "sound": "meow"
   }
 ]);

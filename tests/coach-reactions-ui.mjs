@@ -49,6 +49,7 @@ view.setContext(state); window.fixtureReady = true;
 `;
 let context, page, worker, stage = 'launch';
 const errors = [], external = [];
+async function chooseCoach(id) { await page.locator(`.coach-choice[data-coach="${id}"]`).click(); }
 async function poll(read, label, timeout = 12000) {
   const started = Date.now();
   while (Date.now() - started < timeout) { if (await read()) return; await new Promise(resolve => setTimeout(resolve, 30)); }
@@ -102,6 +103,7 @@ try {
   await worker.evaluate(() => chrome.storage.local.set({ coachPreferences: { coach: 'meowl', perspective: 'both', motion: true, sounds: false, commentary: false } }));
   page = await context.newPage(); await page.goto(`${origin}/reactions-fixture.html`);
   await page.waitForFunction(() => window.fixtureReady);
+  await page.locator('.coach-settings-summary').click();
   const update = patch => page.evaluate(patch => window.reactionFixture.update(patch), patch);
   const active = kind => page.locator(`.coach-actor[data-reaction="${kind}"]`);
   const idle = () => poll(async () => await page.locator('.coach-actor[data-reaction]').count() === 0, 'reaction returns to idle', 4000);
@@ -140,7 +142,7 @@ try {
 
   if (labelsOnly) {
     const expected = { Brilliant: [1, 2], Great: [3, 11], Best: [6, 12], Excellent: [7], Good: [5], Book: [8], Inaccuracy: [9], Mistake: [4], Blunder: [10] };
-    const kinds = { Brilliant: 'brilliant', Great: 'celebrate', Best: 'celebrate', Excellent: 'talk', Good: 'talk', Book: 'talk', Inaccuracy: 'curious', Mistake: 'curious', Blunder: 'curious' };
+    const kinds = { Brilliant: 'brilliant', Great: 'celebrate', Best: 'celebrate', Excellent: 'approve', Good: 'approve', Book: 'approve', Inaccuracy: 'encourage', Mistake: 'encourage', Blunder: 'encourage' };
     const reply = () => page.locator('.coach-message[data-role="coach"]').last();
     const checkCategory = async (question, label, plies = expected[label]) => {
       await ask(question);
@@ -200,10 +202,10 @@ try {
     stage = 'new coach personalities preserve saved facts and fit320px';
     assert.equal(await page.locator('.coach-select option[value="owl"]').textContent(), 'Professor Meowl');
     for (const id of ['mellow', 'scout']) {
-      await page.locator('.coach-select').selectOption(id);
+      await chooseCoach(id);
       await poll(async () => (await stored()).coach === id, `${id} personality saved`);
       await poll(() => page.locator('.coach-avatar').evaluate(image => image.complete && image.naturalWidth > 0), `${id} portrait loaded`);
-      assert((await page.locator('.coach-avatar').getAttribute('src')).endsWith(`/MeowlChess-coach-${id === 'scout' ? 'paws' : 'meowl'}.png`), 'New personalities use their approved mapped portrait.');
+      assert((await page.locator('.coach-avatar').getAttribute('src')).endsWith(`/MeowlChess-coach-${id}.svg`), 'New personalities have distinct bundled outfits.');
       await ask('Why was 2. Nf3 rated Great?');
       const answer = await reply().innerText();
       assert(answer.includes('Great') && !answer.includes('undefined'), `${id} keeps the actual saved grade and has complete copy.`);
@@ -327,7 +329,7 @@ try {
 
   stage = 'original-art puppet renders and changes pixels for every coach';
   for (const coachId of ['meowl', 'owl', 'paws']) {
-    await page.locator('.coach-select').selectOption(coachId);
+    await chooseCoach(coachId);
     await poll(async () => (await stored()).coach === coachId, 'saved puppet coach');
     await ask('Summarize this game');
     const canvas = page.locator('.coach-heading .coach-reaction-puppet');
@@ -353,7 +355,7 @@ try {
     assert.equal(await canvas.count(), 0, 'The puppet canvas is removed after talking.');
     assert.equal(await page.locator('.coach-avatar').evaluate(image => getComputedStyle(image).visibility), 'visible', 'Idle portrait returns unchanged.');
   }
-  await page.locator('.coach-select').selectOption('meowl');
+  await chooseCoach('meowl');
   await poll(async () => (await stored()).coach === 'meowl', 'restore initial coach');
 
   stage = 'Brilliant context, side filtering and redraw deduplication';
@@ -362,7 +364,7 @@ try {
   await idle();
   for (let i = 0; i < 6; i++) await update({ ply: 1 });
   await assertIdle('Redraws on the same move do not replay celebration.');
-  await page.locator('.coach-select').selectOption('owl'); await assertIdle('Changing coach does not replay the same Brilliant.');
+  await chooseCoach('owl'); await assertIdle('Changing coach does not replay the same Brilliant.');
   await update({ ply: 2 }); await assertIdle('Opponent Brilliant stays quiet when focusing White.');
   await page.locator('.coach-perspective').selectOption('both'); await assertIdle('Changing focus does not replay current position.');
   await update({ active: false }); await update({ active: true });
@@ -375,9 +377,9 @@ try {
   await idle();
   await ask('Why was 2. Nf3 rated this way?'); assert(await active('celebrate').count() > 0, 'A Great move receives a positive reaction.');
   await renderedPuppet(); await idle();
-  await ask('Why was 2... Nc6 rated this way?'); assert(await active('curious').count() > 0, 'A mistake receives a curious reaction.');
+  await ask('Why was 2... Nc6 rated this way?'); assert(await active('encourage').count() > 0, 'A mistake receives a reassuring reaction.');
   await renderedPuppet(); await idle();
-  await ask('Why was 3. Bb5 rated this way?'); assert(await active('talk').count() > 0, 'A Good move uses the talking reaction.');
+  await ask('Why was 3. Bb5 rated this way?'); assert(await active('approve').count() > 0, 'A Good move receives a small approving gesture.');
   await idle();
 
   stage = 'motion preference and quiet sound opt-in';
@@ -457,7 +459,7 @@ try {
   await page.evaluate(() => { window.reactionFixture.update({ ply: 4 }); window.reactionFixture.update({ ply: 5 }); });
   await poll(async () => await page.locator('.coach-walkthrough[data-ply="5"]').isVisible(), 'latest scrubbed move comment');
   assert.match(await page.locator('.coach-walkthrough .coach-walkthrough-heading').textContent(), /3\. Bb5/);
-  assert(await active('talk').count() > 0, 'Coach talks automatically on a normal reviewed move.');
+  assert(await active('approve').count() > 0, 'Coach acknowledges a Good move automatically.');
   assert.equal(await page.locator('.coach-message').count(), priorChatCount, 'Move commentary never fills chat history.');
   await idle();
   for (let i = 0; i < 6; i++) await update({ ply: 5 });
@@ -481,7 +483,7 @@ try {
   await assertIdle('Returning from practice does not replay automatic speech.');
   await update({ active: false, moveReactionsActive: true, ply: 5 });
   await poll(async () => await page.locator('#move-fixture .move-coach-comment[data-ply="5"]').isVisible(), 'Moves comment follows the selected move');
-  assert(await page.locator('#move-fixture .coach-actor[data-reaction="talk"]').count() > 0);
+  assert(await page.locator('#move-fixture .coach-actor[data-reaction="approve"]').count() > 0);
   await update({ moveReactionsActive: false }); await delay(250); await assertIdle('Summary stops automatic speech.');
   assert.equal(await page.locator('#move-fixture').isVisible(), false);
   await update({ active: true });
@@ -498,8 +500,10 @@ try {
   stage = 'reduced motion and narrow-screen layout';
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await ask('Summarize this game');
-  const transforms = await page.locator('.coach-actor, .coach-avatar, .coach-message-avatar').evaluateAll(items => items.map(item => getComputedStyle(item).transform));
-  assert(transforms.every(value => value === 'none'), 'Reduced motion has no actor transformations.');
+  const transforms = await page.locator('.coach-heading .coach-actor, .coach-heading .coach-avatar').evaluateAll(items => items.map(item => getComputedStyle(item).transform));
+  assert(transforms.every(value => value === 'none'), 'Reduced motion leaves the full portrait still.');
+  // Chat portraits use a fixed centering translation to crop the face; that is layout.
+  assert.equal(await page.locator('.coach-reaction-puppet').count(), 0, 'Reduced motion never paints an animated portrait.');
   assert(await page.evaluate(() => document.getAnimations().every(animation => !animation.effect?.target?.closest?.('.coach-actor'))), 'Reduced motion has no actor animation timeline.');
   await idle();
   await page.setViewportSize({ width: 375, height: 812 });

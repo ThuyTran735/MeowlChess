@@ -107,6 +107,6 @@ test('a deeper search failure and a cancellation at its final progress callback 
   assert.equal(failing.engine.disposed, true);
   const controller = new AbortController();
   const f = fixture([0, 0, 0, -700, -700, -700, -700]);
-  await assert.rejects(analyzeGame(SIX, { smartAnalysis: true, recognizeOpenings: false, signal: controller.signal, engineFactory: f.engineFactory, onProgress: event => { if (event.phase === 'recheck' && event.completed === event.total) controller.abort(); } }), { name: 'AbortError' });
+  await assert.rejects(analyzeGame(SIX, { smartAnalysis: true, recognizeOpenings: false, signal: controller.signal, engineFactory: f.engineFactory, onProgress: event => { if (event.phase === 'recheck' && event.phaseCompleted === event.phaseTotal) controller.abort(); } }), { name: 'AbortError' });
   assert.equal(f.engine.disposed, true);
 });

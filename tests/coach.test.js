@@ -26,11 +26,11 @@ function withError(input, ply, label = 'Blunder', probabilityLoss = 0.4) {
 }
 
 test('coach profiles are distinct and only change presentation of the same facts', () => {
-  assert.equal(COACHES.length, 5);
-  assert.equal(new Set(COACHES.map(item => item.id)).size, 5);
+  assert.equal(COACHES.length, 6);
+  assert.equal(new Set(COACHES.map(item => item.id)).size, COACHES.length);
   const input = withError(fixture(), 3);
   const answers = COACHES.map(coach => answerCoach({ ...input, question: 'Summarize this game', coach: coach.id }));
-  assert.equal(new Set(answers.map(answer => answer.text)).size, 5);
+  assert.equal(new Set(answers.map(answer => answer.text)).size, COACHES.length);
   for (const answer of answers) {
     assert.match(answer.text, /White won/);
     assert.match(answer.text, /2\. Nf3/);
@@ -395,8 +395,8 @@ test('label definitions and specific move questions do not turn into category se
   assert.match(answerCoach({ ...invalid, question: 'Show brilliants' }).text, /completed game first/);
 });
 
-test('all five Meowl personalities provide valid chat and walkthrough wording for every grade', () => {
-  assert.deepEqual(COACHES.map(coach => coach.id), ['meowl', 'owl', 'paws', 'mellow', 'scout']);
+test('all Meowl personalities provide valid chat and walkthrough wording for every grade', () => {
+  assert.deepEqual(COACHES.map(coach => coach.id), ['meowl', 'owl', 'paws', 'mellow', 'scout', 'evil']);
   assert.equal(COACHES.find(coach => coach.id === 'owl').name, 'Professor Meowl');
   const input = ratingFixture();
   for (const coach of COACHES) {
@@ -411,4 +411,132 @@ test('all five Meowl personalities provide valid chat and walkthrough wording fo
       assert.doesNotMatch(comment.text, /undefined|null/);
     }
   }
+});
+
+test('next key moment follows the reviewed timeline and selected side without wrapping silently', () => {
+  const input = ratingFixture();
+  for (const question of ['Next key moment', 'What should I look at next?', 'What should I review next?', 'Next critical position']) {
+    const answer = answerCoach({ ...input, question, ply: 2, perspective: 'b' });
+    assert.equal(answer.subjectPly, 4, question);
+    assert.equal(answer.label, 'Great', question);
+    assert.deepEqual(answer.moves, [{ ply: 4, label: '2... Nc6' }]);
+  }
+  const later = answerCoach({ ...input, question: 'Next key moment', ply: 4, perspective: 'w' });
+  assert.equal(later.subjectPly, 13);
+  assert.equal(later.label, 'Inaccuracy');
+  assert.match(later.text, /Pause before this move/);
+  const last = answerCoach({ ...input, question: 'Next key moment', ply: 18, perspective: 'b' });
+  assert.equal(last.subjectPly, undefined);
+  assert.match(last.text, /last recorded key moment/);
+  assert.deepEqual(last.moves, [{ ply: 2, label: '1... e5' }]);
+  const none = answerCoach({ ...fixture(), question: 'Next key moment' });
+  assert.deepEqual(none.moves, []);
+  assert.match(none.text, /There are no moves rated/);
+});
+
+test('position brief uses the displayed position, legal engine continuation, and no speculative plan', () => {
+  const input = fixture();
+  input.result.positions[3].cp = -90;
+  input.result.positions[3].pv = ['b8c6', 'f1b5', 'a1a8'];
+  const answer = answerCoach({ ...input, question: 'Explain this position', ply: 3 });
+  assert.equal(answer.subjectPly, 3);
+  assert.match(answer.text, /After 2\. Nf3, Black is to move/);
+  assert.match(answer.text, /-0\.90 from White’s perspective, favoring Black/);
+  assert.match(answer.text, /Explore Nc6 first/);
+  assert.match(answer.text, /Only its legal continuation is shown/);
+  assert.doesNotMatch(answer.text, /a1a8|Rxa8|attack on|winning plan/);
+  const start = answerCoach({ ...input, question: 'What is happening here?', ply: 0 });
+  assert.match(start.text, /starting position, White is to move/);
+  assert.equal(start.subjectPly, undefined);
+  assert.equal(answerCoach({ ...input, question: 'Explain that position', ply: 4, previousPly: 3 }).subjectPly, 3);
+});
+
+test('position brief respects terminal repetition and mate instead of suggesting moves', () => {
+  const repetition = fixture(REPETITION);
+  repetition.result.positions.at(-1).bestMove = 'e2e4';
+  repetition.result.positions.at(-1).pv = ['e2e4'];
+  const draw = answerCoach({ ...repetition, question: 'Explain this position', ply: 8 });
+  assert.match(draw.text, /drawn by threefold repetition/);
+  assert.doesNotMatch(draw.text, /Explore|Saved line/);
+  const mate = answerCoach({ ...fixture(MATE), question: 'Describe the position', ply: 4 });
+  assert.match(mate.text, /position is checkmate/);
+  assert.doesNotMatch(mate.text, /to move|Explore|Saved line/);
+});
+
+test('walkthrough offers an evidence-linked question and the next matching key moment', () => {
+  const input = ratingFixture();
+  const start = describeCoachMove({ ...input, ply: 1, perspective: 'w' });
+  assert.equal(start.suggestion, 'Why was 1. e4 rated Brilliant?');
+  assert.deepEqual(start.nextMoment, { ply: 3, label: '2. Nf3', rating: 'Great' });
+  input.result.positions[2].bestMove = 'f1c4';
+  input.result.positions[2].pv = ['f1c4'];
+  assert.equal(describeCoachMove({ ...input, ply: 3 }).suggestion, 'What was better than 2. Nf3?');
+  assert.equal(describeCoachMove({ ...input, ply: 18 }).nextMoment, null);
+});
+
+test('coach character profiles have distinct immutable traits and useful supported prompts', () => {
+  const input = ratingFixture();
+  const promptOrders = new Set();
+  for (const coach of COACHES) {
+    assert(Object.isFrozen(coach));
+    assert(Object.isFrozen(coach.traits)); assert(Object.isFrozen(coach.suggestions));
+    assert.equal(coach.traits.length, 2);
+    assert.equal(coach.suggestions.length, 4);
+    assert(coach.traits.every(value => value.length <= 16));
+    promptOrders.add(coach.suggestions.join('|'));
+    for (const question of coach.suggestions) {
+      const answer = answerCoach({ ...input, question, coach: coach.id, perspective: 'w' });
+      assert.doesNotMatch(answer.text, /local game coach, not an open-ended|undefined|null/);
+    }
+  }
+  assert.equal(promptOrders.size, COACHES.length);
+});
+
+test('personality changes coaching method and structure without changing chess evidence', () => {
+  const input = withError(fixture(), 3, 'Mistake', .15);
+  input.result.positions[2].bestMove = 'f1c4'; input.result.positions[2].pv = ['f1c4', 'b8c6'];
+  input.result.positions[3].cp = -90;
+  for (const question of ['Why was 2. Nf3 a mistake?', 'Explain this position', 'Next key moment', 'Show mistakes', 'How were the phases?', 'What opening is this?']) {
+    const answers = COACHES.map(coach => answerCoach({ ...input, question, coach: coach.id, ply: question === 'Next key moment' ? 0 : 3 }));
+    assert.equal(new Set(answers.map(answer => answer.text)).size, COACHES.length, question);
+    const facts = ({ text, ...value }) => value;
+    for (const answer of answers) assert.deepEqual(facts(answer), facts(answers[0]), question);
+    if (question.startsWith('Why')) for (const answer of answers) {
+      assert.match(answer.text, /2\. Nf3 is rated Mistake/);
+      assert.match(answer.text, /15 percentage points/);
+      assert.match(answer.text, /preferred Bc4/);
+      assert.match(answer.text, /2\. Bc4 Nc6/);
+    }
+    if (question.startsWith('Explain')) for (const answer of answers) {
+      assert.match(answer.text, /Black is to move/);
+      assert.match(answer.text, /-0\.90 from White’s perspective, favoring Black/);
+    }
+  }
+  const texts = Object.fromEntries(COACHES.map(coach => [coach.id, answerCoach({ ...input, coach: coach.id, question: 'What should I practice?', perspective: 'w' }).text]));
+  assert.match(texts.owl, /Record a candidate and its strongest reply/);
+  assert.match(texts.paws, /Mini-mission/);
+  assert.match(texts.mellow, /quiet minute/);
+  assert.match(texts.scout, /checks, captures, and threats for both sides/);
+  assert.match(texts.meowl, /One useful idea is enough/);
+});
+
+test('walkthrough varies repeated grades predictably without falsely assigning moves to the viewer', () => {
+  for (const label of ALL_LABELS) {
+    const input = fixture();
+    for (const move of input.result.moves) move.label = label;
+    for (const coach of COACHES) {
+      const comments = [1, 3, 5].map(ply => describeCoachMove({ ...input, coach: coach.id, ply }));
+      assert.equal(new Set(comments.map(comment => comment.text)).size, 3, `${coach.id}/${label}`);
+      for (const [index, comment] of comments.entries()) {
+        assert.equal(comment.label, label);
+        assert.equal(comment.subjectPly, index * 2 + 1);
+        assert.doesNotMatch(comment.text, /you (?:played|found|made|missed|lost|won)|your (?:move|mistake|blunder)/i);
+        assert.deepEqual(comment, describeCoachMove({ ...input, coach: coach.id, ply: index * 2 + 1 }));
+      }
+    }
+  }
+  const input = fixture();
+  assert.deepEqual(describeCoachMove({ ...input, coach: 'missing', ply: 3 }), describeCoachMove({ ...input, coach: 'meowl', ply: 3 }));
+  const opponent = answerCoach({ ...input, coach: 'meowl', question: 'Explain 1...e5', perspective: 'w' });
+  assert.doesNotMatch(opponent.text, /move you played/);
 });

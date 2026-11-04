@@ -83,11 +83,11 @@ The cat likeness behind the Meowl meme is **Melonpi Cat (瓜皮 / Guapi)**. Cred
 - Cat/photo account: [Melonpi Cat — 瓜皮的id酱](https://weibo.com/melonpi).
 - Original Meowl post: [zhumaokele’s cat/owl images on Weibo, April 28, 2013](https://weibo.com/1505044005/zuePUyE2D), documented in [Know Your Meme’s Meowl history](https://knowyourmeme.com/memes/meowl).
 
-The MeowlChess icon is a chess-themed adaptation of Meowl, featuring Melonpi Cat. The three 2D coach illustrations in `extension/icons/coaches/` also adapt the Meowl character, with cat-likeness credit to **Melonpi Cat (瓜皮 / Guapi)** and the photo account linked above. The artwork is stored in `extension/icons/logo.png`; the browser icons are resized copies. MeowlChess does not claim authorship or ownership of Melonpi’s photographs or the underlying Meowl meme. These credits do not grant a license to the underlying third-party artwork.
+The MeowlChess icon is a chess-themed adaptation of Meowl, featuring Melonpi Cat. The six 2D coach characters in `extension/icons/coaches/` also adapt the Meowl character, with cat-likeness credit to **Melonpi Cat (瓜皮 / Guapi)** and the photo account linked above. The app-icon artwork is stored in `extension/icons/logo.png`; the browser icons are resized copies. Coach SVGs combine the original coach drawings with editable costume and facial-feature layers; `scripts/build-coach-outfits.mjs` reproduces these assets. MeowlChess does not claim authorship or ownership of Melonpi’s photographs or the underlying Meowl meme. These credits do not grant a license to the underlying third-party artwork.
 
 ## Recorded coach meows
 
-The 25 WAV clips in `extension/sounds/coaches/` are edited excerpts of real cat recordings released under the [CC0 1.0 Universal Public Domain Dedication](https://creativecommons.org/publicdomain/zero/1.0/):
+The 35 WAV clips in `extension/sounds/coaches/` are edited excerpts of real cat recordings released under the [CC0 1.0 Universal Public Domain Dedication](https://creativecommons.org/publicdomain/zero/1.0/):
 
 | Bundled clips | Recording and creator |
 | --- | --- |
@@ -100,8 +100,22 @@ The 25 WAV clips in `extension/sounds/coaches/` are edited excerpts of real cat 
 | `MeowlChess-meow-23.wav` | [Cat Meowing — lextrack](https://freesound.org/people/lextrack/sounds/333916/) |
 | `MeowlChess-meow-24.wav` | [cat chirp.wav — dreamstobecome; cat: Queen Felicia](https://freesound.org/people/dreamstobecome/sounds/451250/) |
 | `MeowlChess-meow-25.wav` | [catpurrchirp.m4a — dreamstobecome; cat: Queen Felicia](https://freesound.org/people/dreamstobecome/sounds/535318/) |
+| `MeowlChess-meow-26.wav` | [Cat trill 1 — MBPL](https://freesound.org/people/MBPL/sounds/668822/) |
+| `MeowlChess-meow-27.wav` | [Cat trill 2 — MBPL](https://freesound.org/people/MBPL/sounds/668821/) |
+| `MeowlChess-meow-28.wav` | [Cat trill 3 — MBPL](https://freesound.org/people/MBPL/sounds/668820/) |
+| `MeowlChess-meow-29.wav` | [Cat trill 4 — MBPL](https://freesound.org/people/MBPL/sounds/668825/) |
+| `MeowlChess-meow-30.wav` | [Cat trill 5 — MBPL](https://freesound.org/people/MBPL/sounds/668824/) |
+| `MeowlChess-meow-31.wav` | [Cat trill 6 — MBPL](https://freesound.org/people/MBPL/sounds/668823/) |
+| `MeowlChess-meow-32.wav` | [Cat Meow — d.n.audio.uk](https://freesound.org/people/d.n.audio.uk/sounds/264507/) |
+| `MeowlChess-meow-33.wav` | [mew.wav — Ayana225](https://freesound.org/people/Ayana225/sounds/615893/) |
+| `MeowlChess-meow-34.wav` | [Cat meow — Sadiquecat](https://freesound.org/people/Sadiquecat/sounds/689324/) |
+| `MeowlChess-meow-35.wav` | [cat meow II — tuberatanka](https://freesound.org/people/tuberatanka/sounds/110010/) |
 
-The source pages' public high-quality MP3 previews were trimmed into individual calls, converted to mono 32 kHz PCM, normalized, and given short edge fades. Original pitch and playback speed are preserved. `extension/sounds/coaches/NOTICE.txt` and `provenance.json` include source links, excerpt times, and file hashes. Attribution does not imply endorsement by the recordists.
+The source pages' public high-quality MP3 previews were used as complete short calls or trimmed into individual calls, converted to mono 32 kHz PCM, normalized, and given short edge fades. Original pitch and playback speed are preserved. `extension/sounds/coaches/NOTICE.txt` and `provenance.json` include source links, excerpt times, and file hashes. Attribution does not imply endorsement by the recordists.
+
+## Lichess accuracy method
+
+MeowlChess's accuracy calculation independently implements the mathematical method described at [Lichess Accuracy metric](https://lichess.org/page/accuracy): a move-score curve, volatility weighting, and harmonic averaging. It uses MeowlChess's local evaluations and excludes Book moves. No Lichess source code is bundled for this calculation, and the resulting scores are not official Lichess or Chess.com scores.
 
 ## Lichess opening names
 

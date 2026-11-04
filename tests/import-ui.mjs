@@ -70,7 +70,7 @@ try {
     assert.equal(await page.locator('#summary-panel').isVisible(), true);
     assert.match(await page.locator('#position-label').innerText(), /starting/i);
     assert.equal(await page.locator('#board .board-move-badge').count(), 0);
-    assert.equal(await page.locator('#board .engine-arrow').count(), 0);
+    assert.equal(await page.locator('#board .engine-arrow').count(), 1, 'Enabled arrows remain visible on the initial Summary position.');
   };
   await page.goto(`chrome-extension://${new URL(worker.url()).hostname}/review.html`);
   await openLibrary(page);

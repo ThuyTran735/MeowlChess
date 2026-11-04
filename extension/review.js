@@ -38,6 +38,11 @@ const summaryShare = createSummaryShare({ getSummary: () => state.result && stat
 $('share-summary').addEventListener('click', () => { stopPlayback(); void summaryShare.open(); });
 const moveSounds = createMoveSounds({ isEnabled: () => $('move-sounds').checked });
 const coachView = createCoachView($('coach-root'), {
+  onOpen: () => {
+    if (!state.result || state.busy || state.loading || state.libraryBusy || state.importing || state.retry || state.study) return;
+    setReviewTab('coach', true);
+    $('coach-panel').scrollIntoView({ block: 'nearest', behavior: 'instant' });
+  },
   companionTarget: {
     container: $('coach-companion'), image: $('coach-companion-avatar'), name: $('coach-companion-name'),
     bubble: $('coach-companion-bubble'), heading: $('coach-companion-heading'), text: $('coach-companion-text'),
@@ -58,7 +63,7 @@ function playPositionSound(before, move) {
   if (!state.busy && !state.loading && before !== currentFen()) void moveSounds.play({ capture: !!move?.captured });
 }
 const lineColors = ['#96bc4b', '#55a7d7', '#efa64a'];
-const badgeDescriptions = { Book: 'A recorded opening move without a detected tactical error', Brilliant: 'Sound sacrifice in the engine line', Great: 'Best reply after an opponent’s error', Best: 'The engine’s first choice', Excellent: 'Almost no estimated loss', Good: 'A reasonable move', Inaccuracy: 'A small missed opportunity', Mistake: 'A significant loss of chances', Blunder: 'A large loss of chances' };
+const badgeDescriptions = { Book: 'A recorded opening move without a detected tactical error', Brilliant: 'Sound sacrifice in the engine line', Great: 'A critical choice or a confirmed tactical opportunity', Best: 'The engine’s first choice', Excellent: 'Almost no estimated loss', Good: 'A reasonable move', Inaccuracy: 'A small missed opportunity', Mistake: 'A significant loss of chances', Blunder: 'A large loss of chances' };
 function makeBadge(label, extraClass = '') {
   const badge = document.createElement('span'); badge.className = `move-badge ${label.toLowerCase()} ${extraClass}`;
   const icon = document.createElement('img'); icon.src = `move-icons/${label.toLowerCase()}.svg`; icon.alt = ''; icon.draggable = false;
@@ -515,12 +520,12 @@ function renderGamePerformance() {
   for (const text of ['This game', 'White', 'Black']) { const th = document.createElement('th'); th.scope = 'col'; th.textContent = text; head.append(th); }
   const body = table.createTBody(), ratingRow = body.insertRow(); ratingRow.className = 'game-rating-row';
   const ratingName = document.createElement('th'); ratingName.scope = 'row'; ratingName.textContent = 'Game rating';
-  const estimate = document.createElement('small'); estimate.textContent = 'estimate'; ratingName.append(estimate); ratingRow.append(ratingName);
+  const estimate = document.createElement('small'); estimate.textContent = 'experimental'; ratingName.append(estimate); ratingRow.append(ratingName);
   for (const color of ['w', 'b']) {
     const item = ratings[color], cell = ratingRow.insertCell();
     const value = document.createElement('strong'); value.className = 'game-rating-value'; value.dataset.color = color;
     value.textContent = item.rating === null ? '—' : `≈${item.rating.toLocaleString()}`;
-    value.title = item.rating === null ? item.reason : `Rough estimate from ${item.eligibleMoves} non-book decisions in competitive positions. Not an account rating.`;
+    value.title = item.rating === null ? item.reason : `Based on the recorded rating of ${item.baseline} and ${item.eligibleMoves} reviewable decisions. ${item.confidence === 'low' ? 'Limited' : 'Broader'} analysis coverage; a study estimate, not an account rating. Experimental: not calibrated to Chess.com or Torch Human.`;
     value.setAttribute('aria-label', `${color === 'w' ? 'White' : 'Black'} game rating: ${item.rating === null ? item.reason : `approximately ${item.rating}`}`);
     cell.append(value);
   }
@@ -538,7 +543,7 @@ function renderGamePerformance() {
   section.append(table);
   if (['w', 'b'].some(color => ratings[color].rating === null)) {
     const note = document.createElement('p'); note.className = 'game-performance-note';
-    note.textContent = 'A game rating needs at least 8 reviewable decisions per player.'; section.append(note);
+    note.textContent = 'A game rating needs a recorded player rating and at least 8 reviewable decisions.'; section.append(note);
   }
   return section;
 }
@@ -672,7 +677,9 @@ function renderEngineLines() {
 }
 function renderEngineArrows(candidates) {
   $('board').querySelector('.engine-overlay')?.remove();
-  if (state.reviewTab !== 'moves' || answersHidden() || !$('show-arrows').checked || !candidates.length) return;
+  // Arrows belong to the displayed board, including Summary and Coach. Retry
+  // answers stay concealed until revealed, regardless of the selected tab.
+  if (answersHidden() || !$('show-arrows').checked || !candidates.length) return;
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg'); svg.classList.add('engine-overlay'); svg.setAttribute('viewBox', '0 0 800 800'); svg.setAttribute('aria-hidden', 'true');
   const defs = document.createElementNS(ns, 'defs'); svg.append(defs);
@@ -738,20 +745,51 @@ function startPlayback() {
   updateControls();
 }
 let boardSize = 'auto';
-function setBoardSize(value) {
-  boardSize = typeof value === 'number' && Number.isFinite(value) && value >= 320 && value <= 880
-    ? Math.round(value / 40) * 40 : 'auto';
+let boardSizePointer = null, boardSizeCommitFrame = 0, boardSizePending = false;
+function applyBoardSize() {
   const automatic = boardSize === 'auto';
   document.documentElement.dataset.boardSize = automatic ? 'auto' : 'custom';
   if (automatic) document.documentElement.style.removeProperty('--board-size');
   else document.documentElement.style.setProperty('--board-size', `${boardSize}px`);
-  $('board-size').value = automatic ? '640' : String(boardSize);
+}
+function setBoardSize(value, { deferLayout = false } = {}) {
+  boardSize = typeof value === 'number' && Number.isFinite(value) && value >= 320 && value <= 880
+    ? Math.round(value / 40) * 40 : 'auto';
+  const automatic = boardSize === 'auto', rangeValue = automatic ? '640' : String(boardSize);
+  if (!deferLayout) applyBoardSize();
+  if ($('board-size').value !== rangeValue) $('board-size').value = rangeValue;
   $('board-size').setAttribute('aria-valuetext', automatic ? 'Automatic size' : `${boardSize} pixels`);
   $('board-size-value').value = automatic ? 'Auto' : `${boardSize} px`;
   $('board-size-auto').disabled = automatic;
 }
-$('board-size').addEventListener('input', () => setBoardSize(Number($('board-size').value)));
-$('board-size').addEventListener('change', savePreferences);
+function commitBoardSize() {
+  boardSizePointer = null;
+  if (boardSizeCommitFrame) cancelAnimationFrame(boardSizeCommitFrame);
+  boardSizeCommitFrame = 0;
+  if (!boardSizePending) return;
+  boardSizePending = false;
+  applyBoardSize();
+  savePreferences();
+}
+$('board-size').addEventListener('pointerdown', event => {
+  if (!event.isPrimary || event.button !== 0) return;
+  commitBoardSize();
+  boardSizePointer = event.pointerId;
+});
+$('board-size').addEventListener('input', () => {
+  boardSizePending = true;
+  // Resizing the centered layout also moves this range. Keep its track fixed
+  // until release so a steady pointer cannot send the chosen width backwards.
+  setBoardSize(Number($('board-size').value), { deferLayout: boardSizePointer !== null });
+});
+$('board-size').addEventListener('change', commitBoardSize);
+for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, event => {
+  if (event.pointerId !== boardSizePointer || boardSizeCommitFrame) return;
+  // Let the native range finish its final input/change before applying layout.
+  boardSizeCommitFrame = requestAnimationFrame(commitBoardSize);
+});
+window.addEventListener('blur', commitBoardSize);
+document.addEventListener('visibilitychange', () => { if (document.hidden) commitBoardSize(); });
 $('board-size-auto').addEventListener('click', () => { setBoardSize('auto'); savePreferences(); });
 setBoardSize('auto');
 function currentPreferences() {
@@ -891,8 +929,8 @@ async function review() {
         $('progress-eta').textContent = estimator.update(progress).text;
         $('progress').value = total ? completed / total * 100 : 0;
         $('progress-percent').textContent = `${Math.round($('progress').value)}%`;
-        $('progress-stage').textContent = phase === 'recheck' ? 'Rechecking key moves' : 'Analyzing game';
-        $('progress-text').textContent = `${phase === 'recheck' ? `Rechecking key positions ${phaseCompleted} of ${phaseTotal}` : `First pass ${phaseCompleted ?? completed} of ${phaseTotal ?? total}`} · ${Math.floor((performance.now() - startedAt) / 1000)}s elapsed`;
+        $('progress-stage').textContent = phase === 'highlights' ? 'Checking standout moves' : phase === 'recheck' ? 'Rechecking key moves' : phase === 'complete' ? 'Finishing review' : 'Analyzing game';
+        $('progress-text').textContent = `${phase === 'highlights' ? `Checking highlights ${phaseCompleted} of ${phaseTotal}` : phase === 'recheck' ? `Rechecking key positions ${phaseCompleted} of ${phaseTotal}` : phase === 'complete' ? 'Finishing review' : `First pass ${phaseCompleted ?? completed} of ${phaseTotal ?? total}`} · ${Math.floor((performance.now() - startedAt) / 1000)}s elapsed`;
       }
     });
     state.result = result; state.recordMeta = analysis; state.opening = result.opening || state.opening;

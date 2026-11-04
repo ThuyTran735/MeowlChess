@@ -5,13 +5,8 @@ import { parseCompletedPgn } from './pgn.js';
 import { getPhasePerformance } from './game-performance.js';
 import { recognizeOpening } from './openings.js';
 
-export const COACHES = Object.freeze([
-  Object.freeze({ id: 'meowl', name: 'Meowl', description: 'Encouraging, with one clear next step.' }),
-  Object.freeze({ id: 'owl', name: 'Professor Meowl', description: 'Precise, with the evidence up front.' }),
-  Object.freeze({ id: 'paws', name: 'Captain Paws', description: 'Playful, with practical challenges.' }),
-  Object.freeze({ id: 'mellow', name: 'Mellow Meowl', description: 'Calm and patient, one move at a time.' }),
-  Object.freeze({ id: 'scout', name: 'Scout Meowl', description: 'A close look at the tactics the review can verify.' }),
-]);
+import { COACHES, coachResponseText, coachStudyStep, coachMoveLead, coachMoveTask, coachTopicStep } from './coach-personalities.js';
+export { COACHES } from './coach-personalities.js';
 
 const RESULTS = new Set(['1-0', '0-1', '1/2-1/2']);
 const LABELS = new Set(['Brilliant', 'Great', 'Best', 'Excellent', 'Good', 'Book', 'Inaccuracy', 'Mistake', 'Blunder']);
@@ -25,15 +20,8 @@ const cleanSan = value => value.replace(/[+#?!]/g, '').replace(/0/g, 'O').toLowe
 const defaults = ['Summarize this game', 'What was the biggest mistake?', 'What should I practice?'];
 
 function response(text, { moves = [], suggestions = defaults, subjectPly, label, labels, counts, matchCount, coach = 'meowl', kind = '' } = {}) {
-  const starts = {
-    summary: { meowl: 'Let’s take one lesson from this game.', owl: 'Here is the review evidence.', paws: 'Let’s follow the pawprints through this game.', mellow: 'We can take this game one step at a time.', scout: 'Let’s inspect the key moments in the saved review.' },
-    practice: { meowl: 'One position at a time is enough.', owl: 'Prioritize the largest recorded losses.', paws: 'A small challenge for your next session:', mellow: 'Choose one position and give yourself time.', scout: 'Compare the checks, captures, and threats in these positions.' },
-    mistake: { meowl: 'This is a useful position to revisit.', owl: 'The largest recorded loss is here.', paws: 'Here’s the pawprint worth investigating.', mellow: 'This position gives us something useful to learn.', scout: 'Here is the largest loss recorded by the review.' },
-    move: { meowl: 'Let’s take this move step by step.', owl: 'The saved analysis says:', paws: 'Let’s put this move under the magnifying glass.', mellow: 'Let’s look at the evidence without rushing.', scout: 'Let’s trace what the saved engine line supports.' },
-  };
-  const intro = starts[kind]?.[coach] || '';
   return {
-    text: `${intro ? `${intro}\n\n` : ''}${text}`, moves: moves.slice(0, 4), suggestions: suggestions.slice(0, 3),
+    text: coachResponseText(text, { coach, kind, ply: subjectPly, label }), moves: moves.slice(0, 4), suggestions: suggestions.slice(0, 3),
     ...(Number.isInteger(subjectPly) ? { subjectPly, ...(LABELS.has(label) ? { label } : {}) } : {}),
     ...(Array.isArray(labels) ? { labels: labels.filter(value => LABELS.has(value)) } : {}),
     ...(counts ? { counts } : {}), ...(Number.isInteger(matchCount) ? { matchCount } : {}),
@@ -128,8 +116,18 @@ function legalSuggestion(context, basePly) {
     const line = context.lineAt ? context.lineAt(basePly, pv) : createStudyLine(context.pgn, basePly, pv);
     if (!line.moves.length || line.moves[0].uci !== evaluation.bestMove) return null;
     const moves = line.moves;
-    return { san: moves[0].san, uci: evaluation.bestMove, line: moves.map((move, i) => `${move.color === 'w' || !i ? `${move.before.split(' ')[5]}${move.color === 'w' ? '.' : '...'} ` : ''}${move.san}`).join(' '), truncated: line.truncated };
+    return { san: moves[0].san, uci: evaluation.bestMove, moveCount: moves.length, line: moves.map((move, i) => `${move.color === 'w' || !i ? `${move.before.split(' ')[5]}${move.color === 'w' ? '.' : '...'} ` : ''}${move.san}`).join(' '), truncated: line.truncated };
   } catch { return null; }
+}
+
+function moveVoiceDetails(context, move, suggestion) {
+  return {
+    ply: move.ply, label: move.label,
+    ending: move.ply === context.result.moves.length || move.san.endsWith('#'),
+    inCheck: move.san.endsWith('+'), promotion: !!move.promotion, capture: !!move.captured, castle: /^O-O/.test(move.san),
+    hasLine: !!suggestion, hasReply: suggestion?.moveCount > 1,
+    alternative: !!suggestion && suggestion.uci !== `${move.from}${move.to}${move.promotion || ''}`,
+  };
 }
 
 function moveAnswer(context, move, coach, better = false) {
@@ -140,9 +138,10 @@ function moveAnswer(context, move, coach, better = false) {
     : move.probabilityLoss >= 0.01 ? `The estimated expected-score loss is about ${Math.round(move.probabilityLoss * 100)} percentage points.`
     : 'The recorded loss of estimated chances is less than one percentage point.';
   let text = `${grade} ${LABEL_DEFINITIONS[move.label]} ${loss}`;
-  if (suggestion) text += `\n\n${same ? 'The engine preferred the move you played' : `The engine preferred ${suggestion.san}`} at this search time. Suggested line: ${suggestion.line}.${suggestion.truncated ? ' Only the legal part of the line is shown.' : ''}`;
+  if (suggestion) text += `\n\n${same ? 'The engine preferred the move played' : `The engine preferred ${suggestion.san}`} at this search time. Suggested line: ${suggestion.line}.${suggestion.truncated ? ' Only the legal part of the line is shown.' : ''}`;
   else text += '\n\nNo legal preferred move is available in the saved analysis. Try a deeper review.';
   if (!better || !same) text += `\n\nAfter the played move: ${evidenceFor(context, move)}`;
+  text += `\n\n${coachMoveTask(coach, moveVoiceDetails(context, move, suggestion))}`;
   return response(text, { coach, kind: 'move', moves: [action(move)], subjectPly: move.ply, label: move.label, suggestions: [`Why was ${moveLabel(move)} rated ${move.label}?`, 'What should I practice?', 'Summarize this game'] });
 }
 
@@ -153,7 +152,7 @@ const LABEL_ALIASES = [
 ];
 const LABEL_DEFINITIONS = Object.freeze({
   Brilliant: 'A sound sacrifice identified in the saved engine line.',
-  Great: 'A best reply after an opponent’s error.',
+  Great: 'A critical choice or a tactical opportunity confirmed by the engine.',
   Best: 'The engine’s first choice at the saved search time.',
   Excellent: 'A move with almost no estimated loss of chances.',
   Good: 'A reasonable move with a small estimated loss of chances.',
@@ -185,7 +184,7 @@ function categoryAnswer(context, question, side, coach, found, ply) {
     || /\bexplain\b.*\b(?:rating|label|category)\b/i.test(question);
   if (definitions && (labels.length || /\b(?:ratings|labels|categories)\b/i.test(question))) {
     if (!labels.length) labels = [...LABELS];
-    return response(`${labels.map(label => `${label}: ${LABEL_DEFINITIONS[label]}`).join('\n')}\n\nThese are MeowlChess’s review labels. A deeper search can change them.`, { coach, labels, suggestions: ['Show Brilliant moves', 'Show Great moves', 'How many of each rating?'] });
+    return response(`${labels.map(label => `${label}: ${LABEL_DEFINITIONS[label]}`).join('\n')}\n\nThese are MeowlChess’s review labels. A deeper search can change them.`, { coach, kind: 'catalog', labels, suggestions: ['Show Brilliant moves', 'Show Great moves', 'How many of each rating?'] });
   }
   const bareLabels = labels.length && LABEL_ALIASES.reduce((text, [, pattern]) => text.replace(new RegExp(pattern.source, 'gi'), ''), question)
     .replace(/\b(?:moves?|and|or)\b/gi, '').replace(/[\s?!.,/]+/g, '') === '';
@@ -195,11 +194,11 @@ function categoryAnswer(context, question, side, coach, found, ply) {
     || (labels.includes('Best') && !exactBest && /\bbest moves?\b/i.test(question));
   if (genericHighlights) {
     const matches = highlights(context, side);
-    if (!matches.length) return response(`There are no moves rated Brilliant, Great, Best, Excellent, or Good${side === 'both' ? '' : ` for ${sideName(side)}`} in this review.`, { coach, matchCount: 0, labels: HIGHLIGHT_ORDER });
+    if (!matches.length) return response(`There are no moves rated Brilliant, Great, Best, Excellent, or Good${side === 'both' ? '' : ` for ${sideName(side)}`} in this review.`, { coach, kind: 'catalog', matchCount: 0, labels: HIGHLIGHT_ORDER });
     const singular = /\b(?:best|strongest) move\b/i.test(question) && !/\bmoves\b/i.test(question);
     const shown = matches.slice(0, singular ? 1 : 4), first = shown[0];
     return response(`Strong reviewed ${singular ? 'moment' : 'moments'}${side === 'both' ? '' : ` for ${sideName(side)}`}: ${shown.map(move => `${moveLabel(move)} (${move.label})`).join(', ')}.\n\nBrilliant and Great are shown before other strong grades. This selection uses the saved labels; it does not establish a uniquely decisive move.`, {
-      coach, moves: shown.map(action), subjectPly: first.ply, label: first.label, labels: [...new Set(shown.map(move => move.label))], matchCount: matches.length,
+      coach, kind: 'catalog', moves: shown.map(action), subjectPly: first.ply, label: first.label, labels: [...new Set(shown.map(move => move.label))], matchCount: matches.length,
       suggestions: [`Why was ${moveLabel(first)} rated ${first.label}?`, 'Show moves rated Best', 'Show Brilliant moves'],
     });
   }
@@ -220,7 +219,7 @@ function categoryAnswer(context, question, side, coach, found, ply) {
   const listing = shown.length ? `\n\n${shown.map(move => `${moveLabel(move)} (${sideName(move.color)} · ${move.label})`).join(', ')}.${selected.length > 4 ? ` Showing the first 4 of ${selected.length} matches.` : ''}`
     : direction && matches.length ? `\n\nThere is no ${direction === 'next' ? 'later' : 'earlier'} matching move from the current position.` : '\n\nNo matching moves were recorded. A deeper review can change the labels.';
   return response(heading + listing, {
-    coach, labels, counts, matchCount: matches.length, moves: shown.map(action),
+    coach, kind: 'catalog', labels, counts, matchCount: matches.length, moves: shown.map(action),
     ...(first ? { subjectPly: first.ply, label: first.label } : {}),
     suggestions: first ? [`Why was ${moveLabel(first)} rated ${first.label}?`, 'How many of each rating?', 'Show highlights'] : ['How many of each rating?', 'Show highlights', 'Summarize this game'],
   });
@@ -252,7 +251,7 @@ function summaryAnswer(context, side, coach) {
     paragraphs.push(`${sideName(color)} played ${moves.length} moves${Number.isFinite(score) ? ` with a study score of ${score.toFixed(1)}` : ''}. ${errors.length ? `${errors.length} were rated Inaccuracy, Mistake, or Blunder; the largest estimated loss was ${moveLabel(errors[0])}.` : 'No moves were rated Inaccuracy, Mistake, or Blunder.'}${stars.length ? ` Highlights: ${stars.slice(0, 2).map(move => `${moveLabel(move)} (${move.label})`).join(', ')}.` : ''}`);
   }
   const worst = worstMoves(context, side);
-  paragraphs.push(worst.length ? `Start by replaying the position before ${moveLabel(worst[0])}, then compare your choice with the engine suggestion.` : 'Choose a close decision from the move list and compare the engine line with your own plan.');
+  paragraphs.push(coachStudyStep(coach, worst.length ? moveLabel(worst[0]) : '', !!worst.length));
   const linked = [...highlights(context, side, true).slice(0, 2), ...worst.slice(0, 3)];
   return response(paragraphs.join('\n\n'), { coach, kind: 'summary', moves: [...new Map(linked.map(move => [move.ply, action(move)])).values()] });
 }
@@ -262,7 +261,8 @@ function phaseAnswer(context, side, question, coach) {
   const phases = getPhasePerformance(context.result).filter(phase => !requested || phase.id === requested);
   const lines = phases.map(phase => `${phase.name}: ${[...(side === 'both' ? ['w', 'b'] : [side])].map(color => `${sideName(color)} ${phase[color].label ? `${phase[color].label} across ${phase[color].total} ${phase[color].total === 1 ? 'move' : 'moves'}` : 'has no moves in this phase'}`).join('; ')}.`);
   lines.push('These phase labels summarize the reviewed moves. They are estimates, and one strong move does not erase errors elsewhere in the phase.');
-  return response(lines.join('\n\n'), { coach, moves: phases.filter(phase => phase.firstPly).map(phase => action(context.result.moves[phase.firstPly - 1])) });
+  lines.push(coachTopicStep(coach, 'phases'));
+  return response(lines.join('\n\n'), { coach, kind: 'facts', moves: phases.filter(phase => phase.firstPly).map(phase => action(context.result.moves[phase.firstPly - 1])) });
 }
 
 function materialAnswer(context, ply, coach) {
@@ -271,7 +271,55 @@ function materialAnswer(context, ply, coach) {
   let balance = 0;
   for (const piece of board.board().flat()) if (piece) balance += values[piece.type] * (piece.color === 'w' ? 1 : -1);
   const prefix = ply ? `After ${moveLabel(context.result.moves[ply - 1])}` : 'In the starting position';
-  return response(`${prefix}, ${balance ? `${sideName(balance > 0 ? 'w' : 'b')} has a material advantage of ${Math.abs(balance)} pawn-equivalents` : 'material is equal'}. This counts pawns as 1, knights and bishops as 3, rooks as 5, and queens as 9. Material alone does not determine who is winning.`, { coach, ...(ply ? { moves: [action(context.result.moves[ply - 1])], subjectPly: ply, label: context.result.moves[ply - 1].label } : {}) });
+  return response(`${prefix}, ${balance ? `${sideName(balance > 0 ? 'w' : 'b')} has a material advantage of ${Math.abs(balance)} pawn-equivalents` : 'material is equal'}. This counts pawns as 1, knights and bishops as 3, rooks as 5, and queens as 9. Material alone does not determine who is winning.\n\n${coachTopicStep(coach, 'material')}`, { coach, kind: 'facts', ...(ply ? { moves: [action(context.result.moves[ply - 1])], subjectPly: ply, label: context.result.moves[ply - 1].label } : {}) });
+}
+
+function keyMoments(context, side) {
+  return context.result.moves.filter(move => (side === 'both' || side === move.color)
+    && (ERRORS.has(move.label) || move.label === 'Brilliant' || move.label === 'Great'));
+}
+
+function nextMomentAnswer(context, ply, side, coach) {
+  const moments = keyMoments(context, side);
+  const next = moments.find(move => move.ply > ply);
+  if (!next) {
+    return response(moments.length
+      ? `You’ve reached the last recorded key moment${side === 'both' ? '' : ` for ${sideName(side)}`}. Revisit the first one below, or look over the game summary.`
+      : `There are no moves rated Brilliant, Great, Inaccuracy, Mistake, or Blunder${side === 'both' ? '' : ` for ${sideName(side)}`} in this review. Choose a close decision in the move list to explore.`, {
+      coach, kind: 'moment', moves: moments.length ? [action(moments[0])] : [], suggestions: ['Summarize this game', 'Explain this position', 'Show highlights'],
+    });
+  }
+  return response(`Next up: ${moveLabel(next)} (${sideName(next.color)} · ${next.label}). ${ERRORS.has(next.label) ? 'Pause before this move. ' : ''}${coachMoveTask(coach, moveVoiceDetails(context, next, legalSuggestion(context, next.ply - 1)))}`, {
+    coach, kind: 'moment', moves: [action(next)], subjectPly: next.ply, label: next.label,
+    suggestions: [`Why was ${moveLabel(next)} rated ${next.label}?`, `What was better than ${moveLabel(next)}?`, 'Next key moment'],
+  });
+}
+
+function positionAnswer(context, ply, coach) {
+  const board = new Chess(context.result.game.positions[ply]);
+  const base = ply ? `After ${moveLabel(context.result.moves[ply - 1])}` : 'At the starting position';
+  // Replay history preserves repetition and the fifty-move rule in addition to FEN facts.
+  const line = createStudyLine(context.pgn, ply, []);
+  const evaluation = context.result.positions[ply];
+  const parts = line.terminal
+    ? [`${base}, the position is ${line.terminalReason === 'Checkmate' ? 'checkmate' : `drawn by ${line.terminalReason.toLowerCase()}`}.`]
+    : [`${base}, ${sideName(board.turn())} is to move${board.isCheck() ? ' and is in check' : ''}.`];
+  if (!line.terminal) {
+    if (evaluation.mate != null && evaluation.mate !== 0) {
+      parts.push(`The saved search reports mate for ${sideName(evaluation.cp > 0 ? 'w' : 'b')} in ${Math.abs(evaluation.mate)} moves.`);
+    } else {
+      parts.push(`The saved evaluation is ${evaluation.cp >= 0 ? '+' : ''}${(evaluation.cp / 100).toFixed(2)} from White’s perspective${Math.abs(evaluation.cp) < 20 ? ' — close to equal' : `, favoring ${sideName(evaluation.cp > 0 ? 'w' : 'b')}`}.`);
+    }
+    const suggestion = legalSuggestion(context, ply);
+    parts.push(suggestion ? `Explore ${suggestion.san} first. Saved line: ${suggestion.line}.${suggestion.truncated ? ' Only its legal continuation is shown.' : ''}`
+      : 'There is no legal continuation in the saved analysis here. A deeper search may help.');
+    parts.push(coachMoveTask(coach, { ply, inCheck: board.isCheck(), hasLine: !!suggestion, hasReply: suggestion?.moveCount > 1 }));
+  } else parts.push(coachTopicStep(coach, 'ending'));
+  return response(parts.join('\n\n'), {
+    coach, kind: line.terminal ? 'facts' : 'position', ...(ply ? { subjectPly: ply, label: context.result.moves[ply - 1].label, moves: [action(context.result.moves[ply - 1])] } : {}),
+    suggestions: line.terminal ? ['How did this game end?', 'Summarize this game', 'Show highlights']
+      : ['What is the material?', 'Next key moment', ...(ply ? ['Why was this move rated this way?'] : ['Summarize this game'])],
+  });
 }
 
 /** A local question router over reviewed facts, not an open-ended language model. */
@@ -292,6 +340,11 @@ export function answerCoach({ question, result, game, ply = 0, perspective = 'bo
   const found = locateMove(question, context, ply, previousPly, perspective);
   if (found.error) return response(found.error, { coach, moves: found.moves });
   const move = found.move;
+  if (!found.explicit && (/\bnext\s+(?:key|important|critical|learning)\s+(?:moment|position|move)\b/i.test(question)
+    || /\b(?:look at|focus on|review|study)\s+next\b/i.test(question))) return nextMomentAnswer(context, ply, side, coach);
+  if (/\b(?:explain|describe|understand|assess)\b.*\b(?:this|that|current|selected|the)\s+position\b|\bwhat(?:'s| is)\s+(?:happening|going on)\b.*\b(?:here|position)\b/i.test(question)) {
+    return positionAnswer(context, found.explicit || /\bthat position\b/i.test(question) && move ? move.ply : ply, coach);
+  }
   if (/\bwhy\b.*\b(lose|lost|won|win)\b/i.test(question) && !found.explicit) {
     const answer = summaryAnswer(context, side, coach);
     answer.text += '\n\nThese are recorded study moments, not proof that a single move caused the final result.';
@@ -305,7 +358,7 @@ export function answerCoach({ question, result, game, ply = 0, perspective = 'bo
   }
   if (/\b(practi[cs]e|improve|training|lesson|learn|work on|study next)\b/i.test(question)) {
     const worst = worstMoves(context, side).slice(0, 3);
-    const text = worst.length ? `Revisit ${worst.map(moveLabel).join(', ')}. These are the largest recorded losses${side === 'both' ? '' : ` for ${sideName(side)}`} in this game.\n\nOpen each move and choose Try again. Before revealing the answer, look for checks, captures, and threats, then compare your candidate with the engine line.` : 'No moves were rated Inaccuracy, Mistake, or Blunder for the selected side. Pick a position you found difficult and compare your own candidate with the engine line. A deeper review may find other learning moments.';
+    const text = worst.length ? `Revisit ${worst.map(moveLabel).join(', ')}. These are the largest recorded losses${side === 'both' ? '' : ` for ${sideName(side)}`} in this game.\n\nOpen a linked move and choose Try again. ${coachStudyStep(coach, moveLabel(worst[0]))}` : `No moves were rated Inaccuracy, Mistake, or Blunder for the selected side. A deeper review may find other learning moments.\n\n${coachStudyStep(coach, '', false)}`;
     return response(text, { coach, kind: 'practice', moves: worst.map(action) });
   }
   const category = categoryAnswer(context, question, side, coach, found, ply);
@@ -316,7 +369,7 @@ export function answerCoach({ question, result, game, ply = 0, perspective = 'bo
     const opening = context.result.opening || recognizeOpening(context.result.game);
     if (!opening?.name) return response('The local opening reference does not identify a named opening for this game. Custom starting positions are not matched, and an unrecognized line is not necessarily a mistake.', { coach });
     const departure = context.result.moves[opening.departurePly - 1];
-    return response(`The local reference identifies ${opening.name}${opening.eco ? ` (${opening.eco})` : ''}.${departure ? ` The first move outside the matched line is ${moveLabel(departure)}.` : 'The supplied game stays within a matched line.'}\n\nLeaving the reference is not automatically an error. The engine’s move rating is a separate assessment.`, { coach, moves: departure ? [action(departure)] : [] });
+    return response(`The local reference identifies ${opening.name}${opening.eco ? ` (${opening.eco})` : ''}.${departure ? ` The first move outside the matched line is ${moveLabel(departure)}.` : 'The supplied game stays within a matched line.'}\n\nLeaving the reference is not automatically an error. The engine’s move rating is a separate assessment.\n\n${coachTopicStep(coach, 'opening')}`, { coach, kind: 'facts', moves: departure ? [action(departure)] : [] });
   }
   if (/\b(material|captured|pieces (?:up|down)|pawn equivalents?)\b/i.test(question)) return materialAnswer(context, found.explicit ? move.ply : ply, coach);
   if (/\b(advantage|winning|ahead|evaluation|eval|better position)\b/i.test(question) && !/\bwhy\b/i.test(question)) {
@@ -324,15 +377,15 @@ export function answerCoach({ question, result, game, ply = 0, perspective = 'bo
     const prefix = index ? `After ${moveLabel(result.moves[index - 1])}` : 'At the starting position';
     const text = evaluation.mate != null ? evaluation.mate === 0 ? `${prefix}, the position is checkmate.` : `${prefix}, the engine reports mate for ${sideName(evaluation.cp > 0 ? 'w' : 'b')} in ${Math.abs(evaluation.mate)} moves at this search depth.`
       : `${prefix}, the saved evaluation is ${evaluation.cp >= 0 ? '+' : ''}${(evaluation.cp / 100).toFixed(2)} from White’s perspective. ${Math.abs(evaluation.cp) < 20 ? 'The engine evaluates the position as close to equal.' : `${sideName(evaluation.cp > 0 ? 'w' : 'b')} has the engine advantage.`} This is an estimate at the saved search depth, not the game result.`;
-    return response(text, { coach, ...(index ? { moves: [action(result.moves[index - 1])], subjectPly: index, label: result.moves[index - 1].label } : {}) });
+    return response(text, { coach, kind: 'facts', ...(index ? { moves: [action(result.moves[index - 1])], subjectPly: index, label: result.moves[index - 1].label } : {}) });
   }
   if (/\b(end|ending|ended|finish|finished|result|won|winner|checkmate|mate|stalemate|repetition|resign|timeout|time out|draw)\b/i.test(question)
     && !/\b(this move|that move|better)\b/i.test(question) && (!/\bwhy\b/i.test(question) || !found.explicit)) {
-    return response(endingText(context), { coach, moves: [action(result.moves.at(-1))], subjectPly: result.moves.length, label: result.moves.at(-1).label });
+    return response(`${endingText(context)}\n\n${coachTopicStep(coach, 'ending')}`, { coach, kind: 'facts', moves: [action(result.moves.at(-1))], subjectPly: result.moves.length, label: result.moves.at(-1).label });
   }
   if (/\b(plan|next move|continue|continuation|what next)\b/i.test(question)) {
     const index = found.explicit ? move.ply : ply, suggestion = legalSuggestion(context, index);
-    return response(suggestion ? `From ${index ? `the position after ${moveLabel(result.moves[index - 1])}` : 'the starting position'}, the saved engine line is ${suggestion.line}.\n\nThis is a concrete continuation at the saved search time. I cannot verify a broader strategic plan from that line alone.` : 'There is no legal next-move suggestion in the saved analysis for this position. It may be terminal; otherwise, analyze it more deeply.', { coach, ...(index ? { moves: [action(result.moves[index - 1])], subjectPly: index, label: result.moves[index - 1].label } : {}) });
+    return response(suggestion ? `From ${index ? `the position after ${moveLabel(result.moves[index - 1])}` : 'the starting position'}, the saved engine line is ${suggestion.line}.\n\nThis is a concrete continuation at the saved search time. I cannot verify a broader strategic plan from that line alone.` : 'There is no legal next-move suggestion in the saved analysis for this position. It may be terminal; otherwise, analyze it more deeply.', { coach, kind: 'facts', ...(index ? { moves: [action(result.moves[index - 1])], subjectPly: index, label: result.moves[index - 1].label } : {}) });
   }
   if (found.explicit || /\b(move|moves|grade|rated|rating|label|brilliant|great|best|excellent|good|mistake|blunder|inaccuracy|better|instead)\b/i.test(question)
     || /^(?:why|explain (?:this|that|it))[?!.]*$/i.test(question)) {
@@ -353,22 +406,11 @@ function describeMoveInContext(context, { ply, perspective = 'both', coach = 'me
   const move = context.result.moves[ply - 1];
   if (['w', 'b'].includes(perspective) && move.color !== perspective) return null;
   coach = COACHES.some(item => item.id === coach) ? coach : 'meowl';
-  const praise = {
-    Brilliant: { meowl: 'A brilliant moment!', owl: 'The review identifies a sound sacrifice.', paws: 'That deserves a wing flap!', mellow: 'A lovely moment to pause and appreciate.', scout: 'The review identifies a sound sacrifice here.' },
-    Great: { meowl: 'You found a great reply.', owl: 'A strong reply after the previous error.', paws: 'A sharp response!', mellow: 'You found a strong response.', scout: 'The review marks a strong reply after an error.' },
-    Best: { meowl: 'A strong choice.', owl: 'This is the top move in the saved review.', paws: 'Right on the pawprint.', mellow: 'A well-considered choice.', scout: 'The saved search ranks this move first.' },
-    Excellent: { meowl: 'Nicely played.', owl: 'Very little estimated loss here.', paws: 'Looking sharp.', mellow: 'This is a solid step.', scout: 'The review records very little lost opportunity.' },
-    Good: { meowl: 'A reasonable choice.', owl: 'A playable move in this review.', paws: 'A steady step.', mellow: 'A steady, reasonable move.', scout: 'This move keeps reasonable chances in the review.' },
-    Book: { meowl: 'You are following a known opening.', owl: 'This follows the local opening reference.', paws: 'Familiar opening territory.', mellow: 'A familiar opening move.', scout: 'This move matches the local opening reference.' },
-    Inaccuracy: { meowl: 'There was a little more to find here.', owl: 'A small missed opportunity.', paws: 'A clue slipped past here.', mellow: 'There is a small opportunity to explore.', scout: 'Look for the opportunity in the saved line.' },
-    Mistake: { meowl: 'Let’s learn from this position.', owl: 'A significant estimated loss of chances.', paws: 'Time to investigate this one.', mellow: 'We can learn something from this choice.', scout: 'Let’s examine the recorded consequence.' },
-    Blunder: { meowl: 'This is a useful moment to revisit.', owl: 'A large estimated loss of chances.', paws: 'A big learning moment here.', mellow: 'Take your time with this learning moment.', scout: 'The review records a large loss of chances here.' },
-  };
-  const parts = [praise[move.label][coach]];
+  const parts = [coachMoveLead(coach, move.label, ply)];
   const suggestion = legalSuggestion(context, ply - 1);
   const played = `${move.from}${move.to}${move.promotion || ''}`;
   if (suggestion && suggestion.uci !== played && move.label !== 'Book') {
-    parts.push(`The engine preferred ${suggestion.san} at this search time.`);
+    parts.push(`The engine preferred ${suggestion.san}.`);
   }
   if (ERRORS.has(move.label) || ['Brilliant', 'Great'].includes(move.label) || /[+#]/.test(move.san)) {
     parts.push(evidenceFor(context, move));
@@ -377,9 +419,16 @@ function describeMoveInContext(context, { ply, perspective = 'both', coach = 'me
   } else if (suggestion?.uci === played && move.label !== 'Best') {
     parts.push('The engine also preferred the move played.');
   } else if (move.label === 'Best' && coach !== 'owl' && suggestion?.uci === played) {
-    parts.push('The engine also chose this move at this search time.');
+    parts.push('The engine also chose this move.');
   }
-  return { subjectPly: ply, label: move.label, heading: `${moveLabel(move)} · ${move.label}`, text: parts.join(' ') };
+  parts.push(coachMoveTask(coach, moveVoiceDetails(context, move, suggestion)));
+  const next = keyMoments(context, ['w', 'b'].includes(perspective) ? perspective : 'both').find(item => item.ply > ply);
+  return {
+    subjectPly: ply, label: move.label, heading: `${moveLabel(move)} · ${move.label}`, text: parts.join(' '),
+    suggestion: suggestion && suggestion.uci !== played && move.label !== 'Book'
+      ? `What was better than ${moveLabel(move)}?` : `Why was ${moveLabel(move)} rated ${move.label}?`,
+    nextMoment: next ? { ...action(next), rating: next.label } : null,
+  };
 }
 
 

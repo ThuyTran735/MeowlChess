@@ -174,7 +174,7 @@ function renderPerformance(result) {
     cell.textContent = available ? `≈${estimate.rating.toLocaleString()}` : '—';
     cell.classList.toggle('unavailable', !available);
     const description = available
-      ? `${side} game rating: approximately ${estimate.rating.toLocaleString()}, from ${estimate.eligibleMoves} eligible moves. A rough estimate for this game, not an account rating.`
+      ? `${side} game rating: approximately ${estimate.rating.toLocaleString()}, based on the recorded rating of ${estimate.baseline} and ${estimate.eligibleMoves} reviewable decisions. ${estimate.confidence === 'low' ? 'Limited' : 'Broader'} analysis coverage; a study estimate, not an account rating. Experimental: not calibrated to Chess.com or Torch Human.`
       : `${side} game rating unavailable: ${estimate.reason || 'Not enough moves'}.`;
     cell.title = description;
     cell.setAttribute('aria-label', description);
@@ -277,7 +277,7 @@ function onProgress(progress) {
   percent = Math.max(percent, Math.min(99, total > 0 ? completed / total * 100 : 0));
   $('summary-progress').value = percent;
   $('summary-percent').textContent = `${Math.round(percent)}%`;
-  $('summary-progress-label').textContent = phase === 'recheck' ? 'Rechecking key moves' : 'Reviewing positions';
+  $('summary-progress-label').textContent = phase === 'highlights' ? 'Checking standout moves' : phase === 'recheck' ? 'Rechecking key moves' : phase === 'complete' ? 'Finishing review' : 'Reviewing positions';
   $('summary-progress-detail').textContent = `${phaseCompleted ?? completed} of ${phaseTotal ?? total} positions · ${payload.analysis.engineName}, on your device`;
 }
 async function readSaved(id) {

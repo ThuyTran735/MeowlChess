@@ -603,10 +603,10 @@ progress::-webkit-progress-value { transition: width .2s ease-out; }
   .board-layout:has(> .coach-companion:not([hidden])) { grid-template-rows: min-content 1fr; }
 }
 @media (min-width: 1280px) {
-  main:has(#coach-companion:not([hidden])) { max-width: min(1324px, calc(var(--board-column-width) + 644px)); }
-  html[data-board-size="custom"] main:has(#coach-companion:not([hidden])) { max-width: calc(var(--board-size) + 684px); }
-  .study-panel:has(#coach-companion:not([hidden])) > .study-title { margin-left: 244px; }
-  .board-layout:has(> .coach-companion:not([hidden])) { grid-template-columns: 220px minmax(0, 1fr) 340px; grid-template-areas: "companion board insights"; }
+  main:has(#coach-companion:not([hidden])) { max-width: min(1356px, calc(var(--board-column-width) + 676px)); }
+  html[data-board-size="custom"] main:has(#coach-companion:not([hidden])) { max-width: calc(var(--board-size) + 716px); }
+  .study-panel:has(#coach-companion:not([hidden])) > .study-title { margin-left: 276px; }
+  .board-layout:has(> .coach-companion:not([hidden])) { grid-template-columns: 252px minmax(0, 1fr) 340px; grid-template-areas: "companion board insights"; }
   .board-layout:has(> .coach-companion:not([hidden])) > .board-column { position: sticky; }
 }
 @media (max-width: 920px) {

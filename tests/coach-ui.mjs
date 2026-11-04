@@ -14,6 +14,7 @@ const sitePgn = '[Event "Coach site"]\n[White "sitecat"]\n[Black "siteowl"]\n[Re
 const chessUrl = 'https://www.chess.com/game/live/884477990';
 const errors = [], external = [];
 let context, worker, page, stage = 'launch';
+async function chooseCoach(id) { await page.locator(`.coach-choice[data-coach="${id}"]`).click(); }
 async function poll(read, label, timeout = 15000) {
   const started = Date.now();
   while (Date.now() - started < timeout) { if (await read()) return; await new Promise(resolve => setTimeout(resolve, 40)); }
@@ -58,8 +59,8 @@ try {
   const capture = name => page.screenshot({ path: join(root, 'test-results', `MeowlChess-coach-${name}.png`), fullPage: true });
   const expectPortrait = async (locator, coachId) => {
     await poll(() => locator.evaluate(image => image.complete && image.naturalWidth > 0 && image.naturalHeight > 0), `loaded ${coachId} portrait`);
-    const source = await locator.getAttribute('src');
-    assert.equal(source, `${origin}/icons/coaches/MeowlChess-coach-${coachId}.png`);
+    const source = await locator.evaluate(image => image.src);
+    assert.equal(source, `${origin}/icons/coaches/MeowlChess-coach-${coachId}.svg`);
     assert.equal(await locator.getAttribute('alt'), '', 'Portrait is decorative beside the visible coach name.');
     assert.equal(await locator.evaluate(image => getComputedStyle(image).objectFit), 'contain', 'The full character is shown without cropping.');
   };
@@ -85,7 +86,7 @@ try {
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'No horizontal page overflow.');
     const rootBounds = await page.locator('#coach-root').boundingBox();
     assert(rootBounds.x >= 0 && rootBounds.x + rootBounds.width <= page.viewportSize().width + 1, 'Coach fits the viewport.');
-    for (const selector of ['.coach-question', '.coach-send', '.coach-select', '.coach-perspective']) {
+    for (const selector of ['.coach-question', '.coach-send', '.coach-choice[aria-pressed="true"]', '.coach-perspective']) {
       const box = await page.locator(selector).boundingBox();
       assert(box && box.x >= rootBounds.x - 1 && box.x + box.width <= rootBounds.x + rootBounds.width + 1, `${selector} stays within the coach.`);
     }
@@ -154,7 +155,7 @@ try {
 
   stage = 'distinct bundled portraits and per-message identity';
   for (const coachId of ['owl', 'paws', 'meowl']) {
-    await page.locator('.coach-select').selectOption(coachId);
+    await chooseCoach(coachId);
     await expectPortrait(page.locator('.coach-avatar'), coachId);
     await ask('Summarize this game');
     await expectPortrait(answers(page).last().locator('.coach-message-avatar'), coachId);
@@ -163,7 +164,7 @@ try {
   assert.deepEqual(external, [], 'Coach portraits are bundled extension assets.');
 
   stage = 'coach selection and perspective persistence';
-  await page.locator('.coach-select').selectOption('owl'); await page.locator('.coach-perspective').selectOption('b');
+  await chooseCoach('owl'); await page.locator('.coach-perspective').selectOption('b');
   await poll(() => worker.evaluate(async () => {
     const preference = (await chrome.storage.local.get('coachPreferences')).coachPreferences;
     return preference?.coach === 'owl' && preference?.perspective === 'b';
@@ -177,7 +178,7 @@ try {
   await worker.evaluate(async () => chrome.storage.local.set({ coachPreferences: { coach: 'paws', perspective: 'b' } }));
   await poll(async () => await page.locator('.coach-select').inputValue() === 'paws', 'external coach preference update');
   await expectPortrait(page.locator('.coach-avatar'), 'paws');
-  await page.locator('.coach-select').selectOption('owl');
+  await chooseCoach('owl');
   await expectPortrait(page.locator('.coach-avatar'), 'owl');
   assert.equal(await questions(page).count(), 0, 'Conversation text is not persisted.');
   assert.equal(await page.evaluate(() => window.coachWorkerStarts), 0, 'Saved review deep link does not start an engine.');
@@ -228,7 +229,7 @@ try {
   const panelCoach = await worker.evaluate(async () => (await chrome.storage.local.get('coachPreferences')).coachPreferences?.coach || 'meowl');
   await expectPortrait(frame.locator('#summary-coach img'), panelCoach);
   await worker.evaluate(async () => chrome.storage.local.set({ coachPreferences: { coach: 'paws', perspective: 'w' } }));
-  await poll(async () => (await frame.locator('#summary-coach img').getAttribute('src')).endsWith('/MeowlChess-coach-paws.png'), 'panel coach portrait follows changed preference');
+  await poll(async () => (await frame.locator('#summary-coach img').getAttribute('src')).endsWith('/MeowlChess-coach-paws.svg'), 'panel coach portrait follows changed preference');
   await expectPortrait(frame.locator('#summary-coach img'), 'paws');
   const opened = context.waitForEvent('page'); await frame.locator('#summary-coach').click();
   const full = await opened; await full.waitForURL(/review\.html\?reviewId=.*view=coach/);
