@@ -458,7 +458,7 @@ try {
   await assertIdle('Turning commentary on shows text without replaying the current move.');
   await page.evaluate(() => { window.reactionFixture.update({ ply: 4 }); window.reactionFixture.update({ ply: 5 }); });
   await poll(async () => await page.locator('.coach-walkthrough[data-ply="5"]').isVisible(), 'latest scrubbed move comment');
-  assert.match(await page.locator('.coach-walkthrough .coach-walkthrough-heading').textContent(), /3\. Bb5/);
+  assert.equal(await page.locator('.coach-walkthrough .coach-walkthrough-heading .move-notation').getAttribute('data-san'), 'Bb5');
   assert(await active('approve').count() > 0, 'Coach acknowledges a Good move automatically.');
   assert.equal(await page.locator('.coach-message').count(), priorChatCount, 'Move commentary never fills chat history.');
   await idle();

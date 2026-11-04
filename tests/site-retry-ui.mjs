@@ -6,8 +6,8 @@ import { chromium } from 'playwright-core';
 import { closeTestContext } from './ui-helpers.mjs';
 
 const root = resolve(import.meta.dirname, '..'), temporaryRoot = resolve(tmpdir());
-const profile = await mkdtemp(join(temporaryRoot, 'meowlchess-retry-test-'));
-const bundle = await mkdtemp(join(temporaryRoot, 'meowlchess-retry-bundle-')), extension = join(bundle, 'extension');
+const profile = await mkdtemp(join(temporaryRoot, 'MeowlChess-retry-test-'));
+const bundle = await mkdtemp(join(temporaryRoot, 'MeowlChess-retry-bundle-')), extension = join(bundle, 'extension');
 const HOST = '#meowlchess-site-review';
 const pgn = '[Event "Retry fixture"]\n[White "sitecat"]\n[Black "siteowl"]\n[Result "0-1"]\n\n1. f3 e5 2. g4 Qh4# 0-1';
 let context, worker, page, cdp, stage = 'launch';
@@ -61,6 +61,7 @@ try {
   });
   await context.addInitScript(() => {
     window.retryEngineStarts = 0;
+    window.retryDocument = crypto.randomUUID();
     const OriginalWorker = window.Worker;
     window.Worker = class extends OriginalWorker { constructor(...args) { super(...args); window.retryEngineStarts++; } };
   });
@@ -71,7 +72,8 @@ try {
   });
   worker = context.serviceWorkers().find(item => /chrome-extension:/.test(item.url())) || await context.waitForEvent('serviceworker');
   await worker.evaluate(async ({ pgn, stamp }) => {
-    globalThis.retryFixture = { mode: 'missing', id: '884422101', calls: 0, hold: null, release: null };
+    globalThis.retryFixture = { mode: 'missing', id: '884422101', calls: 0, hold: null, release: null, updates: [] };
+    chrome.tabs.onUpdated.addListener((tabId, changes) => { retryFixture.updates.push({ tabId, ...changes }); });
     globalThis.fetch = async input => {
       const url = new URL(typeof input === 'string' ? input : input.url), fixture = globalThis.retryFixture;
       fixture.calls++;
@@ -122,20 +124,32 @@ try {
   const lichess = await summary();
   assert.equal(await lichess.locator('#summary-source').innerText(), 'Lichess');
   assert.equal(await lichess.locator('#summary-players').innerText(), 'sitecat vs siteowl');
-  stage = 'expired iframe retries the retained completed game';
+  stage = 'expired iframe automatically reconnects the retained completed game';
   const callsBeforeRestart = await worker.evaluate(() => retryFixture.calls);
   await worker.evaluate(() => { const originalNow = Date.now; Date.now = () => originalNow() + 11 * 60 * 1000; });
-  await lichess.evaluate(() => location.reload());
-  await lichess.locator('#summary-retry').waitFor({ state: 'visible' });
-  assert.match(await lichess.locator('#summary-status').innerText(), /expired/);
-  assert.equal(await lichess.locator('#summary-refresh').isVisible(), true, 'An expired panel offers an explicit page refresh.');
-  await poll(() => page.locator(HOST).getAttribute('data-busy').then(value => value === 'false'), 'expired frame releases refresh deferral');
-  await lichess.locator('#summary-retry').click();
-  await poll(() => lichess.isDetached(), 'failed summary frame replaced');
+  await Promise.all([lichess.waitForNavigation({ waitUntil: 'domcontentloaded' }), lichess.evaluate(() => location.reload())]);
   const recovered = await summary();
+  assert.equal(recovered, lichess, 'A renewable lease reconnects the existing iframe.');
   assert.equal(await recovered.locator('#summary-players').innerText(), 'sitecat vs siteowl');
   assert.match(await recovered.locator('#summary-status').innerText(), /Saved review loaded/);
+  assert.equal(await recovered.evaluate(() => window.retryEngineStarts), 0, 'Reconnect opens saved analysis without starting an engine.');
+  assert.equal(await recovered.locator('#summary-retry').isVisible(), false);
   assert.equal(await worker.evaluate(() => retryFixture.calls), callsBeforeRestart, 'Restart reuses its selected completed game, not another archive entry.');
+  const reconnectReplies = await recovered.evaluate(async () => {
+    const token = location.hash.slice(1), origin = location.ancestorOrigins[0];
+    const request = () => new Promise((resolve, reject) => {
+      const requestId = crypto.randomUUID();
+      const timeout = setTimeout(() => { window.removeEventListener('message', receive); reject(new Error('Reconnect response timed out')); }, 5000);
+      function receive(event) {
+        if (event.source !== parent || event.origin !== origin || event.data?.type !== 'meowl:site-frame-reconnected' || event.data?.requestId !== requestId) return;
+        clearTimeout(timeout); window.removeEventListener('message', receive); resolve(event.data.connected);
+      }
+      window.addEventListener('message', receive);
+      parent.postMessage({ type: 'meowl:site-frame-reconnect', token, requestId }, origin);
+    });
+    return [await request(), await request()];
+  });
+  assert.deepEqual(reconnectReplies, [true, false], 'Automatic reconnects stop at two attempts per minute instead of looping.');
   stage = 'stopped analysis retries exactly one engine for the same game';
   await worker.evaluate(async pgn => {
     retryFixture.id = '884422103'; retryFixture.pgn = pgn.replace('Retry fixture', 'Retry stopped fixture');
@@ -156,8 +170,42 @@ try {
   assert.equal(page.frames().filter(item => /site-summary\.html#/.test(item.url())).length, 1, 'Only one summary remains.');
   assert.equal(await restarted.locator('#summary-players').innerText(), 'sitecat vs siteowl');
   assert.match(await restarted.locator('#summary-status').innerText(), /Review complete/);
+  stage = 'SPA profile navigation preserves the active engine and completes its review';
+  await worker.evaluate(async pgn => {
+    retryFixture.id = '884422104'; retryFixture.pgn = pgn.replace('Retry fixture', 'SPA retry fixture'); retryFixture.updates = [];
+    await chrome.storage.local.set({ reviewSettings: { engine: 'lozza', time: '1500', lines: '1', smart: false, highlights: false } });
+  }, pgn);
+  await page.goto('https://www.chess.com/game/884422104'); await page.bringToFront();
+  let activeReview;
+  await poll(() => { activeReview = page.frames().find(item => /site-summary\.html#/.test(item.url())); return activeReview; }, 'SPA analysis frame');
+  await activeReview.waitForFunction(() => window.retryEngineStarts === 1 && document.querySelector('main').dataset.stage === 'analyzing');
+  const documentBefore = await page.evaluate(() => window.retryDocument);
+  const frameBefore = await activeReview.evaluate(() => window.retryDocument);
+  await page.evaluate(() => history.pushState({}, '', '/member/sitecat'));
+  await poll(() => worker.evaluate(() => retryFixture.updates.some(item => item.status === 'loading' && item.url?.endsWith('/member/sitecat'))), 'real browser SPA loading event');
+  await poll(() => worker.evaluate(async () => (await chrome.storage.session.get('siteReviewSession')).siteReviewSession.jobs.some(job => job.pageKey.endsWith('/member/sitecat') && !job.documentPending)), 'same document reclaims the profile selection');
+  assert.equal(await page.evaluate(() => window.retryDocument), documentBefore, 'pushState did not replace the top document.');
+  assert.equal(activeReview.isDetached(), false, 'The iframe survives the profile route.');
+  assert.equal(await activeReview.evaluate(() => window.retryDocument), frameBefore);
+  await page.evaluate(() => history.pushState({}, '', '/game/884422104'));
+  await poll(() => worker.evaluate(async () => (await chrome.storage.session.get('siteReviewSession')).siteReviewSession.jobs.some(job => job.game.url.endsWith('/884422104') && job.pageKey.endsWith('/884422104') && !job.documentPending)), 'same document returns to the exact game');
+  assert.equal(await activeReview.locator('main').getAttribute('data-stage'), 'analyzing', 'The long review is still running during SPA recovery.');
+  await activeReview.evaluate(() => {
+    window.retryReconnects = 0;
+    window.addEventListener('message', event => {
+      if (event.source === parent && event.data?.type === 'meowl:site-frame-reconnected' && event.data.connected === true) window.retryReconnects++;
+    });
+  });
+  await worker.evaluate(() => { const previousNow = Date.now; Date.now = () => previousNow() + 11 * 60 * 1000; });
+  const completedSpa = await summary();
+  assert.equal(completedSpa, activeReview, 'Returning to the game keeps its original iframe.');
+  assert.equal(await completedSpa.evaluate(() => window.retryEngineStarts), 1, 'SPA navigation neither duplicates nor restarts engine analysis.');
+  assert.equal(await completedSpa.evaluate(() => window.retryDocument), frameBefore);
+  assert.equal(await completedSpa.evaluate(() => window.retryReconnects), 1, 'The completed in-memory result reconnects its expired lease before saving.');
+  assert.match(await completedSpa.locator('#summary-status').innerText(), /Review complete/);
+  assert.equal(await completedSpa.locator('#summary-open-review').isEnabled(), true, 'The surviving analysis was saved.');
   assert.deepEqual(errors, []);
-  console.log('Retry UI passed: waiting recovery, in-flight disabling, cooldown, route reset, no drag, Lichess error recovery, expired iframe restart, and canceled analysis restart.');
+  console.log('Retry UI passed: waiting recovery, automatic bounded reconnect, saved review reuse, canceled analysis restart, and active review surviving actual SPA navigation.');
 } catch (error) {
   console.error('Retry UI failed at:', stage, error);
   console.error('Panel state:', await page?.locator(HOST).evaluate(element => ({ state: element.dataset.state, busy: element.dataset.busy })).catch(() => null), await shadow('.body', 'this.textContent').catch(() => null));
@@ -165,6 +213,6 @@ try {
   throw error;
 }
 finally {
-  if (context) await closeTestContext(context, profile, 'meowlchess-retry-test-');
+  if (context) await closeTestContext(context, profile, 'MeowlChess-retry-test-');
   const absolute = resolve(bundle); if (absolute.startsWith(temporaryRoot + '\\') || absolute.startsWith(temporaryRoot + '/')) await rm(absolute, { recursive: true, force: true });
 }

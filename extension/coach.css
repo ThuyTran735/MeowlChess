@@ -83,6 +83,9 @@
 .coach-message[data-coach="scout"] .coach-message-name { color: #a5d0c3; }
 .coach-message[data-role="user"] .coach-message-name { color: var(--muted, #aba99e); }
 .coach-message-text { margin: 0; white-space: pre-line; overflow-wrap: anywhere; font-size: 12px; line-height: 1.8; }
+.coach-move-label { min-width: 0; }
+:is(.coach-view, .coach-companion, .move-coach-moment) .move-notation { display: inline-block; white-space: nowrap; font-variant-numeric: tabular-nums; }
+:is(.coach-view, .coach-companion, .move-coach-moment) .notation-piece { display: inline-block; width: 1.3em; height: 1.3em; margin-right: .04em; vertical-align: -.22em; overflow: visible; pointer-events: none; }
 .coach-jumps, .coach-suggestions { display: flex; flex-wrap: wrap; gap: 6px; }
 .coach-jumps { margin-top: 10px; }
 .coach-view .coach-jump { display: inline-flex; align-items: center; max-width: 100%; min-height: 36px; padding: 6px 9px; border: 1px solid #ffffff25; border-radius: 6px; background: #ffffff06; color: #d0d6c5; font: inherit; font-size: 11px; text-align: left; overflow-wrap: anywhere; cursor: pointer; }

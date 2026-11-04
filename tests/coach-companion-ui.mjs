@@ -227,7 +227,7 @@ try {
   assert(await companion.isVisible()); assert.equal(await bubble.isVisible(), false);
   await idle();
   await page.locator('#moves-tab').click(); await page.locator('#last-button').click();
-  await poll(async () => await bubble.isVisible() && /Qh4#/.test(await heading.innerText()), 'current last move replaces earlier explanation');
+  await poll(async () => await bubble.isVisible() && await heading.locator('.move-notation[data-san="Qh4#"]').count() === 1, 'current last move replaces earlier explanation');
   await page.locator('#retry-move').click();
   assert(await companion.isVisible(), 'Practice retains the idle coach artwork.');
   assert.equal(await bubble.isVisible(), false, 'Practice hides the current move hint.');

@@ -103,7 +103,8 @@ try {
   const sampleRecord = await savedRecord('MeowlChess sample'); assert(sampleRecord);
   const workersBeforeChat = await page.evaluate(() => window.coachWorkerStarts);
   await coach();
-  assert.deepEqual(await page.locator('.coach-select option').evaluateAll(options => options.map(option => option.value)), ['meowl', 'owl', 'paws', 'mellow', 'scout']);
+  assert.deepEqual(await page.locator('.coach-select option').evaluateAll(options => options.map(option => option.value)), ['meowl', 'owl', 'paws', 'mellow', 'scout', 'evil']);
+  assert(await page.locator('.coach-select option[value="evil"]').isDisabled(), 'Evil Meowl remains locked for a new installation.');
   assert(await page.locator('.coach-commentary-toggle').isChecked(), 'Automatic move explanations start enabled.');
   await expectPortrait(page.locator('.coach-avatar'), 'meowl');
   assert.match(await ask('Summarize this game'), /White|Black|mate|game/i);
@@ -131,8 +132,9 @@ try {
   const playedMove = (await page.locator('#board').getAttribute('aria-label')).match(/after move (\d+): (\S+)/);
   assert(playedMove && Number(playedMove[1]) >= 3);
   const currentSan = playedMove[2].replace(/\.$/, '');
-  assert((await page.locator('.coach-context').innerText()).includes(currentSan), 'The coach tracks the position reached during playback.');
-  assert((await ask('Why was this move rated this way?')).includes(currentSan), 'A current-move question uses the newly displayed move, not the earlier conversation subject.');
+  assert.equal(await page.locator('.coach-context .move-notation').getAttribute('data-san'), currentSan, 'The coach tracks the position reached during playback.');
+  await ask('Why was this move rated this way?');
+  assert(await answers(page).last().getByRole('img', { name: currentSan, exact: true }).count() > 0, 'A current-move question uses the newly displayed move, not the earlier conversation subject.');
 
   stage = 'keyboard, input safety, and honest unsupported answers';
   const position = await page.locator('#board').getAttribute('aria-label');

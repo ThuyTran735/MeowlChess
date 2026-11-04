@@ -93,9 +93,10 @@ export async function renderSummaryImage({ game, result, analysis = {}, hidePlay
     wrapped(ctx, player, x + 24, 238, 484, 25, ink, 650, 2, 1.12);
     text(ctx, score(result.summary[color].accuracy), x + 24, 306, 67, ink, 700);
     text(ctx, 'Study score', x + 26, 383, 17, subtle, 500);
-    const rating = ratings[color].rating;
+    const { rating, range } = ratings[color];
     text(ctx, Number.isFinite(rating) ? `≈${rating.toLocaleString()}` : '—', x + 508, 324, 31, ink, 650, 'right');
-    text(ctx, 'Game rating', x + 508, 383, 17, subtle, 500, 'right');
+    if (Number.isFinite(rating)) text(ctx, `Range ${range.low.toLocaleString()}–${range.high.toLocaleString()}`, x + 508, 360, 15, subtle, 400, 'right');
+    text(ctx, 'MeowlChess estimate', x + 508, 383, 17, subtle, 500, 'right');
   }
 
   text(ctx, 'Game performance', 56, 466, 27, COLORS.text, 650);
@@ -117,7 +118,7 @@ export async function renderSummaryImage({ game, result, analysis = {}, hidePlay
     text(ctx, 'OPENING', 56, 820, 15, COLORS.muted, 600);
     wrapped(ctx, [clean(result.opening?.eco, 8), opening].filter(Boolean).join(' · '), 56, 850, 455, 22, COLORS.text, 500, 3, 1.35);
   }
-  wrapped(ctx, 'Game ratings are experimental study estimates, not account Elo or calibrated Chess.com ratings. A dash means insufficient data.', 56, 973, 455, 18, COLORS.muted, 400, 3, 1.35);
+  wrapped(ctx, 'Experimental MeowlChess game ratings, not account Elo or Chess.com ratings. Ranges are rough guides, not statistical confidence intervals. A dash means insufficient data.', 56, 973, 455, 18, COLORS.muted, 400, 4, 1.25);
 
   const tableX = 576, tableWidth = 568;
   text(ctx, 'Move ratings', tableX, 466, 27, COLORS.text, 650);

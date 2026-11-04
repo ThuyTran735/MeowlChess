@@ -25,7 +25,7 @@ function fixture(pgn = GAME) {
   return { result: { game, positions, moves, summary: { w: { accuracy: 81.2 }, b: { accuracy: 72.4 } } }, game: { pgn } };
 }
 
-const metadata = ({ text, ...answer }) => answer;
+const metadata = ({ text, notation, ...answer }) => ({ ...answer, notation: notation.map(({ san, color }) => ({ san, color })) });
 
 test('coach voices preserve the exact reviewed facts, legal line and linked position', () => {
   const input = fixture();

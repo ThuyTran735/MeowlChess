@@ -562,6 +562,8 @@ progress::-webkit-progress-value { transition: width .2s ease-out; }
 .game-performance-table .game-rating-row th, .game-performance-table .game-rating-row td { padding-block: 11px; }
 .game-rating-row small { display: block; margin-top: 1px; color: var(--muted); font-size: 10px; }
 .game-rating-value { font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: #dce7cf; }
+.game-rating-row .game-rating-range { margin-top: 4px; font-size: 10px; font-weight: 400; line-height: 1.35; font-variant-numeric: tabular-nums; white-space: normal; overflow-wrap: anywhere; }
+.game-rating-bounds { display: block; white-space: nowrap; }
 .game-performance-table .phase-badge { width: 22px; height: 22px; }
 .phase-unavailable { color: #8d9184; }
 .game-performance-note { margin-top: 7px; color: var(--muted); font-size: 10px; line-height: 1.5; }

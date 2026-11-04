@@ -54,6 +54,107 @@ const finishedResult = (options = {}) => analyzeGame(completedPgn, { smartAnalys
 
 const pageExportPgn = '[Event "Live Chess"]\n[Site "Chess.com"]\n[White "Alice"]\n[Black "Bob"]\n[Result "1-0"]\n[Link "https://www.chess.com/game/live/123"]\n\n1. e4 e5 1-0';
 const importPageGame = (broker, pgn = pageExportPgn, sender = content('https://www.chess.com/game/123')) => broker.handle({ type: 'meowl:site-game-import', pgn }, sender);
+const oneMoveDrawPgn = pageExportPgn.replaceAll('1-0', '1/2-1/2').replace('1. e4 e5', '1. e4');
+const abortedPgn = oneMoveDrawPgn.replace('[Link ', '[Termination "Game aborted"]\n[Link ');
+
+test('an explicit validated page abort stops retrieval without creating an analysis job', async () => {
+  let tokens = 0, fetches = 0;
+  const fixture = setup({ makeToken: () => { tokens++; throw new Error('No analysis token for aborts'); }, fetchGames: async () => { fetches++; return []; } });
+  const unavailable = await importPageGame(fixture.broker, abortedPgn);
+  assert.deepEqual(unavailable, { status: 'unavailable', reason: 'aborted', gameUrl: game().url,
+    message: 'Chess.com marked this game as aborted. There is no completed game to review.' });
+  assert.equal(tokens, 0);
+  assert.deepEqual(await fixture.check(content(game().url), { manualRetry: true }), unavailable);
+  assert.deepEqual(await fixture.check(content('https://www.chess.com/analysis/game/live/123/review?move=0')), unavailable);
+  assert.equal(fetches, 0);
+});
+
+test('short agreed draws remain reviewable; only explicit termination tags mark an abort', async () => {
+  for (const pgn of [oneMoveDrawPgn, oneMoveDrawPgn.replace('[Link ', '[Termination "Game drawn by agreement"]\n[Link '), oneMoveDrawPgn.replace('1. e4', '1. e4 {Game aborted}')]) {
+    const fixture = setup();
+    assert.equal(completedPageGame(pgn, game().url, 'alice').aborted, undefined);
+    assert.equal((await importPageGame(fixture.broker, pgn)).status, 'ready');
+  }
+  for (const reason of ['Game aborted', ' aborted ', 'GAME ABORTED.']) {
+    assert.equal(completedPageGame(abortedPgn.replace('Game aborted', reason), game().url, 'alice').aborted, true);
+  }
+});
+
+test('an abort marker cannot bypass legal moves, exact link, configured player, or unique headers', async () => {
+  for (const pgn of [
+    abortedPgn.replace('1. e4', '1. e5'), abortedPgn.replace('/live/123', '/live/999'), abortedPgn.replace('[White "Alice"]', '[White "Someone"]'),
+    abortedPgn.replace('[Termination ', '[Termination "Game drawn by agreement"]\n[Termination '), abortedPgn.replace(/1\/2-1\/2$/, '*'),
+  ]) {
+    const fixture = setup({ fetchGames: async () => [] });
+    assert.equal((await importPageGame(fixture.broker, pgn)).status, 'error');
+    assert.equal((await fixture.check(content(game().url))).status, 'waiting');
+  }
+});
+
+test('a validated abort retires an earlier selected export and its iframe access', async () => {
+  const fixture = setup();
+  const selected = await importPageGame(fixture.broker, oneMoveDrawPgn);
+  assert.equal((await importPageGame(fixture.broker, abortedPgn)).status, 'unavailable');
+  assert.equal((await fixture.broker.handle({ type: 'meowl:site-payload', token: selected.token }, frame(game().url))).status, 'expired');
+  assert.equal((await fixture.check(content(game().url))).status, 'unavailable');
+});
+
+test('an abort export wins over an archive check already in flight', async () => {
+  let finish;
+  const fixture = setup({ fetchGames: () => new Promise(resolve => { finish = resolve; }) });
+  const pending = fixture.check(content(game().url));
+  while (!finish) await new Promise(resolve => setImmediate(resolve));
+  const stopped = await importPageGame(fixture.broker, abortedPgn);
+  finish([game()]);
+  assert.deepEqual(await pending, stopped);
+});
+
+test('aborted exports stay unavailable across worker restarts without blocking profiles or new games', async () => {
+  let snapshot;
+  const session = { readSession: async () => structuredClone(snapshot), writeSession: async value => { snapshot = structuredClone(value); }, fetchGames: async () => [game('999')] };
+  const first = setup(session);
+  await importPageGame(first.broker, abortedPgn);
+  assert.equal(snapshot.jobs.length, 0); assert.equal(snapshot.unavailable.length, 1);
+  const second = setup(session);
+  assert.equal((await second.check(content(game().url))).status, 'unavailable');
+  const profile = await second.check(content('https://www.chess.com/member/alice'));
+  assert.equal(profile.status, 'ready'); assert.equal(profile.gameUrl, game('999').url);
+  const next = await second.check(content(game('999').url));
+  assert.equal(next.status, 'ready'); assert.equal(next.gameUrl, game('999').url);
+});
+
+test('session restoration retires aborted export jobs created by older versions', async () => {
+  let snapshot;
+  const first = setup({ writeSession: async value => { snapshot = structuredClone(value); } });
+  const old = await importPageGame(first.broker, oneMoveDrawPgn);
+  snapshot.jobs[0].game.pgn = abortedPgn;
+  delete snapshot.unavailable;
+  const next = setup({ readSession: async () => structuredClone(snapshot), fetchGames: async () => { throw new Error('No new archive request'); } });
+  assert.equal((await next.check(content(game().url))).status, 'unavailable');
+  assert.equal((await next.broker.handle({ type: 'meowl:site-payload', token: old.token }, frame(game().url))).status, 'expired');
+});
+
+test('restored unavailable exports must still validate termination and exact configured identity', async () => {
+  let snapshot;
+  const first = setup({ writeSession: async value => { snapshot = structuredClone(value); } });
+  await importPageGame(first.broker, abortedPgn);
+  for (const mutate of [
+    item => { item.game.pgn = oneMoveDrawPgn; },
+    item => { item.game.pgn = abortedPgn.replace('/live/123', '/live/999'); },
+    item => { item.game.pgn = abortedPgn.replace('[White "Alice"]', '[White "Someone"]'); },
+    item => { item.username = 'bob'; }, item => { item.game.end_time = Date.now() / 1000 + 300; },
+  ]) {
+    const changed = structuredClone(snapshot); mutate(changed.unavailable[0]);
+    const next = setup({ readSession: async () => changed, fetchGames: async () => [] });
+    assert.equal((await next.check(content(game().url))).status, 'waiting');
+  }
+});
+
+test('archive entries with explicit aborted termination cannot authorize a page review', () => {
+  const draw = pgn => game('123', { pgn, white: { username: 'Alice', result: 'agreed' }, black: { username: 'Bob', result: 'agreed' } });
+  assert.equal(completedSiteGames([draw(oneMoveDrawPgn)], 'chesscom', 'alice').length, 1);
+  assert.deepEqual(completedSiteGames([draw(abortedPgn)], 'chesscom', 'alice'), []);
+});
 
 test('an exact completed page export starts without an archive and retains its canonical identity', async () => {
   const { broker, state, check } = setup({ fetchGames: async () => { throw new Error('The archive must not be used.'); } });
@@ -798,6 +899,75 @@ test('panel state authenticates the content document, generation, token, tab, an
   assert.equal((await broker.handle({ type: 'meowl:site-payload', token: selected.token }, { ...frame(), documentId: 'frame-b' })).status, 'ready');
   state.settings.siteReviewSettings.chesscom.enabled = false;
   assert.equal((await broker.handle(update, sender)).status, 'expired');
+});
+
+test('loading notices for same-document navigation do not retire a healthy review frame', async () => {
+  const { broker, check, state } = setup();
+  let url = page;
+  const parent = () => ({ ...content(url), documentId: 'document-a', documentLifecycle: 'active' });
+  const child = () => ({ ...frame(url), documentId: 'frame-a', documentLifecycle: 'active' });
+  const selected = await check(parent()), request = { type: 'meowl:site-payload', token: selected.token };
+  assert.equal((await broker.handle(request, child())).status, 'ready');
+  for (const destination of ['https://www.chess.com/member/alice', 'https://www.chess.com/play/online', 'https://www.chess.com/play/online']) {
+    url = destination; broker.pageChanged(5, url); broker.documentChanged(5);
+    assert.equal((await broker.handle(request, child())).status, 'expired', 'Loading is gated until the active top document checks in.');
+    const renewed = await check(parent());
+    assert.equal(renewed.token, selected.token);
+    assert.equal(renewed.panelGeneration, selected.panelGeneration, 'The same browser document keeps its frame generation.');
+    assert.equal((await broker.handle(request, child())).status, 'ready', 'The original iframe remains authorized.');
+  }
+  assert.equal(state.calls.length, 1, 'Same-document navigation reuses the completed game.');
+});
+
+test('a same-document loading handshake preserves an in-flight save; a replacement document cancels it', async () => {
+  for (const replacement of [false, true]) {
+    let release, writes = 0;
+    const { broker, check } = setup({ saveReview: async (job, result, assertActive) => {
+      await new Promise(resolve => { release = resolve; }); await assertActive(); writes++; return { id: 'saved' };
+    } });
+    const selected = await check({ ...content(), documentId: 'document-a' });
+    const actor = { ...frame(), documentId: 'frame-a' };
+    const pending = broker.handle({ type: 'meowl:site-save-review', token: selected.token, result: {} }, actor);
+    while (!release) await new Promise(resolve => setImmediate(resolve));
+    const destination = 'https://www.chess.com/member/alice';
+    broker.pageChanged(5, destination); broker.documentChanged(5);
+    actor.tab.url = destination;
+    const renewed = await check({ ...content(destination), documentId: replacement ? 'document-b' : 'document-a' });
+    assert.equal(renewed.panelGeneration, selected.panelGeneration + Number(replacement));
+    release();
+    assert.equal((await pending).status, replacement ? 'error' : 'saved');
+    assert.equal(writes, Number(!replacement));
+    if (replacement) assert.equal((await check({ ...content(destination), documentId: 'document-a' })).status, 'expired');
+  }
+});
+
+test('loading without a confirmed top document identity conservatively replaces its iframe', async () => {
+  const { broker, check } = setup();
+  const selected = await check();
+  const request = { type: 'meowl:site-payload', token: selected.token };
+  assert.equal((await broker.handle(request, { ...frame(), documentId: 'frame-a' })).status, 'ready');
+  broker.documentChanged(5);
+  const renewed = await check();
+  assert.equal(renewed.panelGeneration, selected.panelGeneration + 1);
+  assert.equal((await broker.handle(request, { ...frame(), documentId: 'frame-a' })).status, 'expired');
+  assert.equal((await broker.handle(request, { ...frame(), documentId: 'frame-b' })).status, 'ready');
+});
+
+test('worker suspension during same-document loading retains the original frame after reauthorization', async () => {
+  let snapshot;
+  const persistence = { readSession: async () => structuredClone(snapshot), writeSession: async value => { snapshot = structuredClone(value); } };
+  const parent = { ...content(), documentId: 'document-a' }, child = { ...frame(), documentId: 'frame-a' };
+  const first = setup(persistence), selected = await first.check(parent);
+  const request = { type: 'meowl:site-payload', token: selected.token };
+  assert.equal((await first.broker.handle(request, child)).status, 'ready');
+  first.broker.documentChanged(5);
+  assert.equal((await first.broker.handle(request, child)).status, 'expired');
+  assert.equal(snapshot.jobs[0].documentPending, true);
+  const resumed = setup(persistence);
+  const renewed = await resumed.check(parent);
+  assert.equal(renewed.token, selected.token); assert.equal(renewed.panelGeneration, selected.panelGeneration);
+  assert.equal((await resumed.broker.handle(request, child)).status, 'ready');
+  assert.equal(resumed.state.calls.length, 0);
 });
 
 test('full navigation retains state but rejects old document writes and retired iframe access', async () => {

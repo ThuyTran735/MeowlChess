@@ -21,6 +21,7 @@ const TOKEN = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{
 const PANEL_STATES = new Set(['open', 'collapsed', 'closed']);
 const documentId = sender => typeof sender?.documentId === 'string' && /^[a-zA-Z0-9-]{1,128}$/.test(sender.documentId) ? sender.documentId : null;
 const activeDocument = sender => sender?.documentLifecycle === undefined || sender.documentLifecycle === 'active';
+const abortedTermination = value => typeof value === 'string' && /^(?:game\s+)?aborted[.!]?$/i.test(value.trim());
 
 export function normalizeSiteSettings(value) {
   return Object.fromEntries(Object.entries(SITE_PROVIDERS).map(([source, provider]) => {
@@ -84,9 +85,11 @@ export function completedPageGame(pgn, canonicalGameUrl, username, timestamp = D
     throw new Error('This completed game does not belong to the configured Chess.com player.');
   }
   if (!['1-0', '0-1', '1/2-1/2'].includes(result)) throw new Error('This export must contain one final game result.');
+  if (tags.get('Termination')?.length > 1) throw new Error('This export contains conflicting game termination details.');
   const endTime = game.end_time || Math.floor(timestamp / 1000);
   if (!Number.isFinite(endTime) || endTime <= 0 || endTime * 1000 > Date.now()) throw new Error('This finished game has an invalid date.');
   return { ...game, source: 'chesscom', url: canonicalGameUrl, imported: true, provenance: 'page-export', end_time: endTime,
+    ...(abortedTermination(one('Termination')) ? { aborted: true } : {}),
     white: { ...game.white, username: white, result: result === '1-0' ? 'win' : result === '0-1' ? 'lose' : 'draw' },
     black: { ...game.black, username: black, result: result === '0-1' ? 'win' : result === '1-0' ? 'lose' : 'draw' } };
 }
@@ -159,7 +162,8 @@ export function completedSiteGames(games, source, username, now = Date.now()) {
     if (!url || providerForUrl(url) !== source || gameUrlForPage(url) !== url) continue;
     if (source === 'chesscom' && !isCompletedGame(game)) continue;
     try {
-      const { pgn } = parseCompletedPgn(game.pgn);
+      const { pgn, parsed } = parseCompletedPgn(game.pgn);
+      if (abortedTermination(parsed.headers.Termination)) continue;
       accepted.set(url, { ...game, url, pgn });
     } catch { /* An incomplete or illegal archive game cannot authorize engine analysis. */ }
   }
@@ -212,11 +216,21 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
   const sourceEpochs = new Map();
   const botImports = new Map();
   const gameImports = new Map();
+  const unavailableGames = new Map();
   let generation = 0;
   let restorePromise, restored = false, persistence = Promise.resolve();
 
   const disabled = () => ({ status: 'disabled', message: 'Turn on page reviews in MeowlChess settings.' });
   const expired = () => ({ status: 'expired', message: 'This review has expired. Open the dropdown again.' });
+  const unavailableKey = (username, url) => `${username}:${url}`;
+  const unavailable = game => ({ status: 'unavailable', reason: 'aborted', gameUrl: game.url,
+    message: 'Chess.com marked this game as aborted. There is no completed game to review.' });
+
+  function rememberUnavailable(username, game) {
+    unavailableGames.set(unavailableKey(username, game.url), { username, game });
+    while (unavailableGames.size > 20) unavailableGames.delete(unavailableGames.keys().next().value);
+    for (const [token, job] of jobs) if (job.source === 'chesscom' && job.game.url === game.url) jobs.delete(token);
+  }
 
   function prune() {
     // Selection and panel state live for the tab/session; only iframe access has
@@ -256,7 +270,7 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
   // Keep even the older 1 MiB session quota in mind; active job handles take priority.
   function saveSession() {
     if (!restored || !writeSession) return Promise.resolve();
-    const snapshot = { version: 1, jobs: [], cache: [] };
+    const snapshot = { version: 1, jobs: [], cache: [], unavailable: [] };
     const bytes = value => new TextEncoder().encode(JSON.stringify(value)).byteLength;
     let size = bytes(snapshot);
     const add = (collection, value) => {
@@ -265,6 +279,7 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
       collection.push(value); size += length;
     };
     for (const job of [...jobs.values()].reverse().sort((a, b) => b.expiresAt - a.expiresAt).slice(0, MAX_JOBS)) add(snapshot.jobs, job);
+    for (const entry of unavailableGames.values()) add(snapshot.unavailable, entry);
     for (const [key, entry] of cache) {
       if (!entry.pending && entry.expiresAt > now() && entry.value) add(snapshot.cache, { key, expiresAt: entry.expiresAt, value: entry.value,
         ...(Number.isFinite(entry.completionRefreshAt) ? { completionRefreshAt: entry.completionRefreshAt } : {}),
@@ -336,8 +351,20 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
           if (!canCarryJob(job, pageAtOrigin(currentPage, tabOrigins.get(job.tabId))) || tabOrigins.get(job.tabId) !== job.parentOrigin) continue;
           job.pageKey = currentPage;
         } else if ((tabEpochs.get(job.tabId) || 0) !== (startedTabs.get(job.tabId) || 0)) continue;
+        // Older versions accepted aborted exports as completed draws. Retire
+        // their handles instead of restoring or re-analyzing those selections.
+        if (game.aborted) { rememberUnavailable(config.username, game); continue; }
         if (pendingDocuments.has(job.tabId)) suspendDocument(job);
         jobs.set(job.token, job); tabPages.set(job.tabId, job.pageKey); tabOrigins.set(job.tabId, job.parentOrigin);
+      }
+      for (const item of (Array.isArray(snapshot.unavailable) ? snapshot.unavailable : []).slice(0, 20)) {
+        const config = configurations.get('chesscom');
+        if (!config || item?.username !== config.username || item.game?.source !== 'chesscom' || item.game.provenance !== 'page-export' || item.game.imported !== true) continue;
+        if (!Number.isFinite(item.game.end_time) || item.game.end_time <= 0 || item.game.end_time * 1000 > now()) continue;
+        try {
+          const game = completedPageGame(item.game.pgn, item.game.url, config.username, item.game.end_time * 1000);
+          if (game.aborted) rememberUnavailable(config.username, game);
+        } catch { /* Only a validated exact-page abort may stop archive retries. */ }
       }
       for (const item of snapshot.cache.slice(0, 20)) {
         if (typeof item?.key !== 'string') continue;
@@ -421,8 +448,9 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
   function suspendDocument(job) {
     if (job.documentPending) return;
     job.documentPending = true;
-    job.panelGeneration++;
-    retireFrame(job);
+    // tabs.onUpdated reports "loading" for history.pushState too. Gate access
+    // until the top document checks in, but only retire its iframe when the
+    // browser actually identifies a replacement document.
   }
 
   function claimDocument(job, sender) {
@@ -430,12 +458,14 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
     // A bfcache return may reuse a formerly active document, but an old document
     // cannot claim the current panel after its replacement has checked in.
     if (id && job.retiredDocuments?.includes(id) && !job.documentPending) return false;
-    if (id && job.documentId && id !== job.documentId) {
+    const replacement = id && job.documentId && id !== job.documentId;
+    const unknownReplacement = job.documentPending && (!id || !job.documentId);
+    if (replacement) {
       job.retiredDocuments = [...(job.retiredDocuments || []), job.documentId].slice(-8);
-      if (!job.documentPending) {
-        job.panelGeneration++; retireFrame(job);
-        tabEpochs.set(job.tabId, (tabEpochs.get(job.tabId) || 0) + 1);
-      }
+    }
+    if (replacement || unknownReplacement) {
+      job.panelGeneration++; retireFrame(job);
+      if (!job.documentPending) tabEpochs.set(job.tabId, (tabEpochs.get(job.tabId) || 0) + 1);
     }
     if (id) {
       job.documentId = id;
@@ -479,6 +509,9 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
     const refreshCompleted = source === 'chesscom' && message.refreshCompleted === true;
     const manualRetry = message.manualRetry === true;
     const retryAfterMs = refreshCompleted ? COMPLETION_RETRY_MS : SITE_PROVIDERS[source].retryAfterMs;
+    const currentGame = gameUrlForPage(context.pageKey);
+    const stopped = source === 'chesscom' && currentGame && unavailableGames.get(unavailableKey(config.username, currentGame));
+    if (stopped) return unavailable(stopped.game);
     const retained = tabJob(tabId);
     if (retained && retained.configKey === config.key && canCarryJob(retained, sender.tab.url)) {
       if (message.fresh === true && !ownsPanel(context, sender, message, retained)) return expired();
@@ -501,10 +534,11 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
       status: 'waiting', source, retryAfterMs,
       message: 'This game link could not be recognized. Open its full game link or import the finished PGN.',
     };
-    const currentGame = gameUrlForPage(context.pageKey);
     const data = await archive(source, config.username, currentGame, refreshCompleted, manualRetry);
     const current = await configuration(source);
     if (!current || current.key !== config.key || startedGeneration !== generation || (tabEpochs.get(tabId) || 0) !== epoch || (sourceEpochs.get(source) || 0) !== sourceEpoch) return disabled();
+    const stoppedWhileLoading = source === 'chesscom' && currentGame && unavailableGames.get(unavailableKey(config.username, currentGame));
+    if (stoppedWhileLoading) return unavailable(stoppedWhileLoading.game);
     if (data.error) return { status: 'error', source, message: data.error, retryAfterMs: SITE_PROVIDERS[source].retryAfterMs };
     const game = currentGame ? data.games.find(item => item.url === currentGame) : data.games[0];
     if (!game) return {
@@ -569,6 +603,8 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
     const game = completedPageGame(pgn, target, config.username, now());
     const current = await configuration(source);
     if (!current || current.key !== config.key || startedGeneration !== generation || (tabEpochs.get(tabId) || 0) !== epoch || (sourceEpochs.get(source) || 0) !== sourceEpoch || gameImports.get(tabId) !== revision) return disabled();
+    if (game.aborted) { rememberUnavailable(config.username, game); return unavailable(game); }
+    unavailableGames.delete(unavailableKey(config.username, target));
     prune();
     let job = [...jobs.values()].find(item => item.kind !== 'bot' && item.tabId === tabId && item.parentOrigin === context.parentOrigin && item.game.url === target && item.configKey === config.key);
     if (!job) {
@@ -609,6 +645,7 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
       generation++;
       jobs.clear();
       cache.clear();
+      unavailableGames.clear();
       pendingDocuments.clear();
     }
     void saveSession();
@@ -644,6 +681,7 @@ export function createSiteReviewBroker({ extensionId, extensionUrl, readSettings
     sourceEpochs.set(source, (sourceEpochs.get(source) || 0) + 1);
     for (const [token, job] of jobs) if (job.source === source) jobs.delete(token);
     for (const key of cache.keys()) if (key.startsWith(`${source}:`)) cache.delete(key);
+    if (source === 'chesscom') unavailableGames.clear();
     void saveSession();
   }
 

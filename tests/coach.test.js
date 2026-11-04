@@ -34,7 +34,7 @@ test('coach profiles are distinct and only change presentation of the same facts
   for (const answer of answers) {
     assert.match(answer.text, /White won/);
     assert.match(answer.text, /2\. Nf3/);
-    assert.deepEqual(answer.moves, [{ ply: 3, label: '2. Nf3' }]);
+    assert.deepEqual(answer.moves, [{ ply: 3, label: '2. Nf3', notation: [{ start: 3, end: 6, san: 'Nf3', color: 'w' }] }]);
   }
   assert.equal(answerCoach({ ...input, question: 'Summarize this game', coach: 'missing' }).text, answers[0].text);
 });
@@ -112,7 +112,7 @@ test('custom black-to-move starting positions use FEN move numbers rather than p
   const input = fixture('[SetUp "1"]\n[FEN "4k3/7p/8/8/8/8/P7/R3K3 b Q - 0 42"]\n[Result "1/2-1/2"]\n\n42... Kf7 43. a4 1/2-1/2');
   const answer = answerCoach({ ...input, question: 'Explain 42...Kf7' });
   assert.equal(answer.subjectPly, 1);
-  assert.deepEqual(answer.moves, [{ ply: 1, label: '42... Kf7' }]);
+  assert.deepEqual(answer.moves, [{ ply: 1, label: '42... Kf7', notation: [{ start: 6, end: 9, san: 'Kf7', color: 'b' }] }]);
   assert.match(answerCoach({ ...input, question: 'What opening is this?' }).text, /does not identify/);
   assert.match(answerCoach({ ...input, question: 'How was the endgame?' }).text, /Endgame: White Best across 1 move; Black Best across 1 move/);
 });
@@ -419,7 +419,7 @@ test('next key moment follows the reviewed timeline and selected side without wr
     const answer = answerCoach({ ...input, question, ply: 2, perspective: 'b' });
     assert.equal(answer.subjectPly, 4, question);
     assert.equal(answer.label, 'Great', question);
-    assert.deepEqual(answer.moves, [{ ply: 4, label: '2... Nc6' }]);
+    assert.deepEqual(answer.moves, [{ ply: 4, label: '2... Nc6', notation: [{ start: 5, end: 8, san: 'Nc6', color: 'b' }] }]);
   }
   const later = answerCoach({ ...input, question: 'Next key moment', ply: 4, perspective: 'w' });
   assert.equal(later.subjectPly, 13);
@@ -428,7 +428,7 @@ test('next key moment follows the reviewed timeline and selected side without wr
   const last = answerCoach({ ...input, question: 'Next key moment', ply: 18, perspective: 'b' });
   assert.equal(last.subjectPly, undefined);
   assert.match(last.text, /last recorded key moment/);
-  assert.deepEqual(last.moves, [{ ply: 2, label: '1... e5' }]);
+  assert.deepEqual(last.moves, [{ ply: 2, label: '1... e5', notation: [{ start: 5, end: 7, san: 'e5', color: 'b' }] }]);
   const none = answerCoach({ ...fixture(), question: 'Next key moment' });
   assert.deepEqual(none.moves, []);
   assert.match(none.text, /There are no moves rated/);
@@ -467,7 +467,7 @@ test('walkthrough offers an evidence-linked question and the next matching key m
   const input = ratingFixture();
   const start = describeCoachMove({ ...input, ply: 1, perspective: 'w' });
   assert.equal(start.suggestion, 'Why was 1. e4 rated Brilliant?');
-  assert.deepEqual(start.nextMoment, { ply: 3, label: '2. Nf3', rating: 'Great' });
+  assert.deepEqual(start.nextMoment, { ply: 3, label: '2. Nf3', rating: 'Great', notation: [{ start: 3, end: 6, san: 'Nf3', color: 'w' }] });
   input.result.positions[2].bestMove = 'f1c4';
   input.result.positions[2].pv = ['f1c4'];
   assert.equal(describeCoachMove({ ...input, ply: 3 }).suggestion, 'What was better than 2. Nf3?');
@@ -499,7 +499,7 @@ test('personality changes coaching method and structure without changing chess e
   for (const question of ['Why was 2. Nf3 a mistake?', 'Explain this position', 'Next key moment', 'Show mistakes', 'How were the phases?', 'What opening is this?']) {
     const answers = COACHES.map(coach => answerCoach({ ...input, question, coach: coach.id, ply: question === 'Next key moment' ? 0 : 3 }));
     assert.equal(new Set(answers.map(answer => answer.text)).size, COACHES.length, question);
-    const facts = ({ text, ...value }) => value;
+    const facts = ({ text, notation, ...value }) => ({ ...value, notation: notation.map(({ san, color }) => ({ san, color })) });
     for (const answer of answers) assert.deepEqual(facts(answer), facts(answers[0]), question);
     if (question.startsWith('Why')) for (const answer of answers) {
       assert.match(answer.text, /2\. Nf3 is rated Mistake/);

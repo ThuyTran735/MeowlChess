@@ -49,12 +49,13 @@
   const lichessRoutes = new Set(['analysis', 'training', 'practice', 'features', 'insights', 'streamer', 'password', 'bookmark', 'timeline', 'settings', 'checkout', 'registration']);
   let enabled = false, username = '', generation = 0, checking = false, timer, routeTimer, observer, debounce;
   let route = pageKey(), host, shadow, body, frame, message, stageLabel, bar, launcher, token = null, gameUrl = null;
+  let framePanelGeneration = null, reconnecting = null, reconnectTimes = [];
   let selection = null, panelState = 'open', stateRevision = 0, stateWrite = Promise.resolve(), freshSelection = null;
   let dismissed = null, baseline = null, completedUrl = null, baselineKnown = false, hint = false, hintSince = 0, nextCheck = 0;
   let interval = source === 'chesscom' ? 60000 : 30000;
   let completionRefresh = null, completionAlerts = false;
-  let gameExportAttempts = 0, gameExportAttemptPgn = null, finishedPageUrl = null;
-  let gameExportIssue = null;
+  let gameExportAttempts = 0, finishedPageUrl = null;
+  let gameExportIssue = null, unavailableGame = null;
   let configurationRead = 0, settingsRevision = 0, alertsRevision = 0;
   let retryButton, retryTimer, manualRetryUntil = 0, manualRetryPending = false;
   let staleContext = false;
@@ -117,6 +118,7 @@
     host?.remove(); host = shadow = body = message = stageLabel = bar = retryButton = null;
     clearTimeout(retryTimer);
     token = gameUrl = null;
+    framePanelGeneration = null;
   }
   function clearLauncher() { launcher?.remove(); launcher = null; }
   function showLauncher(focus = false) {
@@ -320,26 +322,35 @@
   }
   async function tryFinishedGameExport(started, revision) {
     const target = specificGameUrl();
-    if (source !== 'chesscom' || !target || !bot?.requestGameExport ||
-        !(hint || finishedPageUrl === target)) return false;
+    if (source !== 'chesscom' || !target || !bot?.requestGameExport) return false;
     const active = () => enabled && !document.hidden && started === generation &&
       specificGameUrl() === target && !dismissed && !selection;
     if (!active()) return false;
     const available = bot.readGameExport();
-    // Try twice in case Chess.com's Share controls mount after its result notice.
-    // A manual retry permits another attempt; ordinary polling never loops dialogs.
+    // An export opened by the user is useful even after the result notice has
+    // gone. Opening one ourselves still requires a finished-game cue.
+    if (!available && !(hint || finishedPageUrl === target)) return false;
+    // Limit automatic dialog openings. Missing controls do not spend this
+    // budget, and a manual retry permits another attempt.
     if (!available && gameExportAttempts >= 2) return false;
-    if (!available) gameExportAttempts++;
-    gameExportIssue = null;
     try {
       waiting('Getting the finished game from Chess.com…');
-      const pgn = available || await bot.requestGameExport(active);
-      if (!active() || !pgn || pgn === gameExportAttemptPgn) return false;
-      gameExportAttemptPgn = pgn;
+      const pgn = available || await bot.requestGameExport(active, {
+        onAttempt: () => { if (active()) gameExportAttempts++; },
+        onOutcome: ({ status, reason }) => {
+          if (!active() || status === 'canceled') return;
+          if (status === 'ready') gameExportIssue = null;
+          else if (reason === 'controls') gameExportIssue = 'Waiting for Chess.com’s Share button. You can also open Share → PGN to load this game.';
+          else if (reason === 'unfinished') gameExportIssue = 'Chess.com’s export does not have a final result yet. Open Share → PGN after the game ends, then retry.';
+          else gameExportIssue = 'Could not load Chess.com’s PGN export. Open Share → PGN, then choose Retry loading.';
+        },
+      });
+      if (!active() || !pgn) return false;
       // The broker checks the complete legal PGN, configured player and exact
       // Link against the browser's current game URL before authorizing a review.
       const reply = await send('meowl:site-game-import', { pgn });
       if (!active()) return false;
+      if (acceptUnavailable(reply)) return true;
       if (reply?.status === 'error') {
         gameExportIssue = reply.message || 'The game export could not be read. Retrying the public archive…';
         return false;
@@ -348,9 +359,24 @@
       acceptReview(reply, revision);
       return true;
     } catch {
-      if (active()) gameExportIssue = 'The game export could not be read. Retrying the public archive…';
+      if (active()) gameExportIssue = 'Could not load the game export. Choose Retry loading to try again.';
       return false;
     }
+  }
+  function acceptUnavailable(reply) {
+    if (reply?.status !== 'unavailable' || reply.reason !== 'aborted' || reply.gameUrl !== specificGameUrl()) return false;
+    unavailableGame = reply; completionRefresh = null; clearTimeout(timer);
+    if (selection) forgetSelection();
+    if (frame) clearPanel();
+    if (dismissed) return true;
+    waiting('Chess.com marked this game as aborted. There is no completed game to review.', true);
+    if (!host) return true;
+    host.dataset.state = 'unavailable'; host.dataset.busy = 'false';
+    stageLabel.textContent = 'Aborted game';
+    for (const element of body.querySelectorAll('.loading-steps, progress, .retry-loading')) element.hidden = true;
+    body.querySelector('small').textContent = 'Your next completed game can be reviewed here.';
+    clearTimeout(retryTimer);
+    return true;
   }
   function waiting(text = 'Looking for this completed game.', error = false) {
     if (frame || dismissed) return;
@@ -398,16 +424,16 @@
     if (!enabled || document.hidden || started !== generation) return;
     if (fromFrame) clearPanel();
     manualRetryPending = true; nextCheck = 0;
-    gameExportAttempts = 0; gameExportAttemptPgn = null;
+    gameExportAttempts = 0;
     gameExportIssue = null;
     waiting('Checking for this completed game again…'); updateRetryButton();
     if (!checking) void check();
   }
   function showReview(reply) {
     if (!tokenPattern.test(reply.token) || typeof reply.gameUrl !== 'string') return;
-    if (token === reply.token && frame?.isConnected) return;
+    if (token === reply.token && framePanelGeneration === reply.panelGeneration && frame?.isConnected) return;
     const keepFocus = Boolean(shadow?.activeElement);
-    clearPanel(); token = reply.token; gameUrl = reply.gameUrl;
+    clearPanel(); token = reply.token; gameUrl = reply.gameUrl; framePanelGeneration = reply.panelGeneration;
     ensurePanel(); host.dataset.state = 'review'; host.dataset.busy = 'true';
     frame = document.createElement('iframe'); frame.title = 'MeowlChess review progress and summary'; frame.referrerPolicy = 'origin';
     frame.src = chrome.runtime.getURL('site-summary.html') + '#' + token; frame.style.height = '270px'; body.replaceChildren(frame);
@@ -423,6 +449,34 @@
       dismissed = reply.gameUrl; clearPanel(); showLauncher(); return;
     }
     dismissed = null; showReview(reply); collapsed(panelState === 'collapsed');
+  }
+  async function reconnectFrame(data) {
+    if (!tokenPattern.test(data.requestId || '') || !frame || !selection) return;
+    const request = { frame, token, requestId: data.requestId };
+    const replyToFrame = connected => {
+      if (frame !== request.frame || token !== request.token) return;
+      request.frame.contentWindow?.postMessage({ type: 'meowl:site-frame-reconnected', token: request.token, requestId: request.requestId, connected }, extensionOrigin);
+    };
+    // A stale frame can renew only the already selected game, through its
+    // current top-level document. Never fall back to a different latest game.
+    const started = generation, revision = stateRevision, selectedUrl = selection.gameUrl;
+    const active = () => !staleContext && enabled && !document.hidden && !dismissed && started === generation &&
+      frame === request.frame && token === request.token && selection?.gameUrl === selectedUrl;
+    reconnectTimes = reconnectTimes.filter(time => time > Date.now() - 60000);
+    if (!active() || reconnecting || reconnectTimes.length >= 2) { replyToFrame(false); return; }
+    reconnectTimes.push(Date.now()); reconnecting = request;
+    try {
+      await stateWrite;
+      if (!active()) return;
+      const reply = await send('meowl:site-check');
+      if (!active()) return;
+      if (reply?.status !== 'ready' || reply.gameUrl !== selectedUrl || reply.source !== source) { replyToFrame(false); return; }
+      acceptReview(reply, revision);
+      // A changed document generation replaces the iframe and starts a fresh
+      // handshake. Otherwise keep its completed analysis and retry its request.
+      replyToFrame(true);
+    } catch { replyToFrame(false); }
+    finally { if (reconnecting === request) reconnecting = null; }
   }
   function specificGameUrl() {
     const current = pageKey();
@@ -477,8 +531,10 @@
     const current = pageKey();
     if (current !== route) {
       generation++; route = current; nextCheck = 0; completionRefresh = null; resetRetry();
-      gameExportAttempts = 0; gameExportAttemptPgn = null; finishedPageUrl = null;
-      gameExportIssue = null;
+      reconnectTimes = [];
+      gameExportAttempts = 0; finishedPageUrl = null;
+      gameExportIssue = null; unavailableGame = null;
+      if (host?.dataset.state === 'unavailable') clearPanel();
       const target = specificGameUrl();
       if (target && target !== selection?.gameUrl) {
         forgetSelection(); clearPanel(); clearLauncher(); dismissed = null;
@@ -517,10 +573,12 @@
   }
   function schedule() {
     clearTimeout(timer);
+    if (unavailableGame?.gameUrl === specificGameUrl()) return;
     if (!staleContext && enabled && !document.hidden && (!dismissed || selection)) timer = setTimeout(() => { void check(); }, Math.max(1000, nextCheck - Date.now()));
   }
   async function check() {
     if (staleContext || !enabled || document.hidden || checking || botSubmitting || (dismissed && !selection)) return;
+    if (unavailableGame?.gameUrl === specificGameUrl()) { acceptUnavailable(unavailableGame); return; }
     if (Date.now() < nextCheck) { schedule(); return; }
     if (completionRefresh && completionRefresh.until <= Date.now()) completionRefresh = null;
     checking = true; const started = generation, revision = stateRevision, fresh = freshSelection, completion = completionRefresh, manualRetry = manualRetryPending;
@@ -551,6 +609,7 @@
       if (freshSelection === fresh) freshSelection = null;
       interval = Math.max(15000, Math.min(300000, Number(reply?.retryAfterMs) || interval)); nextCheck = Date.now() + interval;
       if (reply?.status === 'disabled') { selection = null; clearPanel(); clearLauncher(); return; }
+      if (acceptUnavailable(reply)) return;
       if (reply?.status === 'bot') {
         if (selection) { selection = null; panelState = 'open'; dismissed = null; clearPanel(); clearLauncher(); }
         // Keep a small header available even if the site's end-notice layout changes.
@@ -602,14 +661,15 @@
   function stop(preserve = false) {
     if (!preserve) forgetSelection();
     resetRetry(); completionRefresh = null; enabled = false; generation++; clearTimeout(timer); clearTimeout(debounce); clearInterval(routeTimer); observer?.disconnect(); observer = null; clearPanel(); clearLauncher();
+    reconnecting = null; reconnectTimes = [];
   }
   function configure(raw) {
     if (staleContext) return;
     const config = raw?.[source], name = typeof config?.username === 'string' ? config.username.trim().toLowerCase() : '';
     if (config?.enabled === true && enabled && name === username) return;
     stop(); username = name;
-    gameExportAttempts = 0; gameExportAttemptPgn = null; finishedPageUrl = null;
-    gameExportIssue = null;
+    gameExportAttempts = 0; finishedPageUrl = null;
+    gameExportIssue = null; unavailableGame = null;
     if (config?.enabled !== true || !new RegExp(`^[a-z0-9_-]{2,${source === 'lichess' ? 30 : 50}}$`).test(name)) return;
     enabled = true; route = pageKey(); dismissed = baseline = completedUrl = null; baselineKnown = false; hint = finishedHint(); hintSince = hint ? Date.now() : 0; nextCheck = 0; botAttemptPgn = botSavedPgn = null; botExportAttempted = false;
     if (hint) refreshFinishedGame();
@@ -619,6 +679,7 @@
   }
   window.addEventListener('message', event => {
     if (!event.isTrusted || event.origin !== extensionOrigin || !frame || event.source !== frame.contentWindow || event.data?.token !== token) return;
+    if (event.data.type === 'meowl:site-frame-reconnect') { void reconnectFrame(event.data); return; }
     if (event.data.type === 'meowl:site-frame-drag') {
       const data = event.data;
       if (![data.clientX, data.clientY, data.viewportWidth, data.viewportHeight].every(Number.isFinite) || data.viewportWidth <= 0 || data.viewportHeight <= 0) return;

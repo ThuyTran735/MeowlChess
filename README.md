@@ -13,7 +13,7 @@
   </p>
 </div>
 
-**Version 1.12.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.12.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
+**Version 1.13.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.13.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
 
 > Your game, explained. Follow the turning points, explore engine suggestions, and study with an animated Meowl coach—all on your own device.
 
@@ -192,7 +192,7 @@ The panel shows each step clearly:
 
 **Finding game → Analyzing → Saving → Summary**
 
-If loading is waiting or fails, select **Retry loading** to check the current game again without refreshing the page. The button shows when another attempt is available; repeated clicks share the current request and respect the site's retry delay. An unfinished game cannot start a review; an unavailable completed game keeps waiting until its archive record or matching completed export is available. Failed or stopped summary frames also offer Retry loading.
+If loading is waiting or fails, select **Retry loading** to check the current game again without refreshing the page. The button shows when another attempt is available; repeated clicks share the current request and respect the site's retry delay. An unfinished game cannot start a review; an unavailable completed game keeps waiting until its archive record or matching completed export is available. Failed or stopped summary frames also offer Retry loading. Games explicitly marked aborted or canceled by the site show an unavailable message instead of waiting for an archive review. Returning to a completed-game panel can reconnect it without discarding the current summary.
 
 A current saved review goes straight to Summary without another engine run or saving stage. If you enable **Recheck highlights** after saving a review with those checks off, the panel can upgrade that review. New reviews use your saved engine settings, or **Fast / one line** until you save preferences. **Open full review** opens the saved game at move 0 on Summary.
 
@@ -244,7 +244,7 @@ Both engines are bundled. Switching engines downloads nothing. Lozza is a weaker
 
 **Recheck key mistakes** is on by default. It makes a quick first pass, then spends more time on the most important estimated losses or mate changes. Short searches and selective rechecks can still miss tactics.
 
-**Settings → Analysis → Recheck highlights** controls the separate, deeper checks for likely Brilliant and Great moves. It is on by default. Turn it off to save time in both the full review and on-site panel; normal move ratings still work, but shorter searches can miss standout moves. This choice is remembered and included in backups. Already-saved richer reviews reopen immediately; enabling highlights can upgrade an on-site review previously saved with those checks off.
+**Check standout moves** beside the review controls (also **Settings → Analysis → Recheck highlights**) controls the separate, deeper checks for likely Brilliant and Great moves. It is on by default. Turn it off to save time in both the full review and on-site panel; normal move ratings still work, but shorter searches can miss standout moves. This choice is remembered and included in backups. Already-saved richer reviews reopen immediately; enabling highlights can upgrade an on-site review previously saved with those checks off.
 
 <details>
 <summary><strong>Speeds and selective rechecks</strong></summary>
@@ -283,6 +283,8 @@ With Engine arrows enabled, the best suggestion follows the displayed board on e
 **Face my side** uses your entered or remembered username to put your pieces at the bottom. You can disable it or flip the board manually. Retry mode faces the player whose move is being retried. Display choices and playback speed are saved locally, and motion respects reduced-motion preferences.
 
 ## Ask your coach
+
+Moves mentioned in coach tips, chat replies, suggested lines, and move buttons use chess-piece symbols. Filled symbols identify White’s pieces; outlined symbols identify Black’s. Coach explanations also show a pawn for pawn moves and a king for castling. Captures, promotion pieces, and check or mate marks remain visible; hovering a move shows its original notation.
 
 **Explain moves automatically** is on by default. As you step through a completed review in Moves or Coach, one short comment follows the selected move without filling your chat. It follows **Focus on**, pauses during practice or variations, and skips past positions when you scrub quickly. Turn it off under **Coach settings**; animation and sound preferences remain separate.
 
@@ -339,16 +341,18 @@ Use a saved game's **×** button to delete its stored PGN, analysis, and bookmar
 
 Evaluations, move labels, and study scores are **MeowlChess estimates**. They do not reproduce Chess.com's proprietary accuracy or classification algorithms. A different engine or longer search can change the result. The graph and displayed evaluations use White's perspective; move counts are separated by player.
 
-The full review and on-site summary also show **Game rating** for each player and **Opening / Middlegame / Endgame** icons. The rating describes this game only, with an approximate value rounded to 50 points. Phase icons summarize each player's moves in that part of the game. Saved reviews gain these summaries without another engine run.
+The full review and on-site summary also show **Game rating** for each player and **Opening / Middlegame / Endgame** icons. The rating describes this game only, with an approximate value rounded to 50 points and a visible rough range. It is labeled **MeowlChess estimate** to distinguish it from Chess.com's own rating. Phase icons summarize each player's moves in that part of the game. Saved reviews gain the current estimates without another engine run.
 
 <details>
 <summary><strong>Game-rating estimates and phase icons</strong></summary>
 
-Game rating is an **experimental, uncalibrated MeowlChess study heuristic**, not an account rating, official Elo, or Chess.com's formula. The concept is similar to [single-game performance in Chess.com's Game Review](https://support.chess.com/en/articles/10773754-how-is-game-rating-calculated-in-game-review), but the numbers need not match. It has not been calibrated to Chess.com or Torch Human. Engine choice and search time can affect the result.
+Game rating is an **independent, experimental MeowlChess study estimate**, not an account rating, calibrated Elo, or Chess.com's formula. The concept is similar to [single-game performance in Chess.com's Game Review](https://support.chess.com/en/articles/10773754-how-is-game-rating-calculated-in-game-review), but the numbers need not match. Engine choice and search time can affect the result.
 
 Each player needs a **rating recorded in the PGN** and at least **8 eligible decisions**. Book moves, forced moves, and inconsequential moves in already decisive positions are excluded. Giving away a winning advantage or losing a forced mate still counts. Missing ratings or too few decisions display **—**. Custom starting positions are supported when enough decisions and a recorded rating are present.
 
-The estimate starts from that player's recorded rating, with an adjustment bounded to ±400 points and rounded to 50. Short reviews and shallow searches reduce the adjustment; hover the value for its baseline, decision count, and analysis coverage. Ratings retain their source's scale: a Lichess rating is not converted into a Chess.com rating. The reference loss, adjustment limit, and coverage rules are project choices, not a fitted prediction of human Elo. A clean game no longer implies master strength on its own.
+The estimate compares average winning-chance loss with a reference based on the player's recorded rating. Poor play can produce an estimate far below that rating; it is no longer held near the account rating by a fixed downward adjustment limit. A few reference decisions stabilize small samples, while upward adjustments remain cautious so a short, clean game does not imply master strength. The reference curve and safeguards are project choices, not a fitted prediction of human Elo. The recorded rating retains its source's scale: a Lichess rating is not converted into a Chess.com rating.
+
+The visible **range is a rough sensitivity guide, not a statistical confidence interval**. It reflects the number of reviewable decisions, variation in move losses, and analysis depth; shorter games and shallow searches widen it. Hover a value for its recorded rating, average winning-chance loss, decision count, and coverage. The full review, on-site panel, and shared summary image use the same estimate and range.
 
 Phases use the position **before** each move:
 

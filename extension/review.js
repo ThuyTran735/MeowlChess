@@ -19,7 +19,7 @@ import { importPgnCollection, importPgnFiles, PGN_IMPORT_MAX_BYTES } from './lib
 import { createTutorial } from './lib/tutorial.js';
 import { createSupportPrompt } from './lib/support-prompt.js';
 import { createMoveNotation } from './lib/move-notation.js';
-import { estimateGameRatings } from './lib/game-rating.js';
+import { estimateGameRatings, gameRatingDescription } from './lib/game-rating.js';
 import { getPhasePerformance } from './lib/game-performance.js';
 import { createSiteReviewSettings } from './lib/site-settings.js';
 import { createReviewLibrary, reviewIdForGame } from './lib/library.js';
@@ -287,6 +287,12 @@ function updateControls() {
   updateCoach();
   $('smart-analysis').disabled = unavailable;
   $('highlight-analysis').disabled = unavailable;
+  $('quick-highlight-analysis').disabled = unavailable;
+  $('quick-highlight-analysis').checked = $('highlight-analysis').checked;
+  $('standout-option-state').textContent = $('highlight-analysis').checked ? 'On' : 'Off';
+  $('standout-option-help').textContent = state.busy
+    ? 'This review uses the setting chosen at its start. Finish or cancel it to change this option.'
+    : $('highlight-analysis').checked ? 'Turn off to skip extra Brilliant/Great checks.' : 'Extra Brilliant/Great checks are off for your next review.';
   $('retry-move').disabled = !state.result || !state.ply || unavailable || !!state.study || !!state.retry;
   $('show-why').disabled = !state.result || !state.ply || unavailable || !!state.study || !!state.retry;
   $('bookmark-position').disabled = !state.reviewId || unavailable || !!state.study || !!state.retry;
@@ -523,14 +529,21 @@ function renderGamePerformance() {
   for (const text of ['This game', 'White', 'Black']) { const th = document.createElement('th'); th.scope = 'col'; th.textContent = text; head.append(th); }
   const body = table.createTBody(), ratingRow = body.insertRow(); ratingRow.className = 'game-rating-row';
   const ratingName = document.createElement('th'); ratingName.scope = 'row'; ratingName.textContent = 'Game rating';
-  const estimate = document.createElement('small'); estimate.textContent = 'experimental'; ratingName.append(estimate); ratingRow.append(ratingName);
+  const estimate = document.createElement('small'); estimate.textContent = 'MeowlChess estimate'; ratingName.append(estimate); ratingRow.append(ratingName);
   for (const color of ['w', 'b']) {
     const item = ratings[color], cell = ratingRow.insertCell();
     const value = document.createElement('strong'); value.className = 'game-rating-value'; value.dataset.color = color;
     value.textContent = item.rating === null ? '—' : `≈${item.rating.toLocaleString()}`;
-    value.title = item.rating === null ? item.reason : `Based on the recorded rating of ${item.baseline} and ${item.eligibleMoves} reviewable decisions. ${item.confidence === 'low' ? 'Limited' : 'Broader'} analysis coverage; a study estimate, not an account rating. Experimental: not calibrated to Chess.com or Torch Human.`;
-    value.setAttribute('aria-label', `${color === 'w' ? 'White' : 'Black'} game rating: ${item.rating === null ? item.reason : `approximately ${item.rating}`}`);
+    value.title = gameRatingDescription(item);
+    value.setAttribute('aria-label', `${color === 'w' ? 'White' : 'Black'} MeowlChess game estimate: ${item.rating === null ? item.reason : `approximately ${item.rating.toLocaleString()}, rough range ${item.range.low.toLocaleString()} to ${item.range.high.toLocaleString()}`}`);
     cell.append(value);
+    if (item.rating !== null) {
+      const range = document.createElement('small'); range.className = 'game-rating-range'; range.dataset.color = color;
+      range.textContent = 'Range ';
+      const bounds = document.createElement('span'); bounds.className = 'game-rating-bounds';
+      bounds.textContent = `${item.range.low.toLocaleString()}–${item.range.high.toLocaleString()}`; range.append(bounds);
+      range.setAttribute('aria-hidden', 'true'); cell.append(range);
+    }
   }
   for (const phase of phases) {
     const row = body.insertRow(); row.dataset.phase = phase.id;
@@ -1365,6 +1378,11 @@ $('move-sounds').addEventListener('change', () => {
   else moveSounds.stop();
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) moveSounds.stop(); });
+$('quick-highlight-analysis').addEventListener('change', () => {
+  if ($('highlight-analysis').disabled) { updateControls(); return; }
+  $('highlight-analysis').checked = $('quick-highlight-analysis').checked;
+  $('highlight-analysis').dispatchEvent(new Event('change', { bubbles: true }));
+});
 for (const id of ['engine', 'depth', 'multipv', 'arrow-mode', 'smart-analysis', 'highlight-analysis', 'auto-orient', 'show-arrows', 'show-badges', 'show-coordinates', 'play-speed']) {
   $(id).addEventListener('change', () => {
     if (id === 'engine') syncEngine();

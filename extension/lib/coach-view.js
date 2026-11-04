@@ -4,6 +4,8 @@ import { createCoachMotion } from './coach-motion.js';
 import { createCoachSounds } from './coach-sounds.js';
 import { COACH_ANIMATION_LABELS } from './coach-repertoire.js';
 import { getCoachUnlockProgress, subscribeCoachUnlockProgress, COACH_REVIEW_UNLOCK_GOAL } from './coach-unlocks.js';
+import { renderCoachText } from './coach-notation.js';
+import { createMoveNotation } from './move-notation.js';
 
 const STORAGE_KEY = 'coachPreferences';
 const DEFAULT_QUESTIONS = ['Summarize this game', 'What was the biggest mistake?', 'What should I practice?', 'Show Brilliant and Great moves'];
@@ -17,10 +19,11 @@ function ratingIcon(rating) {
   image.alt = ''; image.width = 18; image.height = 18; image.draggable = false;
   return image;
 }
-function ratedHeading(element, text, rating) {
+function ratedHeading(element, text, rating, notation, prefix = '') {
   const icon = ratingIcon(rating);
-  if (icon) element.replaceChildren(icon, document.createTextNode(text));
-  else element.textContent = text;
+  const label = node('span', 'coach-move-label');
+  label.append(prefix, renderCoachText(text, notation));
+  element.replaceChildren(...(icon ? [icon] : []), label);
 }
 function portrait(coachId, className, size) {
   const image = node('img', className);
@@ -406,29 +409,32 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
 
   function showWalkthrough(answer) {
     const coach = COACHES.find(item => item.id === selected.coach) || COACHES[0];
-    ratedHeading(walkthroughHeading, answer.heading, answer.label);
-    walkthroughText.textContent = answer.text;
+    ratedHeading(walkthroughHeading, answer.heading, answer.label, answer.headingNotation);
+    walkthroughText.replaceChildren(renderCoachText(answer.text, answer.notation));
     walkthroughFollowup.dataset.question = answer.suggestion || 'Explain this position';
     walkthroughFollowup.setAttribute('aria-label', walkthroughFollowup.dataset.question);
     walkthroughNext.hidden = !answer.nextMoment || typeof onNavigate !== 'function';
     if (answer.nextMoment) {
       walkthroughNext.dataset.ply = String(answer.nextMoment.ply);
-      walkthroughNext.replaceChildren(document.createTextNode(`Next: ${answer.nextMoment.label}`), actionIcon('arrow'));
+      walkthroughNext.dataset.label = `Next: ${answer.nextMoment.label}`;
+      const nextLabel = node('span', 'coach-move-label');
+      nextLabel.append('Next: ', renderCoachText(answer.nextMoment.label, answer.nextMoment.notation));
+      walkthroughNext.replaceChildren(nextLabel, actionIcon('arrow'));
       walkthroughNext.setAttribute('aria-label', `Next key moment: ${answer.nextMoment.label}, ${answer.nextMoment.rating}`);
     }
     walkthrough.dataset.ply = String(answer.subjectPly);
     walkthrough.hidden = !!companion || !context.active;
     if (companion) {
       if (companionHint) companionHint.hidden = true;
-      ratedHeading(companion.heading, answer.heading, answer.label);
-      companion.text.textContent = answer.text;
+      ratedHeading(companion.heading, answer.heading, answer.label, answer.headingNotation);
+      companion.text.replaceChildren(renderCoachText(answer.text, answer.notation));
       companion.bubble.dataset.ply = String(answer.subjectPly);
       companion.bubble.hidden = false;
       if (companionAsk) { companionAsk.dataset.question = answer.suggestion || 'Explain this position'; companionAsk.setAttribute('aria-label', companionAsk.dataset.question); }
     }
     if (moveReactionTarget?.container) {
-      ratedHeading(moveHeading, `${coach.name} · ${answer.heading}`, answer.label);
-      moveText.textContent = answer.text;
+      ratedHeading(moveHeading, answer.heading, answer.label, answer.headingNotation, `${coach.name} · `);
+      moveText.replaceChildren(renderCoachText(answer.text, answer.notation));
       moveContent.dataset.ply = String(answer.subjectPly);
       moveContent.hidden = false; moveFallback.hidden = true;
       moveReactionTarget.container.hidden = !context.moveReactionsActive;
@@ -588,7 +594,10 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
     if (companionAsk) companionAsk.disabled = !available;
     if (available) {
       const move = context.result.moves[context.ply - 1];
-      position.textContent = move ? `After ${moveLabel(move)}` : 'Starting position';
+      const label = node('span', 'coach-move-label');
+      if (move && typeof move.san === 'string' && move.san) label.append(`After ${moveLabel(move).slice(0, -move.san.length)}`, createMoveNotation(move.san, move.color, { showPawn: true, showCastleKing: true }));
+      else label.textContent = move ? `After ${moveLabel(move)}` : 'Starting position';
+      position.replaceChildren(label);
       const icon = ratingIcon(move?.label); if (icon) position.prepend(icon);
       positionKicker.textContent = move ? `${move.color === 'w' ? 'White' : 'Black'} · ${move.label}` : 'Game overview';
       explainPosition.replaceChildren(document.createTextNode(move ? 'Explain' : 'Recap'), actionIcon('arrow'));
@@ -597,7 +606,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
     } else position.textContent = '';
   }
 
-  function renderSuggestions(values) {
+  function renderSuggestions(values, notations = []) {
     const coach = COACHES.find(item => item.id === selected.coach) || COACHES[0];
     values ??= context.ply > 0 ? ['Explain this position', 'What was better?', 'Next key moment', 'What should I practice?'] : coach.suggestions || DEFAULT_QUESTIONS;
     const safe = Array.isArray(values) ? [...new Set(values.filter(value => typeof value === 'string' && value.trim() && value.length <= 100))].slice(0, 4) : [];
@@ -605,7 +614,9 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
     for (const value of safe.length ? safe : DEFAULT_QUESTIONS) {
       const [label, symbol] = QUESTION_LABELS[value] || [value, 'arrow'];
       const button = node('button', 'coach-suggestion'); button.type = 'button'; button.dataset.question = value;
-      button.append(actionIcon(symbol), node('span', '', label)); button.title = value; button.setAttribute('aria-label', value);
+      const content = node('span', 'coach-move-label');
+      content.append(renderCoachText(label, label === value ? notations[values.indexOf(value)] : []));
+      button.append(actionIcon(symbol), content); button.title = value; button.setAttribute('aria-label', value);
       // Delegated listeners below keep removed suggestion buttons collectible.
       suggestions.append(button);
     }
@@ -618,14 +629,17 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
     renderSuggestions(); renderControls();
   }
 
-  function message(role, name, text, coachId = null) {
+  function message(role, name, text, coachId = null, notation) {
     const article = node('article', 'coach-message'); article.dataset.role = role;
     const heading = node('div', 'coach-message-heading');
     if (role === 'coach' && COACHES.some(item => item.id === coachId)) {
       const icon = node('span', 'coach-message-portrait'); icon.append(portrait(coachId, 'coach-message-avatar', 36)); heading.append(icon);
     }
     heading.append(node('strong', 'coach-message-name', name));
-    article.append(heading, node('p', 'coach-message-text', text));
+    const body = node('p', 'coach-message-text');
+    if (role === 'coach') body.append(renderCoachText(text, notation));
+    else body.textContent = text;
+    article.append(heading, body);
     return article;
   }
 
@@ -643,7 +657,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
       if (!answer || typeof answer.text !== 'string') throw new Error('No answer.');
       const user = message('user', 'You', prompt);
       const coach = COACHES.find(item => item.id === selected.coach) || COACHES[0];
-      const reply = message('coach', coach.name, answer.text, coach.id);
+      const reply = message('coach', coach.name, answer.text, coach.id, answer.notation);
       reply.dataset.coach = selected.coach;
       const subject = Number.isInteger(answer.subjectPly) ? context.result.moves[answer.subjectPly - 1] : null;
       if (subject && RATINGS.has(subject.label)) {
@@ -656,7 +670,9 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
         for (const item of answer.moves.slice(0, 4)) {
           if (!Number.isInteger(item?.ply) || item.ply < 0 || item.ply > context.result.moves.length) continue;
           const label = typeof item.label === 'string' ? item.label.slice(0, 100) : item.ply ? moveLabel(context.result.moves[item.ply - 1]) : 'Starting position';
-          const jump = node('button', 'coach-jump', label); jump.type = 'button'; jump.dataset.ply = String(item.ply);
+          const jump = node('button', 'coach-jump'); jump.type = 'button'; jump.dataset.ply = String(item.ply);
+          jump.dataset.label = item.label;
+          const content = node('span', 'coach-move-label'); content.append(renderCoachText(label, item.notation)); jump.append(content);
           const grade = context.result.moves[item.ply - 1]?.label;
           const icon = ratingIcon(grade);
           if (icon) jump.prepend(icon);
@@ -670,7 +686,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
       }
       log.append(user, reply);
       previousPly = Number.isInteger(answer.subjectPly) ? answer.subjectPly : null;
-      question.value = ''; renderSuggestions(answer.suggestions);
+      question.value = ''; renderSuggestions(answer.suggestions, answer.suggestionsNotation);
       renderControls(); log.scrollTop = log.scrollHeight;
       reactToAnswer(answer, reply);
     } catch {
@@ -798,7 +814,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   listen(explainPosition, 'click', () => submit(context.ply ? 'Explain this position' : 'Summarize this game'));
   listen(walkthroughFollowup, 'click', () => submit(walkthroughFollowup.dataset.question));
   listen(walkthroughNext, 'click', () => {
-    if (!unavailableReason() && Number.isInteger(Number(walkthroughNext.dataset.ply))) onNavigate?.({ ply: Number(walkthroughNext.dataset.ply), label: walkthroughNext.textContent });
+    if (!unavailableReason() && Number.isInteger(Number(walkthroughNext.dataset.ply))) onNavigate?.({ ply: Number(walkthroughNext.dataset.ply), label: walkthroughNext.dataset.label });
   });
   listen(suggestions, 'click', event => {
     const button = event.target.closest('button[data-question]');
@@ -807,7 +823,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   listen(log, 'click', event => {
     const button = event.target.closest('button.coach-jump');
     if (!button || !log.contains(button) || unavailableReason()) return;
-    onNavigate?.({ ply: Number(button.dataset.ply), label: button.textContent });
+    onNavigate?.({ ply: Number(button.dataset.ply), label: button.dataset.label });
   });
 
   function storageChanged(changes, area) {

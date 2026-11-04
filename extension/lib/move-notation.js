@@ -1,7 +1,7 @@
 import { PIECE_SYMBOLS } from './figurine-paths.js';
 
 /** Render figurine notation while retaining the original SAN for assistive tools. */
-export function createMoveNotation(san, color) {
+export function createMoveNotation(san, color, { showPawn = false, showCastleKing = false } = {}) {
   const text = typeof san === 'string' ? san : '';
   const notation = document.createElement('span');
   notation.className = 'move-notation';
@@ -27,6 +27,10 @@ export function createMoveNotation(san, color) {
   let rest = text;
   if (shapes && /^[KQRBN]/.test(rest)) {
     notation.append(piece(rest[0])); rest = rest.slice(1);
+  } else if (shapes && showPawn && /^[a-h](?:x[a-h])?[1-8](?:=[QRBN])?[+#]?$/.test(rest)) {
+    notation.append(piece('P'));
+  } else if (shapes && showCastleKing && /^O-O(?:-O)?[+#]?$/.test(rest)) {
+    notation.append(piece('K'));
   }
   const promotion = shapes ? /=([QRBN])/.exec(rest) : null;
   if (promotion) notation.append(rest.slice(0, promotion.index + 1), piece(promotion[1]), rest.slice(promotion.index + 2));

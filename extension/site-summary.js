@@ -7,7 +7,7 @@ import { parseCompletedPgn, safeOriginalGameUrl } from './lib/pgn.js';
 import { isCompletedGame } from './lib/archive.js';
 import { completedPageGame } from './lib/site-review.js';
 import { installFrameDrag } from './site-frame-drag.js';
-import { estimateGameRatings } from './lib/game-rating.js';
+import { estimateGameRatings, gameRatingDescription } from './lib/game-rating.js';
 import { getPhasePerformance } from './lib/game-performance.js';
 import { createSummaryShare } from './lib/summary-share.js';
 import { coachPortraitUrl } from './lib/coach-portraits.js';
@@ -43,6 +43,74 @@ if (!parentOrigin) {
 
 function sendParent(type, extra = {}) {
   if (parentOrigin && parent !== window && TOKEN.test(token)) parent.postMessage({ type, token, ...extra }, parentOrigin);
+}
+let reconnecting = null;
+const RECONNECTING_MESSAGE = 'Reconnecting review…';
+function waitUntilVisible() {
+  assertActive();
+  if (!document.hidden) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      document.removeEventListener('visibilitychange', visible);
+      controller.signal.removeEventListener('abort', aborted);
+    };
+    const visible = () => { if (!document.hidden) { cleanup(); resolve(); } };
+    const aborted = () => { cleanup(); reject(new DOMException('Review canceled.', 'AbortError')); };
+    document.addEventListener('visibilitychange', visible);
+    controller.signal.addEventListener('abort', aborted, { once: true });
+    visible();
+  });
+}
+function reconnectReview() {
+  assertActive();
+  if (!parentOrigin || parent === window || !TOKEN.test(token)) return Promise.resolve(false);
+  if (reconnecting) return reconnecting;
+  reconnecting = (async () => {
+    // A background review can finish after its short access lease expires.
+    // Keep that result in memory until the user returns to this page.
+    await waitUntilVisible();
+    assertActive();
+    status(RECONNECTING_MESSAGE); reportSize();
+    const requestId = crypto.randomUUID();
+    return new Promise((resolve, reject) => {
+      let timer;
+      const cleanup = () => {
+        clearTimeout(timer);
+        window.removeEventListener('message', receive);
+        controller.signal.removeEventListener('abort', aborted);
+      };
+      const receive = event => {
+        if (!event.isTrusted || event.source !== parent || event.origin !== parentOrigin ||
+            event.data?.type !== 'meowl:site-frame-reconnected' || event.data.token !== token || event.data.requestId !== requestId) return;
+        cleanup(); resolve(event.data.connected === true);
+      };
+      const aborted = () => { cleanup(); reject(new DOMException('Review canceled.', 'AbortError')); };
+      window.addEventListener('message', receive);
+      controller.signal.addEventListener('abort', aborted, { once: true });
+      timer = setTimeout(() => { cleanup(); resolve(false); }, 8000);
+      try { sendParent('meowl:site-frame-reconnect', { requestId }); }
+      catch (error) { cleanup(); reject(error); }
+    });
+  })().finally(() => { reconnecting = null; });
+  return reconnecting;
+}
+async function sendReviewMessage(message) {
+  assertActive();
+  const reply = await chrome.runtime.sendMessage(message);
+  assertActive();
+  if (reply?.status !== 'expired') return reply;
+  const previousMessage = $('summary-status').textContent;
+  const previousError = $('summary-status').classList.contains('error');
+  if (!await reconnectReview()) return reply;
+  assertActive();
+  // Retry this operation once, including its existing analysis result when
+  // saving. The parent reauthorizes the same game before acknowledging us.
+  const refreshed = await chrome.runtime.sendMessage(message);
+  assertActive();
+  if (['ready', 'saved', 'opened'].includes(refreshed?.status) && $('summary-status').textContent === RECONNECTING_MESSAGE) {
+    status(previousMessage === RECONNECTING_MESSAGE ? '' : previousMessage, previousError);
+  }
+  return refreshed;
 }
 const panelDrag = installFrameDrag({ send: data => sendParent('meowl:site-frame-drag', data) });
 window.addEventListener('message', event => {
@@ -174,12 +242,22 @@ function renderPerformance(result) {
     const estimate = ratings[color], cell = $(`summary-rating-${color}`);
     const side = color === 'w' ? 'White' : 'Black';
     const available = Number.isFinite(estimate.rating);
-    cell.textContent = available ? `≈${estimate.rating.toLocaleString()}` : '—';
+    const value = document.createElement('strong'); value.className = 'game-rating-value'; value.dataset.color = color;
+    value.textContent = available ? `≈${estimate.rating.toLocaleString()}` : '—';
+    value.title = gameRatingDescription(estimate);
+    cell.replaceChildren(value);
+    if (available) {
+      const range = document.createElement('small'); range.className = 'game-rating-range'; range.dataset.color = color;
+      range.textContent = 'Range ';
+      const bounds = document.createElement('span'); bounds.className = 'game-rating-bounds';
+      bounds.textContent = `${estimate.range.low.toLocaleString()}–${estimate.range.high.toLocaleString()}`; range.append(bounds);
+      range.setAttribute('aria-hidden', 'true'); cell.append(range);
+    }
     cell.classList.toggle('unavailable', !available);
     const description = available
-      ? `${side} game rating: approximately ${estimate.rating.toLocaleString()}, based on the recorded rating of ${estimate.baseline} and ${estimate.eligibleMoves} reviewable decisions. ${estimate.confidence === 'low' ? 'Limited' : 'Broader'} analysis coverage; a study estimate, not an account rating. Experimental: not calibrated to Chess.com or Torch Human.`
-      : `${side} game rating unavailable: ${estimate.reason || 'Not enough moves'}.`;
-    cell.title = description;
+      ? `${side} MeowlChess game estimate: approximately ${estimate.rating.toLocaleString()}, rough range ${estimate.range.low.toLocaleString()} to ${estimate.range.high.toLocaleString()}`
+      : `${side} MeowlChess game estimate unavailable: ${estimate.reason || 'Not enough moves'}.`;
+    cell.title = gameRatingDescription(estimate);
     cell.setAttribute('aria-label', description);
   }
   const body = $('summary-phase-performance');
@@ -284,7 +362,7 @@ function onProgress(progress) {
   $('summary-progress-detail').textContent = `${phaseCompleted ?? completed} of ${phaseTotal ?? total} positions · ${payload.analysis.engineName}, on your device`;
 }
 async function readSaved(id) {
-  const reply = await chrome.runtime.sendMessage({ type: 'meowl:site-load-review', token });
+  const reply = await sendReviewMessage({ type: 'meowl:site-load-review', token });
   assertActive();
   if (reply?.status === 'expired' || reply?.status === 'disabled') throw new Error('This panel has expired. Select Retry loading to reconnect.');
   // A failed read need not prevent a local analysis. Saving reports its own error.
@@ -316,7 +394,7 @@ async function runReview(id) {
   let displayedResult = result, displayedAnalysis = payload.analysis, completedRecord = null;
   try {
     showStage('saving', 'Saving on this device…', 'Analysis is complete.');
-    const reply = await chrome.runtime.sendMessage({ type: 'meowl:site-save-review', token, result });
+    const reply = await sendReviewMessage({ type: 'meowl:site-save-review', token, result });
     assertActive();
     if (reply?.status !== 'saved') throw new Error(reply?.status === 'expired' ? 'This panel has expired. Select Retry loading to reconnect.' : reply?.message || 'Saved reviews are unavailable. Reload this page to try again.');
     if (reply.record?.id !== id) throw new Error('The saved review does not match this game. Reload this page to try again.');
@@ -333,7 +411,7 @@ async function runReview(id) {
 async function start() {
   try {
     if (parent === window || !TOKEN.test(token)) throw new Error('Open this summary from the MeowlChess panel on your game page.');
-    const reply = await chrome.runtime.sendMessage({ type: 'meowl:site-payload', token });
+    const reply = await sendReviewMessage({ type: 'meowl:site-payload', token });
     const settings = (await chrome.storage.local.get('siteReviewSettings')).siteReviewSettings?.[reply?.source];
     username = typeof settings?.username === 'string' ? settings.username.trim().toLowerCase() : '';
     payload = validatePayload(reply, username);
@@ -379,9 +457,9 @@ async function openFullReview(view = 'summary') {
   $('summary-open-label').textContent = 'Opening…';
   $('summary-open-review').setAttribute('aria-busy', 'true');
   try {
-    const result = await chrome.runtime.sendMessage({ type: 'meowl:site-open-review', token, reviewId: savedId, view });
+    const result = await sendReviewMessage({ type: 'meowl:site-open-review', token, reviewId: savedId, view });
     if (result?.status !== 'opened') throw new Error(result?.status === 'expired' ? 'This panel has expired. Select Retry loading to reconnect.' : result?.message || 'The full review could not be opened. Reload this page to try again.');
-  } catch (error) { status(error.message || 'The full review could not be opened.', true); }
+  } catch (error) { if (!stopped && !disposed && error?.name !== 'AbortError') status(error.message || 'The full review could not be opened.', true); }
   finally {
     $('summary-open-review').disabled = !savedId || stopped;
     $('summary-open-label').textContent = 'Open full review';

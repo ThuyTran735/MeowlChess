@@ -33,8 +33,10 @@ dxc4 22. Qxc4 b5 23. Qc2 b4 24. Ng3 Nd5 25. Nxe4 Qg6 26. f3 Nxe3 27. Qf2 Nxd1
 function exportFixture(options = {}) {
   const { modalAt = 0, tabAt = 0, pgnAt = 0, pgn = exportedPgn, alreadyOpen = false,
     cancelAt = Infinity, navigateAt = Infinity, navigateOnOpen = false, wallClock = elapsed => elapsed,
-    initialPath = '/game/live/186378605424' } = options;
-  let elapsed = 0, clicked = false, closed = false, destinationClosed = false;
+    initialPath = '/game/live/186378605424', controlsAvailable = true, controlsDisabled = false,
+    shareAvailable = false } = options;
+  let elapsed = 0, clicked = false, closed = false, destinationClosed = false, controlsPresent = controlsAvailable, attempts = 0;
+  const outcomes = [];
   const calls = { downloads: 0, tabs: 0, closes: 0, destinationCloses: 0 };
   const location = { hostname: 'www.chess.com', protocol: 'https:', origin: 'https://www.chess.com', pathname: initialPath };
   const rectangle = () => ({ width: 100, height: 40 });
@@ -49,10 +51,11 @@ function exportFixture(options = {}) {
   const isDestination = () => location.pathname !== initialPath;
   const currentModal = () => isDestination() ? destinationClosed ? null : destinationModal
     : (clicked || alreadyOpen) && !closed && elapsed >= modalAt ? modal : null;
-  const download = { getBoundingClientRect: rectangle, disabled: false, click() {
+  const download = { getBoundingClientRect: rectangle, disabled: controlsDisabled, click() {
     clicked = true; calls.downloads++;
     if (navigateOnOpen) location.pathname = '/game/live/186378605425';
   } };
+  const share = { ...download, disabled: false };
   const field = { getBoundingClientRect: rectangle, value: pgn };
   const document = {
     querySelector(selector) {
@@ -62,7 +65,8 @@ function exportFixture(options = {}) {
     },
     querySelectorAll(selector) {
       if (selector.includes('textarea')) return !isDestination() && currentModal() && elapsed >= pgnAt && calls.tabs ? [field] : [];
-      return [download];
+      if (!controlsPresent) return [];
+      return selector.includes('[aria-label="Share"]') ? shareAvailable ? [share] : [] : [download];
     },
   };
   const context = { location, document, getComputedStyle: () => ({ visibility: 'visible' }),
@@ -74,9 +78,87 @@ function exportFixture(options = {}) {
     },
   };
   vm.createContext(context); vm.runInContext(source, context);
-  return { calls, elapsed: () => elapsed, modal: currentModal,
-    request: () => context.__meowlChessBot.requestGameExport(() => elapsed < cancelAt) };
+  return { calls, outcomes, attempts: () => attempts, elapsed: () => elapsed, modal: currentModal,
+    setControls: value => { controlsPresent = value; },
+    request: () => context.__meowlChessBot.requestGameExport(() => elapsed < cancelAt, {
+      onAttempt: () => { attempts++; }, onOutcome: outcome => outcomes.push({ ...outcome }),
+    }) };
 }
+
+test('missing controls preserve the dialog budget until they mount', async () => {
+  const fixture = exportFixture({ controlsAvailable: false });
+  for (let index = 0; index < 3; index++) assert.equal(await fixture.request(), null);
+  assert.equal(fixture.attempts(), 0);
+  assert.equal(fixture.calls.downloads, 0);
+  assert.equal(fixture.elapsed(), 0);
+  assert.deepEqual(fixture.outcomes, Array.from({ length: 3 }, () => ({ status: 'unavailable', reason: 'controls' })));
+  fixture.setControls(true);
+  assert.equal(await fixture.request(), exportedPgn);
+  assert.equal(fixture.attempts(), 1);
+  assert.deepEqual(fixture.outcomes.at(-1), { status: 'ready', reason: null });
+});
+
+test('disabled Download waits without spending a retry or uses the available Share control', async () => {
+  const unavailable = exportFixture({ controlsDisabled: true });
+  assert.equal(await unavailable.request(), null);
+  assert.equal(unavailable.attempts(), 0);
+  assert.deepEqual(unavailable.outcomes, [{ status: 'unavailable', reason: 'controls' }]);
+  const available = exportFixture({ controlsDisabled: true, shareAvailable: true });
+  assert.equal(await available.request(), exportedPgn);
+  assert.equal(available.attempts(), 1);
+});
+
+test('a one-ply draw is a completed export and does not require archive publication', async () => {
+  const pgn = `[Event "Live Chess"]\n[Site "Chess.com"]\n[White "Samuellove33"]\n[Black "DillPickleChips1"]\n[Result "1/2-1/2"]\n[Link "https://www.chess.com/game/186549203536?username=dillpicklechips1"]\n\n1. e4 1/2-1/2`;
+  const fixture = exportFixture({ pgn, initialPath: '/game/186549203536' });
+  const result = await fixture.request();
+  assert.equal(result, pgn);
+  assert.equal(completedPageGame(result, 'https://www.chess.com/game/live/186549203536', 'dillpicklechips1').white.result, 'draw');
+  assert.deepEqual(fixture.outcomes, [{ status: 'ready', reason: null }]);
+});
+
+test('an aborted-game export is returned for exact identity validation instead of silently timing out', async () => {
+  const pgn = `[Event "Live Chess"]\n[Site "Chess.com"]\n[White "Samuellove33"]\n[Black "DillPickleChips1"]\n[Result "1/2-1/2"]\n[Termination "Game aborted"]\n[Link "https://www.chess.com/game/186549203536?username=dillpicklechips1"]\n\n1. e4 1/2-1/2`;
+  const fixture = exportFixture({ pgn, initialPath: '/game/186549203536' });
+  assert.equal(await fixture.request(), pgn, 'The broker must still verify the game link and player before showing an aborted status.');
+  assert.deepEqual(fixture.outcomes, [{ status: 'ready', reason: 'aborted' }]);
+  assert.equal(fixture.attempts(), 1);
+  assert.equal(fixture.calls.closes, 1);
+  const commentedPgn = pgn.replace('[Termination "Game aborted"]\n', '').replace('1. e4', '{[Termination "Game aborted"]} 1. e4');
+  const comment = exportFixture({ pgn: commentedPgn });
+  assert.equal(await comment.request(), commentedPgn);
+  assert.deepEqual(comment.outcomes, [{ status: 'ready', reason: null }], 'A movetext comment is not a termination header.');
+});
+
+test('bounded export outcomes distinguish missing dialog, missing PGN and unfinished export', async () => {
+  for (const [options, reason] of [
+    [{ modalAt: Infinity }, 'modal'],
+    [{ pgnAt: Infinity }, 'pgn'],
+    [{ pgn: '' }, 'pgn'],
+    [{ pgn: exportedPgn.replace(/0-1$/, '*') }, 'unfinished'],
+    [{ pgn: exportedPgn.replace('[Result "0-1"]', '[Result "1-0"]') }, 'unfinished'],
+  ]) {
+    const fixture = exportFixture(options);
+    assert.equal(await fixture.request(), null);
+    assert.equal(fixture.attempts(), 1);
+    assert.equal(fixture.elapsed(), 30000);
+    assert.deepEqual(fixture.outcomes, [{ status: 'timeout', reason }]);
+  }
+});
+
+test('cancellation has its own outcome and a user-opened dialog does not consume an attempt', async () => {
+  for (const alreadyOpen of [false, true]) {
+    const fixture = exportFixture({ alreadyOpen, pgnAt: 6000, cancelAt: 250 });
+    assert.equal(await fixture.request(), null);
+    assert.equal(fixture.attempts(), Number(!alreadyOpen));
+    assert.deepEqual(fixture.outcomes, [{ status: 'canceled', reason: null }]);
+    assert.equal(fixture.calls.closes, Number(!alreadyOpen));
+  }
+  const fixture = exportFixture({ cancelAt: 0 });
+  assert.equal(await fixture.request(), null);
+  assert.equal(fixture.attempts(), 0);
+  assert.deepEqual(fixture.outcomes, [{ status: 'canceled', reason: null }]);
+});
 
 test('a completed public export survives delayed dialog, tab, and PGN mounting', async () => {
   for (const delays of [

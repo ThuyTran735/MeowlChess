@@ -14,24 +14,41 @@
     return ['www.chess.com', 'chess.com'].includes(location.hostname) && location.protocol === 'https:'
       && /^\/(?:analysis\/)?game\/(?:(?:live|daily)\/)?\d+\/?$/.test(path);
   }
-  function readExportFor(eligible) {
-    if (!eligible()) return null;
-    // Read Chess.com's own export, never infer a starting position from board pieces
-    // or reconstruct a partial/virtualized move list. PGN preserves promotions and FEN.
-    const fields = document.querySelectorAll('.share-menu-tab-pgn-component textarea, textarea[name="pgn"][aria-label="PGN"], textarea.share-menu-tab-pgn-textarea');
-    for (const field of fields) {
-      if (!visible(field) || typeof field.value !== 'string' || field.value.length > 250000) continue;
-      const pgn = field.value.trim();
-      const ending = pgn.replace(/\{[^}]*\}/g, '').replace(/;[^\n]*/g, '').trim().match(finalResult)?.[1];
-      if (ending && new RegExp('\\[Result\\s+"' + ending.replaceAll('/', '\\/') + '"\\s*\\]').test(pgn)) return pgn;
+  function exportReason(pgn) {
+    const tag = /\s*\[\s*([A-Za-z]+)\s*"([^"\\]*(?:\\.[^"\\]*)*)"\s*\]/y;
+    let match;
+    while ((match = tag.exec(pgn))) {
+      if (match[1] === 'Termination' && /^Game aborted$/i.test(match[2].trim())) return 'aborted';
     }
     return null;
   }
-  async function requestExportFor(eligible, isActive = () => true) {
+  function inspectExportFor(eligible) {
+    if (!eligible()) return { pgn: null, reason: 'pgn' };
+    // Read Chess.com's own export, never infer a starting position from board pieces
+    // or reconstruct a partial/virtualized move list. PGN preserves promotions and FEN.
+    const fields = document.querySelectorAll('.share-menu-tab-pgn-component textarea, textarea[name="pgn"][aria-label="PGN"], textarea.share-menu-tab-pgn-textarea');
+    let reason = 'pgn';
+    for (const field of fields) {
+      if (!visible(field) || typeof field.value !== 'string' || field.value.length > 250000) continue;
+      const pgn = field.value.trim();
+      if (pgn) reason = 'unfinished';
+      const ending = pgn.replace(/\{[^}]*\}/g, '').replace(/;[^\n]*/g, '').trim().match(finalResult)?.[1];
+      if (ending && new RegExp('\\[Result\\s+"' + ending.replaceAll('/', '\\/') + '"\\s*\\]').test(pgn)) return { pgn, reason: exportReason(pgn) };
+    }
+    return { pgn: null, reason };
+  }
+  function readExportFor(eligible) {
+    return inspectExportFor(eligible).pgn;
+  }
+  async function requestExportFor(eligible, isActive = () => true, { onAttempt, onOutcome } = {}) {
+    const finish = (status, reason = null, pgn = null) => {
+      onOutcome?.({ status, reason });
+      return pgn;
+    };
     const originalPage = location.origin + location.pathname;
     const active = () => eligible() && isActive() && originalPage === location.origin + location.pathname;
-    if (!active()) return null;
-    const ready = readExportFor(eligible); if (ready) return ready;
+    if (!active()) return finish('canceled');
+    const ready = inspectExportFor(eligible); if (ready.pgn) return finish('ready', ready.reason, ready.pgn);
     // #share-modal itself is a permanent (usually empty) mount point, not an
     // open dialog. Treating it as the modal would prevent the export click.
     const shareModal = () => document.querySelector('.share-menu-modal-header')?.closest('dialog')
@@ -42,28 +59,33 @@
       // Use the site's normal Share control, never a private endpoint or page global.
       // Download opens the Share dialog on its PGN tab; it does
       // not download a file. Share is the fallback when that icon is unavailable.
-      const share = [...document.querySelectorAll('.small-controls-leftIcons button[aria-label="Download"]')].find(visible)
-        || [...document.querySelectorAll('.small-controls-leftIcons button[aria-label="Share"]')].find(visible);
-      if (!share || share.disabled) return null;
+      const usable = element => visible(element) && !element.disabled;
+      const share = [...document.querySelectorAll('.small-controls-leftIcons button[aria-label="Download"]')].find(usable)
+        || [...document.querySelectorAll('.small-controls-leftIcons button[aria-label="Share"]')].find(usable);
+      if (!share) return finish('unavailable', 'controls');
       share.click();
+      // Missing controls are not an attempted dialog. Let the caller retain
+      // its retry budget until Chess.com has actually accepted an opening click.
+      onAttempt?.();
     }
     // Share and its PGN tab can load separately on a cold page. Give the whole
     // read one bounded window, independent of wall-clock changes.
     const deadline = performance.now() + 30000;
-    let selected = false, openedModal = null;
+    let selected = false, openedModal = null, lastExportReason = 'pgn';
     try {
       while (performance.now() < deadline && active()) {
         const modal = shareModal();
         if (visible(modal)) {
           openedModal ||= modal;
-          const pgn = readExportFor(eligible);
-          if (pgn) return pgn;
+          const exported = inspectExportFor(eligible);
+          if (exported.pgn) return finish('ready', exported.reason, exported.pgn);
+          lastExportReason = exported.reason;
           const tab = modal.querySelector('button#tab-pgn, button[aria-controls="tabpanel-pgn"]');
           if (!selected && visible(tab) && !tab.disabled) { tab.click(); selected = true; }
         }
         await new Promise(resolve => setTimeout(resolve, 100));
       }
-      return null;
+      return active() ? finish('timeout', openedModal ? lastExportReason : 'modal') : finish('canceled');
     } finally {
       // A timeout or canceled review must not strand our native modal above the
       // board. A dialog that the user already had open belongs to the user.
@@ -113,8 +135,8 @@
   globalThis.__meowlChessBot = {
     isPage, createImport,
     readExport: () => readExportFor(isPage),
-    requestExport: isActive => requestExportFor(isPage, isActive),
+    requestExport: (isActive, options) => requestExportFor(isPage, isActive, options),
     readGameExport: () => readExportFor(isGamePage),
-    requestGameExport: isActive => requestExportFor(isGamePage, isActive),
+    requestGameExport: (isActive, options) => requestExportFor(isGamePage, isActive, options),
   };
 })();

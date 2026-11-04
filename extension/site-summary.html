@@ -36,13 +36,15 @@
     <section id="summary-overview" class="result-pane" role="tabpanel" aria-labelledby="summary-overview-tab" tabindex="0">
       <table class="game-performance-table" aria-label="Estimated game performance by player">
         <thead><tr><th scope="col">This game</th><th scope="col">White</th><th scope="col">Black</th></tr></thead>
-        <tbody><tr class="game-rating-row"><th scope="row">Game rating <small>experimental</small></th><td id="summary-rating-w">—</td><td id="summary-rating-b">—</td></tr></tbody>
+        <tbody><tr class="game-rating-row"><th scope="row">Game rating <small>MeowlChess estimate</small></th><td id="summary-rating-w">—</td><td id="summary-rating-b">—</td></tr></tbody>
         <tbody id="summary-phase-performance"></tbody>
       </table>
       <button id="summary-coach" class="summary-coach" type="button" disabled hidden><img src="icons/coaches/MeowlChess-coach-meowl.svg" width="40" height="48" alt=""><span><strong>Ask coach</strong><small>Talk through this game</small></span><span aria-hidden="true">↗</span></button>
       <details class="estimate-note">
         <summary>About these estimates</summary>
-        <p>Game rating is an experimental study estimate, not calibrated to Chess.com or Torch Human. It starts from the player's recorded rating and adjusts for reviewed decisions. It needs at least eight decisions and a recorded rating; short or shallow reviews stay closer to that baseline.</p>
+        <p>Game rating is MeowlChess’s independent, experimental estimate of play in this game. It is not calibrated Elo or Chess.com’s formula. The recorded player rating is a reference; poor play can produce a much lower estimate.</p>
+        <p>The range is a rough sensitivity guide, not a statistical confidence interval. Shorter games and shallow analysis make it wider. A clean game alone does not establish master strength.</p>
+        <p>At least 8 reviewable decisions and a recorded player rating are needed. Book moves, forced moves, and inconsequential moves in already decisive positions are excluded. Giving away an advantage still counts.</p>
         <p>Opening covers up to the first 10 moves by each side from the normal starting position. Endgame begins when little non-pawn material remains; the rest is Middlegame. Custom starting positions begin in Middlegame or Endgame. Icons summarize move quality in each phase.</p>
       </details>
     </section>

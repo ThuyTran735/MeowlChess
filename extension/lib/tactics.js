@@ -48,7 +48,9 @@ function forkEvidence(continuation, victimColor, materialLoss) {
 }
 
 /** Concrete, conservative observations from a legal engine line, never a claimed human explanation. */
-export function explainConsequence(reviewMove, afterEvaluation = reviewMove?.evalAfter) {
+export function explainConsequence(reviewMove, afterEvaluation = reviewMove?.evalAfter, options = {}) {
+  // Callers may annotate legal move mentions without changing the evidence or SAN.
+  const formatMove = typeof options?.formatMove === 'function' ? options.formatMove : move => move.san;
   const unavailable = { type: 'unavailable', text: 'No legal engine continuation is available for this move yet. Analyze the position more deeply.', line: [], moves: [], positions: [], highlights: [], truncated: false };
   if (!reviewMove?.before || !reviewMove?.after || !['w', 'b'].includes(reviewMove.color)) return unavailable;
   let board;
@@ -65,7 +67,7 @@ export function explainConsequence(reviewMove, afterEvaluation = reviewMove?.eva
   if (board.isDraw()) return { ...base, type: 'draw', text: 'This position is drawn. There is no further engine continuation to explain.' };
   if (end.isCheckmate() && moves.length) {
     const last = moves.at(-1);
-    return { ...base, type: 'mate', text: `In this line, ${sideName(last.color)} ends with ${last.san}, checkmate.`, highlights: [{ square: last.to, role: 'attacker', at: moves.length }] };
+    return { ...base, type: 'mate', text: `In this line, ${sideName(last.color)} ends with ${formatMove(last)}, checkmate.`, highlights: [{ square: last.to, role: 'attacker', at: moves.length }] };
   }
   if (Number.isInteger(afterEvaluation?.mate) && afterEvaluation.mate !== 0 && Number.isFinite(afterEvaluation.cp) && afterEvaluation.cp !== 0) {
     return { ...base, type: 'mate', text: `The engine reports a forced mate for ${sideName(afterEvaluation.cp > 0 ? 'w' : 'b')} in ${Math.abs(afterEvaluation.mate)} moves at this search depth.` };
@@ -75,14 +77,14 @@ export function explainConsequence(reviewMove, afterEvaluation = reviewMove?.eva
   const fork = forkEvidence(continuation, reviewMove.color, materialLoss);
   if (fork) {
     const [first, second] = fork.targets;
-    return { ...base, type: 'fork', materialLoss, text: `In this line, ${fork.attack.san} forks ${sideName(reviewMove.color)}'s ${NAMES[first.type]} on ${first.square} and ${NAMES[second.type]} on ${second.square}; ${fork.capture.san} then captures the ${NAMES[second.type]}.`, highlights: [{ square: fork.attack.to, role: 'attacker', at: fork.at }, ...fork.targets.map(target => ({ square: target.square, role: 'target', at: fork.at }))] };
+    return { ...base, type: 'fork', materialLoss, text: `In this line, ${formatMove(fork.attack)} forks ${sideName(reviewMove.color)}'s ${NAMES[first.type]} on ${first.square} and ${NAMES[second.type]} on ${second.square}; ${formatMove(fork.capture)} then captures the ${NAMES[second.type]}.`, highlights: [{ square: fork.attack.to, role: 'attacker', at: fork.at }, ...fork.targets.map(target => ({ square: target.square, role: 'target', at: fork.at }))] };
   }
   const lostCaptures = moves.map((move, index) => ({ ...move, at: index + 1 })).filter(move => move.color !== reviewMove.color && move.captured);
   if (materialLoss >= 1 && lostCaptures.length) {
     const capture = lostCaptures.find(move => move.captured !== 'p') || lostCaptures[0];
     const amount = Number.isInteger(materialLoss) ? materialLoss : materialLoss.toFixed(1);
-    return { ...base, type: 'material', materialLoss, text: `In this line, ${capture.san} captures ${sideName(reviewMove.color)}'s ${NAMES[capture.captured]} on ${capturedSquare(capture)}. By the end of the shown line, ${sideName(reviewMove.color)} has lost about ${amount} pawn${materialLoss === 1 ? '' : 's'} of net material compared with the position after ${reviewMove.san}.`, highlights: [{ square: capture.from, role: 'attacker', at: capture.at - 1 }, { square: capturedSquare(capture), role: 'target', at: capture.at - 1 }] };
+    return { ...base, type: 'material', materialLoss, text: `In this line, ${formatMove(capture)} captures ${sideName(reviewMove.color)}'s ${NAMES[capture.captured]} on ${capturedSquare(capture)}. By the end of the shown line, ${sideName(reviewMove.color)} has lost about ${amount} pawn${materialLoss === 1 ? '' : 's'} of net material compared with the position after ${formatMove(reviewMove)}.`, highlights: [{ square: capture.from, role: 'attacker', at: capture.at - 1 }, { square: capturedSquare(capture), role: 'target', at: capture.at - 1 }] };
   }
   if (end.isDraw()) return { ...base, type: 'draw', text: 'In this line, the continuation reaches a drawn position. Step through the moves to see how.' };
-  return { ...base, type: 'line', text: `The engine continues with ${moves.slice(0, 4).map(move => move.san).join(' ')} in this line. No simple lasting material gain or forced mate is verified in the shown continuation.` };
+  return { ...base, type: 'line', text: `The engine continues with ${moves.slice(0, 4).map(move => formatMove(move)).join(' ')} in this line. No simple lasting material gain or forced mate is verified in the shown continuation.` };
 }

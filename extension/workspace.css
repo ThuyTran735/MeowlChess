@@ -68,6 +68,13 @@ html[data-board-size="custom"] main { max-width: calc(var(--board-size) + 464px)
 .local-indicator { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 400; color: var(--muted); }
 .local-indicator::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
 .review-action-row { width: 100%; }
+.standout-option { margin: 12px 0 2px; padding-top: 12px; border-top: 1px solid var(--line); }
+.standout-option label { display: flex; align-items: center; gap: 9px; min-height: 30px; cursor: pointer; font-size: 13px; }
+.standout-option input { width: 16px; height: 16px; margin: 0; accent-color: #a3c97a; flex: none; }
+.standout-option label:has(input:disabled) { cursor: default; opacity: .65; }
+.standout-option-state { margin-left: auto; color: #a3c97a; font-size: 11px; font-weight: 700; }
+.standout-option label:has(input:not(:checked)) .standout-option-state { color: var(--muted); }
+.standout-option p { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .primary-button { min-height: 43px; border-radius: 9px; background: #a8c78a; color: #1c2b14; font-size: 14px; box-shadow: 0 2px 0 #0002; }
 .primary-button:hover:enabled { background: #bddb9f; box-shadow: 0 4px 12px #0002; }
 .cancel-button { border-radius: 9px; }
