@@ -33,11 +33,14 @@ function probes(c,pose={}){const ctx=c.getContext('2d'),result=[],a=pose.tilt||0
 const poses=[{leftWing:1.25,rightWing:1.25},{leftWing:1.1,rightElbow:1.55},{rightWing:1.1,leftElbow:1.55},{leftWing:.12,rightWing:.12,leftElbow:1.6,rightElbow:1.6}];
 window.bodyCheck={
  materials(){
+  const garmentColors={owl:[101,125,145],paws:[63,76,101],mellow:[157,137,159],scout:[115,133,104],evil:[133,45,58]};
   const fabric=[];for(let index=1;index<ids.length;index++){const ctx=paint(index,{},true).getContext('2d');for(const y of [700,760,820])for(const [side,columns]of [['left',[485,490,495,500,505,510]],['right',[750,755,760,765,770,775]]]){
-   const samples=columns.map(x=>({distance:cutDistance(x,y,ids[index]),rgb:[...ctx.getImageData(x,y,1,1).data].slice(0,3)}));const variation=values=>Math.max(...[0,1,2].map(c=>Math.max(...values.map(p=>p[c]))-Math.min(...values.map(p=>p[c]))));fabric.push({id:ids[index],side,y,spread:variation(samples.map(p=>p.rgb)),interiorSpread:variation(samples.filter(p=>p.distance>2).map(p=>p.rgb))});
+   const expected=garmentColors[ids[index]],samples=columns.map(x=>{const pixel=[...ctx.getImageData(x,y,1,1).data],rgb=pixel.slice(0,3),shade=rgb.reduce((sum,value,c)=>sum+value*expected[c],0)/expected.reduce((sum,value)=>sum+value*value,0),hueDifference=Math.max(...expected.map((value,c)=>Math.abs(value*shade-rgb[c]))),sameHue=expected.every((value,c)=>expected.every((other,d)=>Math.abs(value-other)<12||Math.sign(value-other)*(rgb[c]-rgb[d])>=Math.abs(value-other)*.45));return{distance:cutDistance(x,y,ids[index]),rgb,valid:pixel[3]>=245&&shade>=.68&&shade<=1.2&&hueDifference<=10&&sameHue};});const variation=values=>Math.max(...[0,1,2].map(c=>Math.max(...values.map(p=>p[c]))-Math.min(...values.map(p=>p[c]))));fabric.push({id:ids[index],side,y,spread:variation(samples.map(p=>p.rgb)),interiorSpread:variation(samples.filter(p=>p.distance>2).map(p=>p.rgb)),mismatches:samples.filter(p=>!p.valid).length});
   }}
   const ctx=paint(0,{},true).getContext('2d'),colors=new Set(),rows=[];
-  for(let y=650;y<=780;y++){const mean=[0,0,0];for(let x=462;x<=474;x++){const pixel=[...ctx.getImageData(x,y,1,1).data].slice(0,3);colors.add(pixel.join(','));for(let c=0;c<3;c++)mean[c]+=pixel[c]/13;}rows.push(mean);}
+  // Check the painted grain separately from the intentional dark feathers.
+  // Including their tapered ends mistakes a real feather for a color band.
+  for(let y=650;y<=780;y++){const mean=[0,0,0];let count=0;for(let x=462;x<=474;x++){const pixel=[...ctx.getImageData(x,y,1,1).data].slice(0,3);colors.add(pixel.join(','));if(pixel[0]<175||pixel[1]<140)continue;count++;for(let c=0;c<3;c++)mean[c]+=pixel[c];}if(count>=3)rows.push(mean.map(value=>value/count));}
   const largestRowStep=Math.max(...rows.slice(1).map((row,index)=>Math.max(...row.map((value,c)=>Math.abs(value-rows[index][c])))));
   const evilBacking=createCoachBodyBacking(puppets[5].image,document,'evil').getContext('2d'),evilFur=[];
   for(const[x,y]of[[454,700],[460,760],[467,820]])evilFur.push([...evilBacking.getImageData(x,y,1,1).data]);
@@ -69,14 +72,18 @@ try{
   assert.equal(item.transparentChanges,0,JSON.stringify(item)+' must not grow a stationary wing, staff or body outline.');
   // SVG clips and raster extraction differ at their antialiased cut fringe.
   // Permit that narrow source-resolution fringe only: the body interior must
-  // match exactly, and fewer than ten pixels may differ at the displayed size.
+  // match exactly. Allow a small antialiased fringe at the displayed size;
+  // different fabric beneath a clipped wing also changes its edge blend.
   assert.equal(item.interiorChanges,0,JSON.stringify(item)+' must not repaint the body interior during a blink.');
   assert(item.opaqueChanges<300,JSON.stringify(item)+' must keep source-edge antialiasing differences bounded.');
-  assert(item.avatarChanges<10,JSON.stringify(item)+' must keep displayed body color stable.');
+  assert(item.avatarChanges<16,JSON.stringify(item)+' must keep displayed body color stable.');
  }}
  console.log(JSON.stringify({materials}));
- if(!baseline){for(const item of materials.fabric){assert(item.spread<=8,JSON.stringify(item)+' may differ only slightly at the antialiased cut edge.');assert.equal(item.interiorSpread,0,JSON.stringify(item)+' must continue the identical garment material across both sides of the old cut.');}assert(materials.furColors>=8,'Hidden fur must keep the source painting variation.');assert(materials.largestRowStep<12,'Hidden fur must not contain horizontal color bands.');
-  for(const[r,g,b,a]of materials.evilFur)assert(r>50&&r<195&&b>=r&&Math.abs(r-g)<6&&a>245,'Evil hidden fur must sample the painted charcoal palette.');
+ // The folds stay clear of these old cutline probes, so their original strict
+ // continuity check still applies. Also require matching opaque garment hue:
+ // tan or gray fur must fail even if its brightness resembles the fabric.
+ if(!baseline){for(const item of materials.fabric){assert(item.spread<=8,JSON.stringify(item)+' may differ only slightly at the antialiased cut edge.');assert.equal(item.interiorSpread,0,JSON.stringify(item)+' must continue the identical garment material across both sides of the old cut.');assert.equal(item.mismatches,0,JSON.stringify(item)+' must continue opaque, matching garment material across the cut.');}assert(materials.furColors>=8,'Hidden fur must keep the source painting variation.');assert(materials.largestRowStep<12,'Hidden fur must not contain horizontal color bands.');
+  for(const[r,g,b,a]of materials.evilFur)assert(r>25&&r<195&&b>=r&&Math.abs(r-g)<6&&a>245,'Evil hidden feathers must keep charcoal fur and its darker feather ink.');
   for(const[name,color]of Object.entries(materials.evilUnderlays)){const[r,g,b]=color.match(/\d+/g).map(Number);assert(r>50&&b>=r&&Math.abs(r-g)<6,name+' must keep Evil charcoal/silver colors while a joint moves.');}
  }
  assert.deepEqual(errors,[]);

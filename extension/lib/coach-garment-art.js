@@ -79,24 +79,60 @@ export const COACH_GARMENT_SVG = {
 // former side outline cannot become a second seam down the middle of the coat.
 // Static portraits use the same fabric geometry, restoring the original wing
 // artwork on top. That keeps the visible resting coat identical to animation.
+// Follow the completed torso down to the hip, not the old narrower wing cut.
+// Each outfit keeps its own collar, front details and lower hem.
+const RIGHT_FLANK = 'C797 550 816 595 822 650 C834 738 844 860 832 955';
+const LEFT_FLANK = 'C449 867 438 741 444 655 C444 603 456 554';
 const HIDDEN_BASES = {
   owl: {
-    'M481 526': 'M481 526 Q606 558 777 526 C804 554 822 603 822 655 C828 741 817 848 793 917 Q776 955 746 953 L641 1003 L605 972 L546 1001 Q506 990 473 917 C449 848 438 741 444 655 C444 603 456 554 481 526 Z',
+    'M481 526': `M481 526 Q606 558 777 526 ${RIGHT_FLANK} Q800 984 746 953 L641 1003 L605 972 L546 1001 Q506 990 467 958 ${LEFT_FLANK} 481 526 Z`,
   },
   paws: {
-    'M480 534': 'M480 534 Q623 574 779 534 C804 554 822 603 822 655 C828 741 817 848 793 917 Q764 956 707 972 L626 945 L547 971 Q496 951 473 917 C449 848 438 741 444 655 C444 603 456 554 480 534 Z',
+    'M480 534': `M480 534 Q623 574 779 534 ${RIGHT_FLANK} Q780 988 707 972 L626 945 L547 971 Q496 985 467 958 ${LEFT_FLANK} 480 534 Z`,
   },
   mellow: {
-    'M474 520': 'M474 520 Q617 561 780 519 C804 554 822 603 822 655 C828 741 817 848 793 917 Q778 944 751 941 Q698 979 634 970 Q566 984 509 947 Q482 939 473 917 C449 848 438 741 444 655 C444 603 456 554 474 520 Z',
+    'M474 520': `M474 520 Q617 561 780 519 ${RIGHT_FLANK} Q790 980 751 941 Q698 979 634 970 Q566 984 509 947 Q482 973 467 958 ${LEFT_FLANK} 474 520 Z`,
   },
   scout: {
-    'M480 522': 'M480 522 L548 541 L619 659 L693 542 L777 522 C804 554 822 603 822 655 C828 741 817 848 793 917 Q779 943 749 935 L673 959 L624 921 L571 957 Q520 970 473 917 C449 848 438 741 444 655 C444 603 456 554 480 522 Z',
+    'M480 522': `M480 522 L548 541 L619 659 L693 542 L777 522 ${RIGHT_FLANK} Q790 980 749 935 L673 959 L624 921 L571 957 Q520 982 467 958 ${LEFT_FLANK} 480 522 Z`,
   },
   evil: {
-    'M483 532': 'M483 532 Q625 565 776 532 C804 554 822 603 822 655 C828 741 817 848 793 917 Q767 950 698 971 L626 947 L553 971 Q499 954 473 917 C449 848 438 741 444 655 C444 603 456 554 483 532 Z',
+    'M483 532': `M483 532 Q625 565 776 532 ${RIGHT_FLANK} Q780 994 698 971 L626 947 L553 971 Q499 987 467 958 ${LEFT_FLANK} 483 532 Z`,
   },
 };
 const scenes = new Map();
+
+// The side panels use the outfit's own cloth colors. Long, quiet folds give
+// the completed underarm some volume without adding a second side outline.
+const SIDE_CLOTH = {
+  owl: { shade: '#5b7185', light: '#71889b' },
+  paws: { shade: '#37445c', light: '#4a5871' },
+  mellow: { shade: '#927f96', light: '#aa97ac' },
+  scout: { shade: '#687a5f', light: '#809174' },
+  evil: { shade: '#772833', light: '#943743' },
+};
+
+function sideClothSvg(coachId) {
+  const cloth=SIDE_CLOTH[coachId];if(!cloth)return '';
+  const folds=`<g stroke="none" fill="${cloth.shade}">
+    <path d="M452 634 C445 679 447 741 457 784 L463 774 C455 726 455 670 460 642 Q458 635 452 634 Z"/>
+    <path d="M477 682 Q470 720 481 758 L485 763 Q479 723 483 691 Z"/>
+    <path d="M461 837 C459 878 466 918 478 944 L483 939 C473 903 472 865 468 844 Z"/>
+    <path d="M819 643 C833 707 837 782 834 846 L826 838 C829 773 824 703 813 656 Z"/>
+    <path d="M794 690 Q788 721 798 750 L803 757 Q798 721 802 697 Z"/>
+    <path d="M828 868 Q834 914 821 947 L813 951 Q821 912 820 880 Z"/>
+  </g>`;
+  // Cardigan ribbing, tailored seams, and field-jacket stitching stay modest
+  // at avatar size. They are part of the cached torso, never per-frame effects.
+  const detail=coachId==='mellow'
+    ? 'M467 815 Q466 867 478 918 M474 820 Q473 866 483 901 M817 793 Q822 850 814 899 M810 802 Q814 848 809 883'
+    : coachId==='scout'
+      ? 'M462 674 L461 702 M461 718 L463 745 M464 761 L467 788 M824 724 L827 752 M828 769 L829 795 M829 811 L828 837'
+      : coachId==='evil'
+        ? 'M461 669 Q455 733 464 777 M825 708 Q832 773 829 826'
+        : 'M462 663 Q455 725 464 774 M824 715 Q830 770 827 820';
+  return `${folds}<path fill="none" stroke="${cloth.light}" stroke-width="3" stroke-linecap="round" d="${detail}"/>`;
+}
 
 function expandedPath(coachId,d) {
   for(const [prefix,replacement]of Object.entries(HIDDEN_BASES[coachId]||{}))if(d.startsWith(prefix))return replacement;
@@ -105,14 +141,14 @@ function expandedPath(coachId,d) {
 
 /** Exact shared fabric paths for the static portrait builder. */
 export function coachGarmentSvg(coachId) {
-  return (COACH_GARMENT_SVG[coachId]||'').replace(/\bd="([^"]*)"/g,(_attribute,d)=>`d="${expandedPath(coachId,d)}"`);
+  return (COACH_GARMENT_SVG[coachId]||'').replace(/\bd="([^"]*)"/g,(_attribute,d)=>`d="${expandedPath(coachId,d)}"`)+sideClothSvg(coachId);
 }
 
 // Compile this module's own small SVG primitive vocabulary once. No DOM or
 // network parsing is involved, and every original path/color stays literal.
 function garmentScene(coachId) {
   if(scenes.has(coachId))return scenes.get(coachId);
-  const source=COACH_GARMENT_SVG[coachId]||'',stack=[{}],shapes=[];
+  const source=(COACH_GARMENT_SVG[coachId]||'')+sideClothSvg(coachId),stack=[{}],shapes=[];
   for(const tag of source.matchAll(/<!--[\s\S]*?-->|<(\/?)([a-z]+)\b([^>]*)>/g)) {
     const [,closing,name,text]=tag;if(!name)continue;
     if(closing){if(name==='g')stack.pop();continue;}

@@ -1,6 +1,27 @@
 const clamp=(value,low,high)=>Math.max(low,Math.min(high,value));
 const smooth=value=>{const t=clamp(value,0,1);return t*t*(3-2*t);};
 
+// Long, uneven feather groups follow the same direction as the painted thighs.
+// They stay with the torso beneath the wings and clothes; quieter secondary
+// marks break up the gaps without making a regular grid of short dashes.
+const BODY_FEATHERS = [
+  'M468 617 C465 641 458 664 459 691 C459 710 463 728 469 739 C470 720 466 706 467 685 C466 661 472 639 471 625 Q471 618 468 617 Z',
+  'M482 710 C476 739 477 763 481 789 C483 807 487 825 492 839 C494 824 489 807 488 787 C484 760 486 740 486 723 Q486 714 482 710 Z',
+  'M456 778 C455 807 461 839 467 863 C471 879 477 896 482 906 C483 890 477 874 475 858 C468 828 465 802 462 788 Q460 780 456 778 Z',
+  'M480 882 C479 905 485 928 494 948 C499 959 505 969 510 974 C508 958 501 945 498 933 C489 911 487 893 484 885 Q482 881 480 882 Z',
+  'M798 610 C803 635 801 661 796 682 C792 701 786 721 781 732 C779 718 786 698 788 679 C794 653 791 632 794 617 Q795 611 798 610 Z',
+  'M813 682 C821 710 820 735 816 761 C814 780 809 798 804 811 C802 797 808 779 807 759 C812 732 808 708 808 693 Q809 685 813 682 Z',
+  'M781 748 C777 771 773 798 777 823 C778 844 782 863 787 875 C789 859 784 842 785 823 C781 798 786 775 786 759 Q785 751 781 748 Z',
+  'M823 815 C829 842 825 871 821 894 C817 914 810 935 802 946 C801 931 809 910 811 892 C816 868 815 843 818 826 Q820 817 823 815 Z',
+  'M797 892 C791 912 788 932 781 948 C775 961 768 971 763 978 C773 975 782 965 789 952 C796 935 801 914 801 901 Q801 894 797 892 Z',
+];
+const SOFT_BODY_FEATHERS = [
+  'M452 670 C447 689 447 714 452 732 C452 708 456 692 456 678 Q455 671 452 670 Z',
+  'M492 819 C488 835 490 853 495 865 C496 850 497 837 496 827 Q495 820 492 819 Z',
+  'M808 638 C814 654 815 670 813 684 C809 670 807 658 805 647 Q804 640 808 638 Z',
+  'M799 793 C796 810 797 829 802 842 C803 825 805 811 803 801 Q802 795 799 793 Z',
+];
+
 function furPatch(source,width,coachId){
   const w=12,h=28;let best=null;
   // Sample painted tan fur, excluding cream chest, dark feather ink and alpha.
@@ -36,11 +57,11 @@ function furPatch(source,width,coachId){
 function torsoOutline(context) {
   context.beginPath();context.moveTo(482,520);
   context.bezierCurveTo(456,554,444,603,444,655);
-  context.bezierCurveTo(438,741,449,848,473,917);
-  context.bezierCurveTo(486,957,507,991,536,1017);
+  context.bezierCurveTo(438,741,449,867,467,958);
+  context.bezierCurveTo(486,1000,507,1010,536,1017);
   context.quadraticCurveTo(626,1058,723,1018);
-  context.bezierCurveTo(758,988,781,952,798,909);
-  context.bezierCurveTo(824,838,834,738,822,650);
+  context.bezierCurveTo(780,1008,818,981,832,955);
+  context.bezierCurveTo(844,860,834,738,822,650);
   context.bezierCurveTo(816,595,797,550,772,520);
   context.quadraticCurveTo(626,566,482,520);context.closePath();
 }
@@ -65,20 +86,20 @@ export function createCoachBodyBacking(artwork,document=globalThis.document,coac
     while(left<right&&pixels[(y*width+left)*4+3]<128)left++;
     while(right>left&&pixels[(y*width+right)*4+3]<128)right--;
     if(left===right)continue;
-    // A stable source fur patch supplies the hidden flank. Blend only beside
-    // the cut, so crossing a cream boundary cannot make a horizontal stripe.
+    // Keep the painted grain beneath the separate feather markings. The middle
+    // stays the original chest, and only the internal join is softly blended.
     const from=edgeAt(LEFT_EDGE,y)+2,to=edgeAt(RIGHT_EDGE,y)-2;
     for(let x=left-1;x<=right+1;x++){
       const offset=(y*width+x)*4,coverage=pixels[offset+3];if(!coverage)continue;
       const sample=clamp(x,from,to);
       const a=Math.floor(sample),f=sample-a;
       const first=(y*width+a)*4,second=first+4;
-      const grain=texture(x*.8,y*.8),edge=smooth(1-Math.abs(x-sample)/15);
+      const grain=texture(x*.8,y*.8),edge=smooth(1-Math.abs(x-sample)/10);
       for(let channel=0;channel<3;channel++){
         const original=source[first+channel]*(1-f)+source[second+channel]*f;
         pixels[offset+channel]=Math.round(grain[channel]*(1-edge)+original*edge);
       }
-      pixels[offset+3]=Math.round(coverage*source[offset+3]/255);
+      pixels[offset+3]=coverage;
     }
   }
   context.putImageData(mask,0,0);
@@ -91,9 +112,19 @@ export function createCoachBodyBacking(artwork,document=globalThis.document,coac
   }
   if(ink.length){
     const channels=[0,1,2].map(channel=>Math.round(ink.reduce((sum,pixel)=>sum+pixel[channel],0)/ink.length));
+    context.fillStyle=`rgb(${channels.join(',')})`;
+    context.save();torsoOutline(context);context.clip();
+    context.globalAlpha=.32;
+    for(const path of SOFT_BODY_FEATHERS)context.fill(new Path2D(path));
+    context.globalAlpha=1;
+    for(const path of BODY_FEATHERS)context.fill(new Path2D(path));
+    context.restore();
     context.strokeStyle=`rgb(${channels.join(',')})`;context.lineWidth=8;context.lineJoin='round';
     torsoOutline(context);context.stroke();
-    context.globalCompositeOperation='destination-in';context.drawImage(artwork,0,0);context.globalCompositeOperation='source-over';
   }
+  // Preserve the original exterior fur fringe at rest. This is the complete
+  // source silhouette, not the cut-out front with the wing areas erased.
+  context.globalCompositeOperation='destination-in';context.drawImage(artwork,0,0);
+  context.globalCompositeOperation='source-over';
   return backing;
 }

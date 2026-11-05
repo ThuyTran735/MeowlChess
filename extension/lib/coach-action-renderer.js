@@ -62,7 +62,13 @@ export function createCoachPuppet(image, document=globalThis.document, coachId='
   const backing=createCoachBodyBacking(artwork,document,coachId);
   const torso=canvas(document,artwork.width,artwork.height),body=torso.getContext('2d');
   body.drawImage(backing,0,0);
-  if(coachId!=='meowl')drawCoachGarment(body,coachId);
+  if(coachId!=='meowl'){
+    drawCoachGarment(body,coachId);
+    // Fabric follows the complete body, including its original soft exterior
+    // edge. A wider coat stroke must not grow a new outline during a blink.
+    body.globalCompositeOperation='destination-in';body.drawImage(artwork,0,0);
+    body.globalCompositeOperation='source-over';
+  }
   body.drawImage(front,0,0);
   return {
     image:artwork,document,coachId,width:artwork.width,height:artwork.height,eyes:createCoachEyes(artwork,document,coachId),

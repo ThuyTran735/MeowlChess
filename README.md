@@ -13,7 +13,7 @@
   </p>
 </div>
 
-**Version 1.14.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.14.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
+**Version 1.14.1** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.14.1) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
 
 > Your game, explained. Follow the turning points, explore engine suggestions, and study with an animated Meowl coach—all on your own device.
 
