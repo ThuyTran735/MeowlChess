@@ -19,6 +19,8 @@ import { importPgnCollection, importPgnFiles, PGN_IMPORT_MAX_BYTES } from './lib
 import { createTutorial } from './lib/tutorial.js';
 import { createSupportPrompt } from './lib/support-prompt.js';
 import { createMoveNotation } from './lib/move-notation.js';
+import { renderCoachText } from './lib/coach-notation.js';
+import { explainMoveRating } from './lib/rating-explanation.js';
 import { estimateGameRatings, gameRatingDescription } from './lib/game-rating.js';
 import { getPhasePerformance } from './lib/game-performance.js';
 import { createSiteReviewSettings } from './lib/site-settings.js';
@@ -295,6 +297,8 @@ function updateControls() {
     : $('highlight-analysis').checked ? 'Turn off to skip extra Brilliant/Great checks.' : 'Extra Brilliant/Great checks are off for your next review.';
   $('retry-move').disabled = !state.result || !state.ply || unavailable || !!state.study || !!state.retry;
   $('show-why').disabled = !state.result || !state.ply || unavailable || !!state.study || !!state.retry;
+  $('insight-explain').disabled = !state.result || !state.ply || unavailable || !!state.study || !!state.retry;
+  for (const button of document.querySelectorAll('.move-rating-button')) button.disabled = unavailable || !!state.study || !!state.retry;
   $('bookmark-position').disabled = !state.reviewId || unavailable || !!state.study || !!state.retry;
   const bookmarked = state.bookmarks.some(item => item.ply === state.ply);
   $('bookmark-position').setAttribute('aria-pressed', String(bookmarked));
@@ -516,10 +520,53 @@ function renderMoves() {
     const button = document.createElement('button'); button.type = 'button'; button.className = 'move-button'; button.dataset.ply = String(index + 1);
     button.append(createMoveNotation(move.san, move.color));
     const reviewMove = state.result?.moves[index];
-    if (reviewMove && $('show-badges').checked) button.append(makeBadge(reviewMove.label));
     button.setAttribute('aria-label', `Move ${moveNumber}, ${move.color === 'w' ? 'White' : 'Black'}: ${move.san}${reviewMove ? `, ${reviewMove.label}` : ''}`);
-    button.addEventListener('click', () => goTo(index + 1)); row.append(button);
+    button.addEventListener('click', () => goTo(index + 1));
+    const cell = document.createElement('div'); cell.className = 'move-cell'; cell.append(button);
+    if (reviewMove && $('show-badges').checked) {
+      const rating = document.createElement('button'); rating.type = 'button'; rating.className = 'move-rating-button'; rating.dataset.ply = String(index + 1);
+      rating.setAttribute('aria-label', `Why was ${moveNumber}${move.color === 'w' ? '.' : '…'} ${move.san} rated ${reviewMove.label}?`);
+      rating.setAttribute('aria-haspopup', 'dialog'); rating.setAttribute('aria-controls', 'rating-dialog');
+      rating.title = `Explain ${reviewMove.label}`; rating.append(makeBadge(reviewMove.label));
+      rating.addEventListener('click', () => openRatingExplanation(index + 1, rating)); cell.append(rating);
+    }
+    row.append(cell);
   });
+}
+
+let ratingExplanationTrigger = null;
+function openRatingExplanation(ply = state.ply, trigger = $('insight-explain')) {
+  if (state.starting || state.busy || state.loading || state.positionController || state.libraryBusy || state.importing || state.study || state.retry) return;
+  const explanation = explainMoveRating({ result: state.result, game: state.selected, ply });
+  if (!explanation) return;
+  // Explain the retained evidence without starting another engine search.
+  stopPlayback();
+  if (state.ply !== ply) { state.ply = ply; state.selectedLine = null; renderBoard(); }
+  ratingExplanationTrigger = trigger;
+  const dialog = $('rating-dialog'); dialog.dataset.evidence = explanation.evidence; dialog.dataset.ply = String(ply);
+  $('rating-dialog-title').textContent = `Why ${explanation.label}?`;
+  $('rating-dialog-move').replaceChildren(makeBadge(explanation.label), renderCoachText(explanation.title, explanation.titleNotation));
+  $('rating-dialog-definition').textContent = explanation.definition;
+  $('rating-dialog-consequence').hidden = !explanation.consequence;
+  $('rating-dialog-consequence').replaceChildren(explanation.consequence ? renderCoachText(explanation.consequence.text, explanation.consequence.notation) : '');
+  $('rating-dialog-reason').replaceChildren(renderCoachText(explanation.reason, explanation.reasonNotation));
+  $('rating-dialog-details').open = false;
+  const facts = $('rating-dialog-facts'); facts.replaceChildren();
+  for (const fact of explanation.facts) { const item = document.createElement('li'); item.append(renderCoachText(fact.text, fact.notation)); facts.append(item); }
+  facts.hidden = !explanation.facts.length;
+  const continuation = $('rating-dialog-line'); continuation.hidden = !explanation.line?.moves.length; continuation.open = false;
+  $('rating-dialog-line-moves').replaceChildren();
+  if (!continuation.hidden) {
+    $('rating-dialog-line-title').textContent = explanation.line.title;
+    for (const move of explanation.line.moves) {
+      const item = document.createElement('span'); item.className = 'rating-line-move';
+      item.append(`${move.before.split(' ')[5]}${move.color === 'w' ? '.' : '…'} `, createMoveNotation(move.san, move.color, { showPawn: true, showCastleKing: true }));
+      $('rating-dialog-line-moves').append(item);
+    }
+  }
+  $('rating-dialog-note').textContent = explanation.note;
+  if (!dialog.open) dialog.showModal();
+  $('rating-dialog-title').focus();
 }
 function renderGamePerformance() {
   const ratings = estimateGameRatings(state.result), phases = getPhasePerformance(state.result);
@@ -1401,6 +1448,9 @@ $('retry-reveal').addEventListener('click', revealRetry);
 $('retry-next').addEventListener('click', () => { const ply = nextMistakePly(state.retry?.targetPly || 0); if (ply) startRetry(ply); });
 $('retry-exit').addEventListener('click', returnToGame);
 $('show-why').addEventListener('click', showConsequence);
+$('insight-explain').addEventListener('click', () => openRatingExplanation());
+$('rating-dialog-close').addEventListener('click', () => $('rating-dialog').close());
+$('rating-dialog').addEventListener('close', () => { if (ratingExplanationTrigger?.isConnected) ratingExplanationTrigger.focus({ preventScroll: true }); ratingExplanationTrigger = null; });
 $('bookmark-position').addEventListener('click', toggleBookmark);
 $('saved-search').addEventListener('input', renderSavedReviews);
 $('open-notebook').addEventListener('click', () => { if (!state.retry) { setReviewTab('practice'); setLibraryOpen(false); $('practice-panel').scrollIntoView({ block: 'nearest' }); } });

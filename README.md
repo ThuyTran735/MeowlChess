@@ -13,7 +13,7 @@
   </p>
 </div>
 
-**Version 1.13.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.13.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
+**Version 1.14.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.14.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
 
 > Your game, explained. Follow the turning points, explore engine suggestions, and study with an animated Meowl coach—all on your own device.
 
@@ -22,6 +22,7 @@ MeowlChess runs Stockfish or Lozza on your device. No subscription, analysis-ser
 | What you can do | How it works |
 | --- | --- |
 | Review a finished game | See both players' study scores, move ratings, opening, and evaluation graph. |
+| Understand a move rating | Click a move's label or rating icon for its saved evidence and continuation. |
 | Get a summary on the game page | Opt in to automatic reviews on Chess.com or Lichess. |
 | Explore better moves | Follow engine arrows, play legal variations, or search a position more deeply. |
 | Practice your mistakes | Try a move again with hints hidden, then check your answer. |
@@ -158,7 +159,7 @@ The game picker closes after selection. Move through the review with the move li
 
 On a normal launch, an optional **Support MeowlChess** popup appears before the tutorial. **Star on GitHub** opens the repository in a new tab; you can star it there or choose **Skip** (or press Escape) to continue. Its **Never show again** checkbox is separate from the tutorial preference. Opening a saved review from the on-site panel or going directly to its settings bypasses both prompts.
 
-The three-step tutorial points out the main controls with spotlights and arrows. Use **Next**, **Back**, or **Skip**; Escape also skips it. Check **Never show again** to stop automatic tutorials in this browser profile. The footer's **Tutorial** link reopens it, and unchecking that option restores automatic display. The tour follows smaller screens, restores your scroll position, respects reduced motion, and never starts a review or changes your selected game.
+The six-step tutorial points out the current controls with spotlights and arrows: **Games**, review speed and standout checks, **Summary / Moves / Practice**, Meowl coaches, on-site reviews in **Settings**, and **Updates & backups**. Use **Next**, **Back**, or **Skip**; Escape also skips it. Check **Never show again** to stop automatic tutorials in this browser profile. The footer's **Tutorial** link reopens it, and unchecking that option restores automatic display. The tour follows smaller screens, restores your scroll position, respects reduced motion, and never starts a review, enables site access, or changes your selected game. An existing Never show again choice stays in effect after updating.
 
 ## Supported games
 
@@ -285,6 +286,10 @@ With Engine arrows enabled, the best suggestion follows the displayed board on e
 ## Ask your coach
 
 Moves mentioned in coach tips, chat replies, suggested lines, and move buttons use chess-piece symbols. Filled symbols identify White’s pieces; outlined symbols identify Black’s. Coach explanations also show a pawn for pawn moves and a king for castling. Captures, promotion pieces, and check or mate marks remain visible; hovering a move shows its original notation.
+
+**Explanation length** starts at **Brief** for concise tips and answers. Choose **Detailed** for fuller reasoning and continuations. Changing it updates the current automatic tip and future replies while keeping your conversation. Your choice is remembered and included in backups. Open **Change coach** when you want a different personality.
+
+In **Moves**, click the selected move's rating heading or an icon in the move list to see **why that move earned its label**. The explanation uses the saved search, estimated chance loss, and verified tactical evidence where available. Older reviews with incomplete evidence say so rather than inventing a reason. This opens instantly without another engine run; close it or press Escape to return to the game.
 
 **Explain moves automatically** is on by default. As you step through a completed review in Moves or Coach, one short comment follows the selected move without filling your chat. It follows **Focus on**, pauses during practice or variations, and skips past positions when you scrub quickly. Turn it off under **Coach settings**; animation and sound preferences remain separate.
 

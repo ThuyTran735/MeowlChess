@@ -14,7 +14,10 @@ const sitePgn = '[Event "Coach site"]\n[White "sitecat"]\n[Black "siteowl"]\n[Re
 const chessUrl = 'https://www.chess.com/game/live/884477990';
 const errors = [], external = [];
 let context, worker, page, stage = 'launch';
-async function chooseCoach(id) { await page.locator(`.coach-choice[data-coach="${id}"]`).click(); }
+async function chooseCoach(id) {
+  if (!await page.locator('.coach-picker').evaluate(details => details.open)) await page.locator('.coach-picker-summary').click();
+  await page.locator(`.coach-choice[data-coach="${id}"]`).click();
+}
 async function poll(read, label, timeout = 15000) {
   const started = Date.now();
   while (Date.now() - started < timeout) { if (await read()) return; await new Promise(resolve => setTimeout(resolve, 40)); }
@@ -86,7 +89,7 @@ try {
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'No horizontal page overflow.');
     const rootBounds = await page.locator('#coach-root').boundingBox();
     assert(rootBounds.x >= 0 && rootBounds.x + rootBounds.width <= page.viewportSize().width + 1, 'Coach fits the viewport.');
-    for (const selector of ['.coach-question', '.coach-send', '.coach-choice[aria-pressed="true"]', '.coach-perspective']) {
+    for (const selector of ['.coach-question', '.coach-send', '.coach-picker-summary', '.coach-perspective', '.coach-explanation-length']) {
       const box = await page.locator(selector).boundingBox();
       assert(box && box.x >= rootBounds.x - 1 && box.x + box.width <= rootBounds.x + rootBounds.width + 1, `${selector} stays within the coach.`);
     }

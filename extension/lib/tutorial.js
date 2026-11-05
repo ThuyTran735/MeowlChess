@@ -38,7 +38,9 @@ export function createTutorial({ onOpen = () => {}, onSaveError = () => {} } = {
 
   function renderStep(focus = false) {
     steps.forEach((section, index) => { section.hidden = index !== step; });
+    dialog.querySelector('.tutorial-body').scrollTop = 0;
     progress.textContent = `${step + 1} of ${steps.length}`;
+    document.getElementById('tutorial-track-fill').style.transform = `scaleX(${(step + 1) / steps.length})`;
     back.hidden = step === 0;
     next.textContent = step === steps.length - 1 ? 'Get started' : 'Next';
     if (dialog.open) guide.showStep(step);

@@ -72,7 +72,7 @@ try {
   const errors = [], external = [];
   await context.route(/^https?:\/\//, route => { external.push(route.request().url()); return route.abort(); });
   const worker = context.serviceWorkers().find(item => item.url().startsWith('chrome-extension://')) || await context.waitForEvent('serviceworker');
-  await worker.evaluate(() => chrome.storage.local.set({ coachPreferences: { coach: 'meowl', perspective: 'both', motion: false, sounds: false, commentary: true } }));
+  await worker.evaluate(() => chrome.storage.local.set({ coachPreferences: { coach: 'meowl', perspective: 'both', motion: false, sounds: false, commentary: true, explanationLength: 'detailed' } }));
   page = await context.newPage(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => {
     window.fixtureEngineStarts = 0; window.fixtureSounds = 0;
@@ -153,6 +153,7 @@ try {
 
   stage = 'all selectable personalities retain metadata after their prose';
   for (const coach of ['owl', 'paws', 'mellow', 'scout', 'meowl']) {
+    if (!await page.locator('.coach-picker').evaluate(details => details.open)) await page.locator('.coach-picker-summary').click();
     await page.locator(`.coach-choice[data-coach="${coach}"]`).click();
     const q = 'Explain 2... Nc6'; reply = await ask(q); await verifyAnswer(reply, q, coach);
     for (const item of await matching(reply.locator('.coach-message-text'), 'Nc6').all()) await assertNotation(item, 'Nc6', 'b');

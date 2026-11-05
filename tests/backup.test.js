@@ -55,7 +55,7 @@ test('backup roundtrip preserves full analyses, bookmark notes, timestamps, sett
   const settings = memorySettings({
     username: 'Alice0', usernames: { chesscom: 'Alice0', lichess: 'https://lichess.org/abcdefgh' },
     savedAccounts: { chesscom: ['Alice0'], lichess: ['Alice'] },
-    coachPreferences: { coach: 'mellow', sounds: true, volume: 0.35, motion: true, commentary: false, perspective: 'b' },
+    coachPreferences: { coach: 'mellow', sounds: true, volume: 0.35, motion: true, commentary: false, perspective: 'b', explanationLength: 'detailed' },
     reviewSettings: { engine: 'lozza', lines: '1', time: '150', smart: false, highlights: false, boardSize: 720, arrowMode: 'all', moveSounds: true },
     tutorialNeverShowAgain: true, supportNeverShowAgain: true, shareHidePlayerNames: false,
     'siteReviewPanelPosition:chesscom': { left: 30, top: 90 }, 'siteReviewPanelSize:chesscom': { width: 450, height: 620 },
@@ -74,6 +74,7 @@ test('backup roundtrip preserves full analyses, bookmark notes, timestamps, sett
   assert.equal(restored.added, 1); assert.equal(restored.settingsRestored, true); assert.deepEqual(restored.warnings, []);
   assert.deepEqual(await target.exportBackupData(), await source.exportBackupData());
   assert.deepEqual(targetSettings.values, backup.settings);
+  assert.equal(targetSettings.values.coachPreferences.explanationLength, 'detailed');
 });
 
 test('duplicate review analysis and existing notes stay intact while missing bookmarks merge', async () => {
@@ -125,6 +126,7 @@ test('invalid full analysis, schema, identity, duplicate rows and oversized file
     value => { value.library.reviews[0].result.positions[0].pv = ['e7e5']; },
     value => { value.library.coachProgress.gameKeys.push(value.library.coachProgress.gameKeys[0]); },
     value => { value.settings.reviewSettings = { boardSize: Infinity }; },
+    value => { value.settings.coachPreferences = { explanationLength: 'unbounded' }; },
   ];
   for (const mutate of mutations) {
     const value = copy(backup); mutate(value);

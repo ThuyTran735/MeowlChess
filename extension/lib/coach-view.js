@@ -82,6 +82,7 @@ function storedPreferences(value, evilUnlocked = false) {
     sounds: value?.sounds === true,
     volume: typeof value?.volume === 'number' && Number.isFinite(value.volume) ? Math.max(0, Math.min(1, value.volume)) : 0.8,
     commentary: typeof value?.commentary === 'boolean' ? value.commentary : true,
+    explanationLength: value?.explanationLength === 'detailed' ? 'detailed' : 'brief',
   };
 }
 
@@ -217,6 +218,9 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   const unlockRetry = node('button', 'coach-unlock-retry', 'Try again'); unlockRetry.type = 'button'; unlockRetry.hidden = true;
   unlockDetails.append(unlockSummary, unlockExplanation, unlockRetry);
   const unlockStatus = node('p', 'coach-unlock-status'); unlockStatus.setAttribute('role', 'status'); unlockStatus.hidden = true;
+  const picker = node('details', 'coach-picker');
+  const pickerSummary = node('summary', 'coach-picker-summary', 'Change coach');
+  picker.append(pickerSummary, roster, unlockDetails, unlockStatus);
   listen(unlockRetry, 'click', () => { void refreshUnlockProgress(); });
   const controls = node('div', 'coach-controls');
   const sideLabel = node('label', 'coach-label', 'Focus on'); sideLabel.htmlFor = `${id}-perspective`;
@@ -224,7 +228,15 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   for (const [value, label] of [['both', 'Both players'], ['w', 'White'], ['b', 'Black']]) {
     const option = node('option', '', label); option.value = value; side.append(option);
   }
-  controls.append(sideLabel, side);
+  const focusControl = node('div', 'coach-focus-control'); focusControl.append(sideLabel, side);
+  const lengthControl = node('div', 'coach-length-control');
+  const lengthLabel = node('label', 'coach-label coach-length-label', 'Explanation length'); lengthLabel.htmlFor = `${id}-length`;
+  const explanationLength = node('select', 'coach-explanation-length'); explanationLength.id = lengthLabel.htmlFor;
+  for (const [value, label] of [['brief', 'Brief'], ['detailed', 'Detailed']]) {
+    const option = node('option', '', label); option.value = value; explanationLength.append(option);
+  }
+  lengthControl.append(lengthLabel, explanationLength);
+  controls.append(focusControl, lengthControl);
   const settings = node('details', 'coach-settings');
   const settingsSummary = node('summary', 'coach-settings-summary');
   const settingsState = node('span', 'coach-settings-state');
@@ -310,7 +322,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   const status = node('p', 'coach-status'); status.setAttribute('role', 'status');
   const scope = node('p', 'coach-scope', 'Based on your saved engine review. Chats stay in this tab and clear when you change games.');
   scope.id = `${id}-scope`;
-  root.replaceChildren(heading, description, roster, unlockDetails, unlockStatus, controls, settings, preferenceStatus, positionCard, blocked, walkthrough, welcome, log, suggestions, form, status, scope);
+  root.replaceChildren(heading, description, picker, controls, settings, preferenceStatus, positionCard, blocked, walkthrough, welcome, log, suggestions, form, status, scope);
   const greet = companion?.container.querySelector('.coach-companion-greet');
   const companionPersonality = companion ? node('span', 'coach-companion-personality') : null;
   if (companionPersonality) companion.container.querySelector('.coach-companion-figure')?.append(companionPersonality);
@@ -331,7 +343,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
     companionToolbar.append(label, companionChoice);
     companionUnlock.type = 'button'; companionToolbar.append(companionUnlock);
     listen(companionUnlock, 'click', () => {
-      onOpen?.(); unlockDetails.open = true;
+      onOpen?.(); picker.open = true; unlockDetails.open = true;
       unlockSummary.scrollIntoView({ block: 'nearest', behavior: 'instant' }); unlockSummary.focus({ preventScroll: true });
     });
     if (companionSettings) {
@@ -449,7 +461,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
       if (companionHint) companionHint.hidden = false;
       return;
     }
-    const key = `${context.ply}:${selected.coach}:${selected.perspective}`;
+    const key = `${context.ply}:${selected.coach}:${selected.perspective}:${selected.explanationLength}`;
     if (walkthroughKey === key && walkthroughAnswer) { showWalkthrough(walkthroughAnswer); return; }
     if (walkthroughPending === key) return;
     cancelWalkthrough();
@@ -462,7 +474,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
       walkthroughTimer = null; walkthroughPending = '';
       if (disposed || token !== walkthroughToken || !showingWalkthrough()) return;
       walkthroughSource ||= createCoachWalkthrough({ result: context.result, game: context.game });
-      const answer = walkthroughSource.describe({ ply: context.ply, coach: selected.coach, perspective: selected.perspective });
+      const answer = walkthroughSource.describe({ ply: context.ply, coach: selected.coach, perspective: selected.perspective, explanationLength: selected.explanationLength });
       if (!answer) return;
       walkthroughKey = key; walkthroughAnswer = answer;
       showWalkthrough(answer);
@@ -533,6 +545,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
     selected = preferences(selected);
     const personalityChanged = root.dataset.coach !== selected.coach;
     choice.value = selected.coach; side.value = selected.perspective;
+    explanationLength.value = selected.explanationLength;
     motionToggle.checked = selected.motion; soundToggle.checked = selected.sounds; commentaryToggle.checked = selected.commentary;
     volumeControls.hidden = false;
     volume.value = String(Math.round(selected.volume * 100)); volumeValue.textContent = `${volume.value}%`;
@@ -652,7 +665,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
     try {
       const answer = answerCoach({
         question: prompt, result: context.result, game: context.game,
-        ply: context.ply, perspective: selected.perspective, coach: selected.coach, previousPly,
+        ply: context.ply, perspective: selected.perspective, coach: selected.coach, previousPly, explanationLength: selected.explanationLength,
       });
       if (!answer || typeof answer.text !== 'string') throw new Error('No answer.');
       const user = message('user', 'You', prompt);
@@ -721,20 +734,25 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
     await preferenceQueue;
   }
 
-  function chooseCoach(coachId) {
+  function chooseCoach(coachId, { collapsePicker = false } = {}) {
     if (coachId === 'evil' && !unlockProgress.unlocked) {
       choice.value = selected.coach; if (companionChoice) companionChoice.value = selected.coach;
-      unlockDetails.open = true; unlockSummary.focus({ preventScroll: true });
+      picker.open = true; unlockDetails.open = true; unlockSummary.focus({ preventScroll: true });
       return;
     }
     unlockStatus.hidden = true;
     selected = preferences({ ...selected, coach: coachId }); revision++;
     renderPreferences(); void writePreferences({ coach: selected.coach });
+    if (collapsePicker && picker.open) {
+      const restoreFocus = picker.contains(document.activeElement);
+      picker.open = false;
+      if (restoreFocus) pickerSummary.focus({ preventScroll: true });
+    }
   }
-  listen(choice, 'change', () => chooseCoach(choice.value));
+  listen(choice, 'change', () => chooseCoach(choice.value, { collapsePicker: true }));
   listen(roster, 'click', event => {
     const button = event.target.closest('.coach-choice');
-    if (button && roster.contains(button)) chooseCoach(button.dataset.coach);
+    if (button && roster.contains(button)) chooseCoach(button.dataset.coach, { collapsePicker: true });
   });
   listen(roster, 'keydown', event => {
     const button = event.target.closest('.coach-choice');
@@ -796,6 +814,12 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
     selected = preferences({ ...selected, commentary: commentaryToggle.checked }); revision++;
     stopReactions(); cancelWalkthrough(); renderPreferences(); renderControls();
     void writePreferences({ commentary: selected.commentary });
+  });
+  listen(explanationLength, 'change', () => {
+    selected = preferences({ ...selected, explanationLength: explanationLength.value }); revision++;
+    // Refresh only the current tip. Earlier replies keep their wording and no reaction is replayed.
+    cancelWalkthrough(); renderPreferences();
+    void writePreferences({ explanationLength: selected.explanationLength });
   });
   listen(document, 'visibilitychange', () => {
     if (document.hidden) { stopReactions(); cancelWalkthrough(); celebratedPly = context.ply; walkthrough.hidden = true; if (companion) companion.bubble.hidden = true; }

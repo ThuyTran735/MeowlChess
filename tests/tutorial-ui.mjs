@@ -11,6 +11,7 @@ const extension = join(root, 'extension');
 const profile = await mkdtemp(join(tmpdir(), 'meowlchess-tutorial-test-'));
 const key = 'tutorialNeverShowAgain';
 const supportKey = 'supportNeverShowAgain';
+const tutorialTargets = ['#library-toggle', '.review-setup', '.review-tabs', '#coach-tab', '#review-settings > summary', "footer a[href='updates.html']"];
 const repository = 'https://github.com/ThuyTran735/MeowlChess';
 const pgn = '[Event "Tutorial test"]\n[White "alice"]\n[Black "bob"]\n[Result "0-1"]\n\n1. f3 e5 2. g4 Qh4# 0-1';
 const game = { url: 'https://www.chess.com/game/live/12345', pgn, rules: 'chess', time_class: 'rapid', end_time: 1700000000, white: { username: 'alice', result: 'checkmated' }, black: { username: 'bob', result: 'win' } };
@@ -63,9 +64,21 @@ try {
   const saved = () => page.evaluate(async key => (await chrome.storage.local.get(key))[key], key);
   const visibleStep = () => page.locator('[data-tutorial-step]:visible').getAttribute('data-tutorial-step');
   const reopen = async () => { if (await page.locator('#library-dialog').evaluate(el => el.open)) await page.locator('#close-library').click(); await page.locator('#open-tutorial').click(); await visible(); };
-  const finish = async () => { await page.locator('#tutorial-next').click(); await page.locator('#tutorial-next').click(); assert.match(await page.locator('#tutorial-next').innerText(), /Get started/i); await page.locator('#tutorial-next').click(); await dismissed(); };
+  const finish = async () => {
+    const count = await page.locator('[data-tutorial-step]').count();
+    for (let index = Number(await visibleStep()); index < count - 1; index++) await page.locator('#tutorial-next').click();
+    assert.match(await page.locator('#tutorial-next').innerText(), /Get started/i);
+    await page.locator('#tutorial-next').click(); await dismissed();
+  };
+  const settingsSnapshot = () => page.evaluate(() => ({
+    open: document.querySelector('#review-settings').open,
+    controls: [...document.querySelectorAll('#settings-content input, #settings-content select, #quick-highlight-analysis')].map(el => ({ id: el.id, value: el.value, checked: el.checked }))
+  }));
+  const resetSteps = async () => {
+    while (Number(await visibleStep()) > 0) await page.locator('#tutorial-back').click();
+  };
   const capture = name => page.screenshot({ path: join(root, 'test-results', name), fullPage: false });
-  const assertGuidance = async target => {
+  const assertGuidance = async (target, { reducedMotion = true } = {}) => {
     await page.waitForFunction(target => {
       const highlight = document.querySelector('#tutorial-highlight');
       const card = document.querySelector('#tutorial-card');
@@ -86,8 +99,30 @@ try {
     const a = geometry.card, b = geometry.highlight;
     assert(a.right <= b.left + 1 || a.left >= b.right - 1 || a.bottom <= b.top + 1 || a.top >= b.bottom - 1, `Tutorial text must not cover the highlighted control: ${JSON.stringify(geometry)}`);
     assert.equal(await page.locator('#tutorial-highlight [id]').count(), 0, 'Highlight copies must not duplicate live-control IDs.');
+    assert.equal(await page.locator('#tutorial-highlight label[for]').count(), 0, 'Highlight labels must not reference live controls.');
+    assert.equal(await page.locator('#tutorial-highlight').evaluate(el => el.inert && el.getAttribute('aria-hidden') === 'true'), true, 'Preview controls stay inert and outside the accessibility tree.');
+    assert.equal(await page.locator('#tutorial-highlight').evaluate(el => [...el.querySelectorAll('*')].every(copy => copy.tabIndex < 0 && (!('disabled' in copy) || copy.disabled))), true, 'Highlight copies cannot be activated or reached by keyboard.');
     assert.equal(await page.locator('#tutorial-arrow').evaluate(el => { const css = getComputedStyle(el); return css.visibility !== 'hidden' && css.display !== 'none' && css.stroke !== 'none' && Number(css.opacity) > 0; }), true);
-    assert.equal(await tutorial().evaluate(el => el.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running').length), 0, 'Reduced motion must not keep tutorial animations running.');
+    if (reducedMotion) assert.equal(await tutorial().evaluate(el => el.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running').length), 0, 'Reduced motion must not keep tutorial animations running.');
+    for (const selector of ['.tutorial-heading h2', '#tutorial-progress']) {
+      const headingText = await page.locator(selector).evaluate(el => {
+        const range = document.createRange(); range.selectNodeContents(el);
+        const text = range.getBoundingClientRect(), card = document.querySelector('#tutorial-card').getBoundingClientRect();
+        return { left: text.left, right: text.right, cardLeft: card.left, cardRight: card.right, scrollLeft: el.scrollLeft };
+      });
+      assert(headingText.left >= geometry.card.left && headingText.right <= geometry.card.right && headingText.scrollLeft === 0, `${selector} text stays inside the card for ${target}: ${JSON.stringify(headingText)}`);
+    }
+    if (target.startsWith('footer ')) {
+      const previewText = await page.locator('#tutorial-highlight').evaluate(el => {
+        const range = document.createRange(); range.selectNodeContents(el.firstElementChild);
+        const text = range.getBoundingClientRect(), box = el.getBoundingClientRect();
+        return { top: text.top, bottom: text.bottom, left: text.left, right: text.right, boxTop: box.top, boxBottom: box.bottom, boxLeft: box.left, boxRight: box.right };
+      });
+      assert(previewText.top >= previewText.boxTop - 1 && previewText.bottom <= previewText.boxBottom + 1 && previewText.left >= previewText.boxLeft - 1 && previewText.right <= previewText.boxRight + 1, `Footer link text fits its spotlight: ${JSON.stringify(previewText)}`);
+    }
+    for (const selector of ['#tutorial-never', '#tutorial-skip', '#tutorial-next']) {
+      assert.equal(await page.locator(selector).evaluate(el => { const rect = el.getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= innerHeight && rect.left >= 0 && rect.right <= innerWidth; }), true, `${selector} remains reachable for ${target}`);
+    }
   };
   await mkdir(join(root, 'test-results'), { recursive: true });
   stage = 'support invitation, focus, mobile layout and no automatic activity';
@@ -166,23 +201,69 @@ try {
   for (let index = 0; index < 10; index++) { await page.keyboard.press('Tab'); assert.equal(await tutorial().evaluate(el => el.contains(document.activeElement) || (document.activeElement === document.body && !document.hasFocus())), true, 'Tab may reach browser chrome but cannot focus background app controls.'); }
   const initialBoard = await page.locator('#board').getAttribute('aria-label');
   await page.keyboard.press('ArrowRight'); assert.equal(await page.locator('#board').getAttribute('aria-label'), initialBoard);
-  await page.locator('#tutorial-next').click(); assert.equal(await visibleStep(), '1'); assert.match(await page.locator('#tutorial-progress').innerText(), /2.*3/);
+  assert.deepEqual(await page.locator('[data-tutorial-step]').evaluateAll(steps => steps.map(step => step.dataset.tutorialTarget)), tutorialTargets);
+  const initialSettings = await settingsSnapshot();
+  const initialPreferences = await page.evaluate(() => chrome.storage.local.get(null));
+  await page.locator('#tutorial-next').click(); assert.equal(await visibleStep(), '1'); assert.equal(await page.locator('#tutorial-progress').innerText(), `2 of ${tutorialTargets.length}`);
   await page.locator('#tutorial-back').click(); assert.equal(await visibleStep(), '0');
-  await assertGuidance('#library-toggle'); await capture('tutorial-desktop.png');
-  await page.locator('#tutorial-next').click(); await assertGuidance('#analyze-button'); await capture('tutorial-review-desktop.png');
-  await page.locator('#tutorial-next').click(); await assertGuidance('.review-tabs'); await capture('tutorial-explore-desktop.png');
-  await page.locator('#tutorial-back').click(); await page.locator('#tutorial-back').click();
-  await page.setViewportSize({ width: 390, height: 560 });
-  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  await assertGuidance('#library-toggle'); await capture('tutorial-mobile.png');
-  await page.locator('#tutorial-next').click(); await assertGuidance('#analyze-button'); await capture('tutorial-review-mobile.png');
-  await page.locator('#tutorial-next').click(); await assertGuidance('.review-tabs'); await capture('tutorial-explore-mobile.png');
-  await page.locator('#tutorial-back').click(); await page.locator('#tutorial-back').click();
+  for (const viewport of [{ name: 'desktop', width: 1366, height: 768 }, { name: 'mobile-short', width: 390, height: 560 }, { name: 'mobile-tall', width: 375, height: 812 }, { name: 'landscape-short', width: 740, height: 360 }]) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await resetSteps();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    for (const [index, target] of tutorialTargets.entries()) {
+      if (index > 0) await page.locator('#tutorial-next').click();
+      assert.equal(await visibleStep(), String(index));
+      assert.equal(await page.locator('#tutorial-progress').innerText(), `${index + 1} of ${tutorialTargets.length}`);
+      assert.equal(await page.locator(`[data-tutorial-step="${index}"] h3`).evaluate(el => el === document.activeElement), true);
+      await assertGuidance(target);
+      if (target === '.review-setup') {
+        assert.equal(await page.locator('#analyze-button').isDisabled(), true);
+        assert.equal(await page.locator('#quick-highlight-analysis').isDisabled(), true);
+        assert.match(await page.locator('#tutorial-highlight').innerText(), /Review game[\s\S]*Check standout moves/);
+        assert.equal(await page.locator('#tutorial-highlight input[type="checkbox"]').isChecked(), true);
+      }
+      await capture(`tutorial-${index + 1}-${viewport.name}.png`);
+    }
+  }
+  assert.deepEqual(await settingsSnapshot(), initialSettings, 'Every tutorial step preserves settings.');
+  assert.deepEqual(await page.evaluate(() => chrome.storage.local.get(null)), initialPreferences, 'Tour navigation does not write preferences.');
   await page.setViewportSize({ width: 1366, height: 768 });
   await finish(); await library();
   assert.equal(await page.evaluate(() => window.engineCommands.length), 0);
   assert.equal(requests.length, 0);
-  console.log('PASS: three-step guided tutorial, arrows and highlights, reduced motion, keyboard focus, responsive layout, and no game/engine activity');
+  console.log('PASS: six-step guided tutorial, arrows and inert highlights, reduced motion, keyboard focus, four viewport sizes, and no game/engine/settings activity');
+
+  stage = 'normal-motion guidance completes without ongoing animation';
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await reopen();
+  for (const [index, target] of tutorialTargets.entries()) {
+    if (index > 0) await page.locator('#tutorial-next').click();
+    assert.notEqual(await page.locator('#tutorial-arrow').evaluate(el => getComputedStyle(el).animationName), 'none', 'Normal motion animates the guide arrow.');
+    await page.waitForFunction(() => document.querySelector('#tutorial-dialog').getAnimations({ subtree: true }).every(animation => animation.playState !== 'running'));
+    await assertGuidance(target, { reducedMotion: false });
+  }
+  await finish();
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  assert.deepEqual(await settingsSnapshot(), initialSettings);
+  assert.equal(await page.evaluate(() => window.engineCommands.length), 0);
+  assert.equal(requests.length, 0);
+  console.log('PASS: normal-motion arrows settle after each step without changing settings or starting activity');
+
+  stage = 'missing target keeps navigation and dismissal usable';
+  await reopen();
+  await page.locator('[data-tutorial-step="1"]').evaluate(el => { el.dataset.tutorialTarget = '#tutorial-unavailable-target'; });
+  await page.locator('#tutorial-next').click();
+  assert.equal(await visibleStep(), '1');
+  assert.equal(await page.locator('#tutorial-highlight').isVisible(), false);
+  assert.equal(await page.locator('#tutorial-arrow').count(), 0);
+  assert.equal(await page.locator('#tutorial-card').evaluate(el => { const rect = el.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.bottom <= innerHeight; }), true);
+  await page.locator('[data-tutorial-step="1"]').evaluate((el, target) => { el.dataset.tutorialTarget = target; }, tutorialTargets[1]);
+  await page.locator('#tutorial-next').click(); await assertGuidance(tutorialTargets[2]);
+  await page.locator('#tutorial-skip').click(); await dismissed();
+  assert.deepEqual(await settingsSnapshot(), initialSettings);
+  assert.equal(await page.evaluate(() => window.engineCommands.length), 0);
+  assert.equal(requests.length, 0);
+  console.log('PASS: a missing target leaves a readable card, working navigation, and Skip');
 
   stage = 'Skip and never-show persistence';
   await page.reload(); await visible(); await page.locator('#tutorial-skip').click(); await dismissed(); await library();
@@ -209,12 +290,23 @@ try {
   await page.locator('#analyze-button').click(); await page.waitForFunction(() => /Review complete/.test(document.querySelector('#review-status').textContent) && !document.querySelector('#analyze-button').disabled);
   await page.locator('#next-button').click();
   const reviewState = await page.evaluate(() => ({ board: document.querySelector('#board').getAttribute('aria-label'), title: document.querySelector('#game-title').textContent, moves: document.querySelector('#move-list').innerHTML, tab: document.querySelector('[role="tab"][aria-selected="true"]').id, saved: document.querySelector('#saved-count').textContent, commands: window.engineCommands.length }));
+  const reviewSettings = await settingsSnapshot();
+  const reviewPreferences = await page.evaluate(() => chrome.storage.local.get(null));
+  const reviewRequestCount = requests.length;
   await page.locator('#open-tutorial').scrollIntoViewIfNeeded();
   const originalScroll = await page.evaluate(() => scrollY);
-  await reopen(); await page.keyboard.press('Home'); await page.keyboard.press('ArrowRight'); await page.locator('#tutorial-skip').click(); await dismissed();
+  await reopen(); await page.keyboard.press('Home'); await page.keyboard.press('ArrowRight');
+  for (const [index, target] of tutorialTargets.entries()) {
+    if (index > 0) await page.locator('#tutorial-next').click();
+    await assertGuidance(target);
+  }
+  await page.locator('#tutorial-skip').click(); await dismissed();
   await page.waitForFunction(y => Math.abs(scrollY - y) < 2, originalScroll);
   assert.deepEqual(await page.evaluate(() => ({ board: document.querySelector('#board').getAttribute('aria-label'), title: document.querySelector('#game-title').textContent, moves: document.querySelector('#move-list').innerHTML, tab: document.querySelector('[role="tab"][aria-selected="true"]').id, saved: document.querySelector('#saved-count').textContent, commands: window.engineCommands.length })), reviewState);
   assert.equal(await page.locator('#open-tutorial').evaluate(el => el === document.activeElement), true);
+  assert.deepEqual(await settingsSnapshot(), reviewSettings);
+  assert.deepEqual(await page.evaluate(() => chrome.storage.local.get(null)), reviewPreferences);
+  assert.equal(requests.length, reviewRequestCount);
   console.log('PASS: reopening the tutorial preserves the completed review, selected move and focus');
 
   stage = 'direct saved review and site settings bypass both prompts';

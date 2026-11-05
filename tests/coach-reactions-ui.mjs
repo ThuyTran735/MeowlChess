@@ -49,7 +49,10 @@ view.setContext(state); window.fixtureReady = true;
 `;
 let context, page, worker, stage = 'launch';
 const errors = [], external = [];
-async function chooseCoach(id) { await page.locator(`.coach-choice[data-coach="${id}"]`).click(); }
+async function chooseCoach(id) {
+  if (!await page.locator('.coach-picker').evaluate(details => details.open)) await page.locator('.coach-picker-summary').click();
+  await page.locator(`.coach-choice[data-coach="${id}"]`).click();
+}
 async function poll(read, label, timeout = 12000) {
   const started = Date.now();
   while (Date.now() - started < timeout) { if (await read()) return; await new Promise(resolve => setTimeout(resolve, 30)); }

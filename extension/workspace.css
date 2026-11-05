@@ -20,22 +20,22 @@ input::placeholder, textarea::placeholder { color: #8e9787; }
 .topbar .review-settings > summary { position: static; width: auto; height: auto; list-style: none; }
 .topbar .review-settings > summary::after { content: none; }
 .topbar .review-settings[open] > summary { color: #dcebcf; border-color: #a8bd94; background: #394731; }
-.topbar .settings-body { position: fixed; z-index: 50; inset: 74px 20px auto auto; width: min(456px, calc(100vw - 24px)); max-height: calc(100dvh - 86px); display: flex; flex-direction: column; padding: 0; margin: 0; border: 1px solid #637157; border-radius: 15px; background: #272d25; box-shadow: 0 20px 70px #0008, 0 3px 12px #0005; overflow: hidden; }
+.topbar .settings-body { position: fixed; z-index: 50; inset: 74px 20px auto auto; width: min(456px, calc(100vw - 24px)); max-height: calc(100dvh - 86px); display: flex; flex-direction: column; padding: 0; margin: 0; border: 1px solid #637157; border-radius: 12px; background: #272d25; box-shadow: 0 16px 48px #0007; overflow: hidden; }
 .settings-heading { display: flex; align-items: center; justify-content: space-between; flex: none; gap: 16px; padding: 18px 20px; border-bottom: 1px solid var(--line); }
 .settings-heading h2 { font-size: 20px; font-weight: 650; letter-spacing: -.4px; }
 .settings-heading p { margin-top: 3px; color: var(--muted); font-size: 12px; }
 .settings-scroll { padding: 0 20px 20px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #76816b transparent; }
-.settings-section { border: 0; border-bottom: 1px solid var(--line); padding: 20px 0; margin: 0; min-width: 0; }
-.settings-section h3, .settings-section legend { padding: 0; font-size: 14px; font-weight: 650; color: var(--text); margin: 0 0 14px; }
+.settings-section { border: 0; border-bottom: 1px solid var(--line); padding: 18px 0; margin: 0; min-width: 0; }
+.settings-section h3, .settings-section legend { padding: 0; font-size: 14px; font-weight: 650; color: var(--text); margin: 0 0 12px; }
 .settings-section:last-child { border-bottom: 0; padding-bottom: 0; }
 .settings-section .review-options { gap: 12px; margin-top: 12px; }
 .settings-section .review-options label { font-size: 12px; color: #c9d0c1; }
 .settings-section .review-options select { width: 64%; max-width: none; font-size: 12px; padding: 9px; min-height: 38px; }
-.settings-section .display-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 8px; margin: 15px 0 4px; }
+.settings-section .display-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 8px; margin: 12px 0 4px; padding-top: 0; }
 .settings-section .display-options label { font-size: 12px; color: #c9d0c1; gap: 7px; }
 .settings-section input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--green); }
 .settings-section .settings-note, .site-review-settings p { font-size: 12px; line-height: 1.6; }
-.settings-section .board-size-setting { padding-block: 14px; margin-top: 14px; }
+.settings-section .board-size-setting { padding-block: 12px; margin-top: 12px; }
 .settings-section .board-size-heading label { font-size: 12px; }
 .settings-section .completion-alert-setting { padding: 0; margin: 0; border: 0; }
 .settings-section .completion-alert-setting label { font-size: 12px; }
@@ -62,8 +62,8 @@ html[data-board-size="custom"] main { max-width: calc(var(--board-size) + 464px)
 .nav-button:hover:enabled { background: #424e38; }
 #play-button { background: #424f37; color: #e4efd9; }
 #position-label { font-size: 12px; }
-.insights-column { border-radius: 16px; border-color: #ffffff19; box-shadow: 0 6px 24px #0001; }
-.review-setup { padding: 18px; background: #2b3127; }
+.insights-column { border-radius: 12px; border-color: #ffffff19; box-shadow: 0 6px 24px #0001; scroll-margin-top: 80px; }
+.review-setup { padding: 20px; background: #2b3127; }
 .review-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 13px; color: #d5ddcd; font-size: 12px; font-weight: 600; }
 .local-indicator { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 400; color: var(--muted); }
 .local-indicator::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
@@ -80,13 +80,13 @@ html[data-board-size="custom"] main { max-width: calc(var(--board-size) + 464px)
 .cancel-button { border-radius: 9px; }
 .review-config { margin-top: 11px; font-size: 12px; color: #c2ceba; }
 .review-status-row { gap: 4px 8px; margin-top: 7px; }
-.review-status { font-size: 11px; color: #b3bda9; }
+.review-status { font-size: 12px; line-height: 1.5; color: #b3bda9; }
 .review-tabs { gap: 3px; padding: 7px; background: #22271f; }
 .review-tabs button { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 9px 4px; border-radius: 9px; font-size: 12px; font-weight: 500; color: #aeb8a5; }
 .review-tabs button[aria-selected=true] { color: #e6f2db; background: #3d4b33; box-shadow: inset 0 0 0 1px #a8bd9430; }
 .review-tabs button[aria-selected=true] svg { color: #b9d49f; }
 .review-tabs button:hover:enabled:not([aria-selected=true]) { background: #323a2c; }
-.analysis-box { padding: 20px 18px; }
+.analysis-box { padding: 20px; }
 #insight-title { font-size: 22px; letter-spacing: -.45px; }
 #insight-text { font-size: 13px; line-height: 1.7; color: #cbd2c4; margin-top: 10px; }
 .best-move { font-size: 12px; color: #bdd89f; }
@@ -97,37 +97,45 @@ html[data-board-size="custom"] main { max-width: calc(var(--board-size) + 464px)
 .move-list { max-height: 285px; }
 .move-button { min-height: 39px; font-size: 14px; border-radius: 7px; }
 .move-button.active { background: #4b613c; box-shadow: inset 3px 0 #c1d99f; }
+.move-rating-button { border-radius: 7px; }
+.move-cell:has(.move-button.active):has(.move-rating-button:not([hidden])) .move-button { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.move-cell:has(.move-button.active) .move-rating-button { border-radius: 0 7px 7px 0; background: #4b613c; }
+.move-rating-button:focus-visible { outline-offset: -2px; }
 .move-row:nth-child(odd) { background: #ffffff03; }
-.engine-panel > summary { padding: 16px 18px; font-size: 13px; font-weight: 600; }
-.engine-body { padding: 0 18px 18px; }
+.engine-panel > summary { padding: 16px 20px; font-size: 13px; font-weight: 600; }
+.engine-body { padding: 0 20px 20px; }
 .engine-line { background: #333d2d; padding: 11px 9px; border-radius: 8px; }
 .line-notation { font-size: 12px; }
 .secondary-button { border-radius: 7px; min-height: 36px; background: #343e2d; color: #dce6d2; }
-.summary { padding: 18px; }
+.summary { padding: 18px 20px 20px; }
 .score-row { gap: 12px; }
 .score-card { padding: 16px 14px; border-radius: 11px; }
 .score-b { background: #424a3b; }
 .score-value { font-size: 36px; }
 .score-info strong { font-size: 13px; }
+.score-info small { font-size: 11px; opacity: .82; }
+.summary-caption { font-size: 11px; line-height: 1.5; }
 .classification-count { padding-block: 2px; }
 .classification-count > span:first-child { font-size: 13px; }
 .rating-count { border-radius: 7px; }
 .game-performance-table { font-size: 13px; }
+.game-performance-table thead th { font-size: 11px; }
 .game-performance-table tbody th, .game-performance-table td { padding-block: 9px; }
 .game-rating-value { font-size: 17px; }
-.opening-info, .chart-panel { padding: 16px 18px; }
+.opening-info, .chart-panel { padding: 16px 20px; }
+.opening-info span { font-size: 11px; line-height: 1.5; }
 .chart-panel .library-heading h3 { font-size: 13px; }
 .eval-chart { background: #20251e; border-radius: 8px; }
-.summary-actions { padding-inline: 18px; }
-.summary-actions button { font-size: 12px; background: transparent; }
-.legend { padding: 16px 18px; }
-.notebook-heading { padding: 20px 18px 10px; }
+.summary-actions { padding-inline: 20px; }
+.summary-actions button { width: auto; font-size: 12px; background: transparent; }
+.legend { padding: 16px 20px; }
+.notebook-heading { padding: 20px 20px 10px; }
 .notebook-heading h3 { font-size: 18px; letter-spacing: -.3px; }
 .notebook-item { background: #30382a; border-radius: 9px; padding: 12px; }
-.keyboard-hint { color: #a0ab96; padding: 10px 18px 14px; }
+.keyboard-hint { color: #a0ab96; padding: 10px 20px 14px; font-size: 11px; }
 .progress-heading { font-size: 12px; }
 progress { height: 7px; }
-.library-dialog { width: 860px; border-radius: 18px; border: 1px solid #75836866; background: var(--panel); }
+.library-dialog { width: 860px; border-radius: 12px; border: 1px solid #75836866; background: var(--panel); }
 dialog::backdrop { background: #0e140fd6; backdrop-filter: blur(5px); }
 .dialog-heading { background: #2b3127; padding: 22px 24px; }
 .dialog-heading h2 { font-size: 26px; }
@@ -183,6 +191,16 @@ footer { padding-block: 22px; }
   .board-layout:has(> .coach-companion:not([hidden])) { grid-template-areas: "board" "insights" "companion"; }
   .review-tabs button { flex-direction: row; justify-content: center; gap: 7px; padding-block: 12px; }
 }
+@media (min-width: 680px) and (max-width: 920px) and (max-height: 560px) {
+  main { max-width: 920px; padding: 16px 16px 0; }
+  .board-layout, .board-layout:has(> .coach-companion:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(300px, 1fr); gap: 16px; }
+  .board-layout:has(> .coach-companion:not([hidden])) { grid-template-areas: "board insights" "companion insights"; grid-template-rows: min-content 1fr; }
+  .study-title { margin-bottom: 10px; }
+  .study-title h1 { font-size: 21px; }
+  .review-tabs button { flex-direction: column; gap: 5px; }
+  .coach-companion { grid-template-columns: 100px minmax(0, 1fr); gap: 10px; }
+  .coach-companion .coach-avatar { width: 100px; }
+}
 @media (max-width: 560px) {
   .topbar { height: 60px; padding-inline: 12px; gap: 8px; }
   .brand { font-size: 17px; }
@@ -205,7 +223,7 @@ footer { padding-block: 22px; }
   .move-navigation { gap: 1px; padding: 2px; }
   #position-label { font-size: 11px; }
   .review-tabs button { flex-direction: column; gap: 5px; font-size: 12px; }
-  .library-dialog { max-width: calc(100vw - 20px); border-radius: 14px; }
+  .library-dialog { max-width: calc(100vw - 20px); border-radius: 12px; }
   .dialog-heading { padding: 18px 16px; }
   .library-shortcuts { padding: 16px 16px 0; gap: 6px; }
   .library-shortcuts button { padding: 11px 8px; }

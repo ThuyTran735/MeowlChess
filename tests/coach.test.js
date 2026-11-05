@@ -25,6 +25,71 @@ function withError(input, ply, label = 'Blunder', probabilityLoss = 0.4) {
   return input;
 }
 
+test('brief answers keep legal whole-move excerpts, uncertainty, subjects and all coach personalities', () => {
+  const input = withError(fixture(), 3, 'Mistake', 0.15);
+  input.result.positions[2] = { cp: 10, mate: null, depth: 12, bestMove: 'f1c4', pv: ['f1c4', 'b8c6', 'g1f3', 'g8f6', 'a1a8'] };
+  const briefAnswers = [];
+  for (const { id: coach } of COACHES) {
+    const options = { ...input, question: 'What was better than 2. Nf3?', coach };
+    const detailed = answerCoach({ ...options, explanationLength: 'detailed' });
+    const brief = answerCoach({ ...options, explanationLength: 'brief' });
+    briefAnswers.push(brief.text);
+    assert(brief.text.length < detailed.text.length * 0.9, `${coach} has a shorter complete answer`);
+    assert.match(brief.text, /2\. Nf3 is rated Mistake/);
+    assert.match(brief.text, /15 percentage points/);
+    assert.match(brief.text, /engine preferred Bc4 at this search time/);
+    assert.match(brief.text, /Line starts: 2\. Bc4 Nc6\./);
+    assert.match(brief.text, /Only the legal part/);
+    assert.match(brief.text, /No lasting material gain or forced mate is verified/);
+    assert.doesNotMatch(brief.text, /a1a8|Qh9|\uE000|\uE001/);
+    assert.deepEqual(brief.moves, detailed.moves);
+    assert.equal(brief.subjectPly, detailed.subjectPly);
+    for (const ref of brief.notation) assert.equal(brief.text.slice(ref.start, ref.end), ref.san);
+    assert(brief.notation.some(ref => ref.san === 'Bc4' && ref.color === 'w'));
+    assert(brief.notation.some(ref => ref.san === 'Nc6' && ref.color === 'b'));
+  }
+  assert.equal(new Set(briefAnswers).size, COACHES.length);
+});
+
+test('brief walkthroughs refresh by length without changing their private evidence or navigation', () => {
+  const input = withError(fixture(), 3, 'Mistake', 0.15);
+  const walkthrough = createCoachWalkthrough(input);
+  const options = { ply: 3, coach: 'mellow' };
+  const detailed = walkthrough.describe({ ...options, explanationLength: 'detailed' });
+  const brief = walkthrough.describe({ ...options, explanationLength: 'brief' });
+  assert(brief.text.length < detailed.text.length);
+  assert.equal(brief.heading, detailed.heading);
+  assert.equal(brief.suggestion, detailed.suggestion);
+  assert.deepEqual(brief.nextMoment, detailed.nextMoment);
+  assert.match(brief.text, /No lasting material gain or forced mate is verified/);
+  assert.deepEqual(walkthrough.describe({ ...options, explanationLength: 'detailed' }), detailed);
+  for (const ref of brief.notation) assert.equal(brief.text.slice(ref.start, ref.end), ref.san);
+  const mate = describeCoachMove({ ...fixture(MATE), ply: 4, explanationLength: 'brief' });
+  assert.match(mate.text, /delivered checkmate/);
+  const repetition = describeCoachMove({ ...withError(fixture(REPETITION), 8), ply: 8, explanationLength: 'brief' });
+  assert.match(repetition.text, /drawn by threefold repetition/);
+});
+
+test('brief topic answers retain ending uncertainty, category counts and score perspective', () => {
+  const input = withError(fixture(), 3, 'Mistake', 0.15);
+  for (const question of ['Summarize this game', 'What should I practice?', 'What is the material?', 'What opening is this?', 'How were the phases?']) {
+    const brief = answerCoach({ ...input, question, perspective: 'w', explanationLength: 'brief' });
+    const detailed = answerCoach({ ...input, question, perspective: 'w', explanationLength: 'detailed' });
+    assert(brief.text.length < detailed.text.length, question);
+    assert.deepEqual(brief.moves, detailed.moves);
+  }
+  assert.match(answerCoach({ ...input, question: 'Summarize this game', explanationLength: 'brief' }).text, /do not establish the exact ending reason/);
+  assert.match(answerCoach({ ...input, question: 'What was the biggest mistake?', explanationLength: 'brief' }).text, /not proof that this move alone decided/);
+  const counts = answerCoach({ ...input, question: 'How many Mistakes did White play?', explanationLength: 'brief' });
+  assert.deepEqual(counts.counts, { Mistake: 1 });
+  assert.equal(counts.matchCount, 1);
+  const position = answerCoach({ ...input, question: 'Explain this position', ply: 3, explanationLength: 'brief' });
+  assert.match(position.text, /Black is to move/);
+  assert.match(position.text, /saved evaluation.*White’s perspective/);
+  input.result.positions[2].bestMove = 'a1a8';
+  assert.match(answerCoach({ ...input, question: 'What was better than 2. Nf3?', explanationLength: 'brief' }).text, /No legal preferred move/);
+});
+
 test('coach profiles are distinct and only change presentation of the same facts', () => {
   assert.equal(COACHES.length, 6);
   assert.equal(new Set(COACHES.map(item => item.id)).size, COACHES.length);

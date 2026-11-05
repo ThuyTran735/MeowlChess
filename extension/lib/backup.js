@@ -73,7 +73,7 @@ export function normalizeBackupSettings(raw) {
   }
   if (own(raw, 'coachPreferences')) result.coachPreferences = fields(raw.coachPreferences, {
     coach: choice(COACHES.map(coach => coach.id)), perspective: choice(['w', 'b', 'both']), motion: boolean,
-    sounds: boolean, volume: value => finite(value, 0, 1), commentary: boolean,
+    sounds: boolean, volume: value => finite(value, 0, 1), commentary: boolean, explanationLength: choice(['brief', 'detailed']),
   });
   if (own(raw, 'updatePreferences')) result.updatePreferences = fields(raw.updatePreferences, { automatic: boolean });
   for (const key of ['completionAlerts', 'tutorialNeverShowAgain', 'supportNeverShowAgain', 'shareHidePlayerNames']) if (own(raw, key)) {

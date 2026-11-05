@@ -91,8 +91,8 @@
 
           <section id="moves-panel" role="tabpanel" aria-labelledby="moves-tab">
             <section class="analysis-box" aria-label="Selected move">
-              <div class="review-heading"><span id="review-engine" class="review-engine">Stockfish 18 · local</span><span id="insight-badge" class="move-badge insight-badge" hidden></span></div>
-              <h2 id="insight-title">Choose a game</h2><p id="insight-text">Open Games to get started.</p><div id="best-move" class="best-move" hidden></div>
+              <div class="review-heading"><span id="review-engine" class="review-engine">Stockfish 18 · local</span></div>
+              <h2 class="insight-heading"><button id="insight-explain" class="insight-explain" type="button" disabled aria-haspopup="dialog" aria-controls="rating-dialog" title="Explain this move's rating"><span id="insight-badge" class="move-badge insight-badge" hidden></span><span id="insight-title">Choose a game</span><svg class="rating-why-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4m0 2v1"/></svg></button></h2><p id="insight-text">Open Games to get started.</p><div id="best-move" class="best-move" hidden></div>
               <div class="insight-actions"><button id="retry-move" type="button" disabled>Try again</button><button id="show-why" type="button" disabled>Show why</button><button id="bookmark-position" type="button" aria-pressed="false" disabled>Bookmark</button></div>
               <section id="retry-panel" class="retry-panel" hidden><p id="retry-feedback" role="status"></p><div class="retry-actions"><button id="retry-reset" type="button">Try another move</button><button id="retry-reveal" type="button">Reveal answer</button><button id="retry-next" type="button">Next mistake</button><button id="retry-exit" type="button">Back to review</button></div></section>
             </section>
@@ -111,7 +111,7 @@
       </div>
     </section>
   </section>
-  <footer><span>MeowlChess v1.13.0 · Local analysis · <button id="open-tutorial" class="footer-link" type="button" disabled aria-haspopup="dialog" aria-controls="tutorial-dialog">Tutorial</button> · <a href="updates.html" target="_blank" rel="noopener">Updates &amp; backups</a></span><span>Completed games only · <a href="https://www.chess.com/legal/fair-play" target="_blank" rel="noopener noreferrer">Fair play</a></span></footer>
+  <footer><span>MeowlChess v1.14.0 · Local analysis · <button id="open-tutorial" class="footer-link" type="button" disabled aria-haspopup="dialog" aria-controls="tutorial-dialog">Tutorial</button> · <a href="updates.html" target="_blank" rel="noopener">Updates &amp; backups</a></span><span>Completed games only · <a href="https://www.chess.com/legal/fair-play" target="_blank" rel="noopener noreferrer">Fair play</a></span></footer>
 </main>
 
 <dialog id="library-dialog" class="library-dialog" aria-labelledby="library-title">
@@ -148,6 +148,15 @@
   <div class="promotion-choices"><button type="button" data-promotion="q" aria-label="Promote to queen"><img src="pieces/wq.png" width="64" height="64" alt="" draggable="false"><span>Queen</span></button><button type="button" data-promotion="r" aria-label="Promote to rook"><img src="pieces/wr.png" width="64" height="64" alt="" draggable="false"><span>Rook</span></button><button type="button" data-promotion="b" aria-label="Promote to bishop"><img src="pieces/wb.png" width="64" height="64" alt="" draggable="false"><span>Bishop</span></button><button type="button" data-promotion="n" aria-label="Promote to knight"><img src="pieces/wn.png" width="64" height="64" alt="" draggable="false"><span>Knight</span></button></div>
   <button id="cancel-promotion" type="button" class="secondary-button">Cancel</button>
 </dialog>
+<dialog id="rating-dialog" class="rating-dialog" aria-labelledby="rating-dialog-title">
+  <div class="rating-dialog-header"><h2 id="rating-dialog-title" tabindex="-1">Explain this rating</h2><button id="rating-dialog-close" type="button" aria-label="Close rating explanation">×</button></div>
+  <p id="rating-dialog-move" class="rating-dialog-move"></p>
+  <p id="rating-dialog-consequence" class="rating-dialog-consequence" hidden></p>
+  <p id="rating-dialog-reason" class="rating-dialog-reason"></p>
+  <details id="rating-dialog-line" class="rating-dialog-line" hidden><summary id="rating-dialog-line-title">Saved continuation</summary><div id="rating-dialog-line-moves"></div></details>
+  <details id="rating-dialog-details" class="rating-dialog-details"><summary>Analysis details</summary><ul id="rating-dialog-facts" class="rating-dialog-facts"></ul><p id="rating-dialog-definition"></p></details>
+  <p id="rating-dialog-note" class="rating-dialog-about"></p>
+</dialog>
 <dialog id="support-dialog" class="support-dialog" aria-labelledby="support-title" aria-describedby="support-description">
   <img class="support-logo" src="icons/icon128.png" width="64" height="64" alt="">
   <h2 id="support-title" tabindex="-1">Support MeowlChess</h2>
@@ -163,11 +172,15 @@
   <svg id="tutorial-overlay" aria-hidden="true" focusable="false"></svg>
   <div id="tutorial-highlight" aria-hidden="true" inert></div>
   <div id="tutorial-card" class="tutorial-card">
-  <div class="tutorial-heading"><h2 id="tutorial-title">Quick start</h2><p id="tutorial-progress" aria-live="polite" aria-atomic="true">1 of 3</p></div>
+  <div class="tutorial-heading"><h2 id="tutorial-title">Quick tour</h2><p id="tutorial-progress" aria-live="polite" aria-atomic="true">1 of 6</p></div>
+  <div class="tutorial-track" aria-hidden="true"><span id="tutorial-track-fill"></span></div>
   <div class="tutorial-body">
-    <section data-tutorial-step="0"><h3 tabindex="-1">Choose a game</h3><p>Open <strong>Games</strong> to find completed Chess.com or Lichess games by username. You can also import a PGN or try the sample.</p></section>
-    <section data-tutorial-step="1" hidden><h3 tabindex="-1">Review it</h3><p>Choose <strong>Review game</strong> to analyze it on your device. <strong>Settings</strong> lets you choose the engine and review speed.</p></section>
-    <section data-tutorial-step="2" hidden><h3 tabindex="-1">Explore the review</h3><p>Reviews open at move 0 on <strong>Summary</strong>; choose <strong>Moves</strong> and use ← / → to step through the game, or open <strong>Engine lines</strong> for suggestions.</p><p>Use <strong>Try again</strong> or <strong>Practice</strong> to revisit mistakes, and find saved reviews under <strong>Games</strong>.</p></section>
+    <section data-tutorial-step="0" data-tutorial-target="#library-toggle"><h3 tabindex="-1">Choose a finished game</h3><p>Open <strong>Games</strong> and enter a Chess.com or Lichess username. You can also import a PGN or try the sample.</p><p>Already reviewed it? Open <strong>Saved reviews</strong> here without running the analysis again.</p></section>
+    <section data-tutorial-step="1" data-tutorial-target=".review-setup" hidden><h3 tabindex="-1">Review at your pace</h3><p><strong>Review game</strong> analyzes the game on your device. Choose your engine and speed in <strong>Settings</strong>.</p><p>Want it faster? Turn off <strong>Check standout moves</strong> to skip extra Brilliant/Great checks. Shorter reviews can miss standout moves.</p></section>
+    <section data-tutorial-step="2" data-tutorial-target=".review-tabs" hidden><h3 tabindex="-1">Find the turning points</h3><p>Reviews open at move 0 on <strong>Summary</strong>. In <strong>Moves</strong>, use ← / → to step through the game. Click a move's rating to see why it earned that label.</p><p>Open <strong>Engine lines</strong> for suggestions and arrows, or use <strong>Try again</strong> and <strong>Practice</strong> to work on mistakes.</p></section>
+    <section data-tutorial-step="3" data-tutorial-target="#coach-tab" hidden><h3 tabindex="-1">Meet your Meowl</h3><p>Open <strong>Coach</strong> to ask about the review. Tips start <strong>Brief</strong>; choose <strong>Detailed</strong> for a fuller explanation. Use <strong>Change coach</strong> to pick a personality.</p><p>Piece symbols identify the moves: filled for White, outlined for Black. <strong>Coach settings</strong> controls automatic tips, animation, and optional sound.</p></section>
+    <section data-tutorial-step="4" data-tutorial-target="#review-settings > summary" hidden><h3 tabindex="-1">Get reviews on the game page</h3><p>In <strong>Settings → On-site reviews</strong>, enter your username, enable Chess.com or Lichess, and accept the browser permission prompt.</p><p>After a finished game, a movable panel shows progress, then your summary. Settings also has board size, arrows, playback, and notifications.</p></section>
+    <section data-tutorial-step="5" data-tutorial-target="footer a[href='updates.html']" hidden><h3 tabindex="-1">Keep your reviews safe</h3><p><strong>Updates &amp; backups</strong> lets you check for releases and save or restore your study data.</p><p>To update, replace files in the same installed folder and reload the existing extension. Keep your browser profile, and <strong>don't remove MeowlChess</strong>—your saved reviews live there.</p></section>
   </div>
   <div class="tutorial-preference"><label for="tutorial-never"><input id="tutorial-never" type="checkbox"> Never show again</label><p>Open Tutorial in the footer any time.</p></div>
   <p id="tutorial-storage-status" class="tutorial-storage-status" role="status" hidden></p>
