@@ -48,6 +48,10 @@
 .coach-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; padding: 0 0 12px; }
 .coach-controls .coach-label { margin: 0 0 5px; font-size: 11px; }
 .coach-controls .coach-perspective { width: 100%; font-size: 12px; }
+.coach-player-control { grid-column: 1 / -1; min-width: 0; }
+.coach-player-control[hidden] { display: none; }
+.coach-controls .coach-player-side { font-size: 12px; }
+.coach-focus-hint { margin: 5px 0 0; color: var(--muted, #aba99e); font-size: 11px; overflow-wrap: anywhere; }
 .coach-settings { margin-bottom: 14px; border-top: 1px solid var(--line, #ffffff12); border-bottom: 1px solid var(--line, #ffffff12); }
 .coach-settings-summary { display: flex; align-items: center; gap: 8px; min-height: 40px; list-style: none; color: var(--muted, #aba99e); cursor: pointer; font-size: 11px; user-select: none; }
 .coach-settings-summary::-webkit-details-marker { display: none; }

@@ -13,7 +13,7 @@
   </p>
 </div>
 
-**Version 1.15.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.15.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
+**Version 1.16.0** · [Release notes](https://github.com/ThuyTran735/MeowlChess/releases/tag/v1.16.0) · [Release history](https://github.com/ThuyTran735/MeowlChess/releases)
 
 > Your game, explained. Follow the turning points, explore engine suggestions, and study with an animated Meowl coach—all on your own device.
 
@@ -299,7 +299,7 @@ After reviewing a game, open **Coach** beside Summary and Moves. Start with curi
 
 **Evil Meowl** unlocks after **10 different completed games** have been reviewed and saved. Existing valid saved reviews count, re-reviewing the same game adds no extra progress, and the built-in Sample does not count. Progress stays on this device when you delete saved reviews; clearing the extension's data resets it. The coach picker shows your progress. Evil Meowl has charcoal fur, a silvery muzzle, curved devil horns, and a sly little smirk. His dark-red outfit and wing-held pitchfork complete the look. He turns study into playful little schemes: test the opponent's reply before the evil laugh. Starring the GitHub repository is optional and has no effect on unlocking coaches.
 
-Choose **White**, **Black**, or **Both** to set the side you want to discuss. Ask a question or start with a suggested prompt:
+Under **Focus on**, choose **Me**, **Opponent**, **Both players**, **White**, or **Black**. Me and Opponent follow your side across games using your remembered account for that website. **You played as** shows the detected player and lets you correct it for the current game. If no account matches, choose your player there before using Me or Opponent. Your focus choice is remembered and included in backups; manual player choices apply to the current review. Move tips, reactions, and general questions follow the focus, while questions about “my” moves or “my opponent” refer to your actual side. Ask a question or start with a suggested prompt:
 
 - “What was my biggest mistake?”
 - “Why was this move a blunder?”

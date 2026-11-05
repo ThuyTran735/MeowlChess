@@ -7,8 +7,10 @@ import { COACH_ANIMATION_LABELS } from './coach-repertoire.js';
 import { getCoachUnlockProgress, subscribeCoachUnlockProgress, COACH_REVIEW_UNLOCK_GOAL } from './coach-unlocks.js';
 import { renderCoachText } from './coach-notation.js';
 import { createMoveNotation } from './move-notation.js';
+import { normalizeCoachPerspective, resolveCoachFocus, detectCoachPlayerSide } from './coach-focus.js';
 
 const STORAGE_KEY = 'coachPreferences';
+const IDENTITY_KEYS = ['username', 'usernames', 'siteReviewSettings', 'savedAccounts'];
 const DEFAULT_QUESTIONS = ['Summarize this game', 'What was the biggest mistake?', 'What should I practice?', 'Show Brilliant and Great moves'];
 const FINAL_RESULTS = new Set(['1-0', '0-1', '1/2-1/2']);
 const MAX_PAIRS = 12;
@@ -78,7 +80,7 @@ const QUESTION_LABELS = {
 function storedPreferences(value, evilUnlocked = false) {
   return {
     coach: COACHES.some(coach => coach.id === value?.coach) && (value.coach !== 'evil' || evilUnlocked) ? value.coach : COACHES[0].id,
-    perspective: ['w', 'b', 'both'].includes(value?.perspective) ? value.perspective : 'both',
+    perspective: normalizeCoachPerspective(value?.perspective),
     motion: typeof value?.motion === 'boolean' ? value.motion : true,
     sounds: value?.sounds === true,
     volume: typeof value?.volume === 'number' && Number.isFinite(value.volume) ? Math.max(0, Math.min(1, value.volume)) : 0.8,
@@ -112,6 +114,9 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   let selected = preferences(), context = { game: null, result: null, ply: 0, blockedReason: '', active: false, moveReactionsActive: false };
   let identityPgn = '', identityResult = null, revision = 0, disposed = false, submitting = false;
   let pendingPreferences = {}, preferenceQueue = Promise.resolve(), conversation = [];
+  const accountIdentity = {}, changedIdentityKeys = new Set();
+  let manualPlayerSide = null, resolvedPlayerSide = null;
+  const focusedSide = () => resolveCoachFocus(selected.perspective, resolvedPlayerSide);
   let previousPly = null, celebratedPly = null;
   let lastGreeting = -Infinity, lastPreview = -Infinity;
   let walkthroughTimer = null, walkthroughToken = 0, walkthroughPending = '', walkthroughKey = '', walkthroughAnswer = null, walkthroughSource = null;
@@ -142,7 +147,8 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   }
   function reactionForMove(ply) {
     const move = context.result?.moves?.[ply - 1];
-    if (!move || (selected.perspective !== 'both' && selected.perspective !== move.color)) return 'talk';
+    const focus = focusedSide();
+    if (!move || (focus !== 'both' && focus !== move.color)) return 'talk';
     if (move.label === 'Brilliant') return 'brilliant';
     if (move.label === 'Great') return 'great';
     if (move.label === 'Best') return 'celebrate';
@@ -152,7 +158,8 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   }
   function brilliantMove(ply) {
     const move = context.result?.moves?.[ply - 1];
-    return move?.label === 'Brilliant' && (selected.perspective === 'both' || selected.perspective === move.color);
+    const focus = focusedSide();
+    return move?.label === 'Brilliant' && (focus === 'both' || focus === move.color);
   }
   function reactToAnswer(answer, reply) {
     if (!context.active || !reactionsVisible()) return;
@@ -232,7 +239,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   const controls = node('div', 'coach-controls');
   const sideLabel = node('label', 'coach-label', 'Focus on'); sideLabel.htmlFor = `${id}-perspective`;
   const side = node('select', 'coach-perspective'); side.id = sideLabel.htmlFor;
-  for (const [value, label] of [['both', 'Both players'], ['w', 'White'], ['b', 'Black']]) {
+  for (const [value, label] of [['both', 'Both players'], ['me', 'Me'], ['opponent', 'Opponent'], ['w', 'White'], ['b', 'Black']]) {
     const option = node('option', '', label); option.value = value; side.append(option);
   }
   const focusControl = node('div', 'coach-focus-control'); focusControl.append(sideLabel, side);
@@ -244,6 +251,15 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   }
   lengthControl.append(lengthLabel, explanationLength);
   controls.append(focusControl, lengthControl);
+  const playerControl = node('div', 'coach-player-control');
+  const playerLabel = node('label', 'coach-label', 'You played as'); playerLabel.htmlFor = `${id}-player-side`;
+  const playerSide = node('select', 'coach-player-side'); playerSide.id = playerLabel.htmlFor;
+  for (const [value, label] of [['', 'Choose your player'], ['w', 'White'], ['b', 'Black']]) {
+    const option = node('option', '', label); option.value = value; playerSide.append(option);
+  }
+  const focusHint = node('p', 'coach-focus-hint'); focusHint.id = `${id}-focus-hint`;
+  focusHint.setAttribute('role', 'status'); side.setAttribute('aria-describedby', focusHint.id);
+  playerControl.append(playerLabel, playerSide, focusHint); controls.append(playerControl);
   const settings = node('details', 'coach-settings');
   const settingsSummary = node('summary', 'coach-settings-summary');
   const settingsState = node('span', 'coach-settings-state');
@@ -394,7 +410,37 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
     if (!context.result || !Array.isArray(context.result.moves) || !FINAL_RESULTS.has(context.result.game?.headers?.Result)) {
       return 'Finish reviewing a completed game to talk with your coach.';
     }
+    if (focusedSide() === null) return 'Choose which player is you under “You played as” to focus on you or your opponent.';
     return '';
+  }
+
+  function playerName(color) {
+    const name = context.game?.[color === 'w' ? 'white' : 'black']?.username
+      || context.result?.game?.headers?.[color === 'w' ? 'White' : 'Black'];
+    return typeof name === 'string' && name.trim() ? name.trim() : color === 'w' ? 'White' : 'Black';
+  }
+
+  function playerDescription(color) {
+    const label = color === 'w' ? 'White' : 'Black', name = playerName(color);
+    return name === label ? label : `${name} (${label})`;
+  }
+
+  function renderFocus() {
+    const detected = detectCoachPlayerSide({ ...context.game, headers: context.result?.game?.headers }, accountIdentity);
+    const resolved = manualPlayerSide || detected;
+    if (resolved !== resolvedPlayerSide) {
+      resolvedPlayerSide = resolved;
+      stopReactions(); cancelWalkthrough(); walkthroughKey = ''; walkthroughAnswer = null; previousPly = null;
+    }
+    playerControl.hidden = !['me', 'opponent'].includes(selected.perspective);
+    playerSide.options[0].textContent = detected ? `Auto · ${playerDescription(detected)}` : 'Choose your player';
+    playerSide.options[0].disabled = !detected;
+    for (const color of ['w', 'b']) playerSide.querySelector(`[value="${color}"]`).textContent = playerDescription(color);
+    playerSide.value = manualPlayerSide || '';
+    playerSide.title = resolved ? `You played as ${playerDescription(resolved)}` : 'Choose your player for this game';
+    const focus = focusedSide();
+    focusHint.textContent = ['w', 'b'].includes(focus) ? `Focusing on ${playerDescription(focus)}.` : '';
+    focusHint.hidden = !focusHint.textContent;
   }
 
   function renderCompanion() {
@@ -425,7 +471,8 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
 
   function showingWalkthrough() {
     const move = context.result?.moves?.[context.ply - 1];
-    return selected.commentary && reactionsVisible() && !!move && (selected.perspective === 'both' || selected.perspective === move.color);
+    const focus = focusedSide();
+    return selected.commentary && reactionsVisible() && !!move && (focus === 'both' || focus === move.color);
   }
 
   function showWalkthrough(answer) {
@@ -470,7 +517,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
       if (companionHint) companionHint.hidden = false;
       return;
     }
-    const key = `${context.ply}:${selected.coach}:${selected.perspective}:${selected.explanationLength}`;
+    const key = `${context.ply}:${selected.coach}:${focusedSide()}:${selected.explanationLength}`;
     if (walkthroughKey === key && walkthroughAnswer) { showWalkthrough(walkthroughAnswer); return; }
     if (walkthroughPending === key) return;
     cancelWalkthrough();
@@ -483,7 +530,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
       walkthroughTimer = null; walkthroughPending = '';
       if (disposed || token !== walkthroughToken || !showingWalkthrough()) return;
       walkthroughSource ||= createCoachWalkthrough({ result: context.result, game: context.game });
-      const answer = walkthroughSource.describe({ ply: context.ply, coach: selected.coach, perspective: selected.perspective, explanationLength: selected.explanationLength });
+      const answer = walkthroughSource.describe({ ply: context.ply, coach: selected.coach, perspective: focusedSide(), explanationLength: selected.explanationLength });
       if (!answer) return;
       walkthroughKey = key; walkthroughAnswer = answer;
       showWalkthrough(answer);
@@ -552,6 +599,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
 
   function renderPreferences() {
     selected = preferences(selected);
+    renderFocus();
     const personalityChanged = root.dataset.coach !== selected.coach;
     choice.value = selected.coach; side.value = selected.perspective;
     explanationLength.value = selected.explanationLength;
@@ -599,7 +647,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
       if (greet) { greet.setAttribute('aria-label', `Say hello to ${coach.name}`); greet.title = `Tap to say hello to ${coach.name}`; }
     }
     if (personalityChanged) renderSuggestions();
-    renderCompanion(); renderWalkthrough(); renderMoveReaction();
+    renderCompanion(); renderWalkthrough(); renderMoveReaction(); renderControls();
   }
 
   function renderControls() {
@@ -676,7 +724,8 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
     try {
       const answer = answerCoach({
         question: prompt, result: context.result, game: context.game,
-        ply: context.ply, perspective: selected.perspective, coach: selected.coach, previousPly, explanationLength: selected.explanationLength,
+        ply: context.ply, perspective: focusedSide(), playerSide: resolvedPlayerSide,
+        coach: selected.coach, previousPly, explanationLength: selected.explanationLength,
       });
       if (!answer || typeof answer.text !== 'string') throw new Error('No answer.');
       const user = message('user', 'You', prompt);
@@ -781,6 +830,10 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
     selected = preferences({ ...selected, perspective: side.value }); revision++;
     renderPreferences(); void writePreferences({ perspective: selected.perspective });
   });
+  listen(playerSide, 'change', () => {
+    manualPlayerSide = ['w', 'b'].includes(playerSide.value) ? playerSide.value : null;
+    renderPreferences();
+  });
   listen(motionToggle, 'change', () => {
     selected = preferences({ ...selected, motion: motionToggle.checked }); revision++;
     motion.stop(); renderPreferences(); void writePreferences({ motion: selected.motion });
@@ -864,11 +917,16 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   });
 
   function storageChanged(changes, area) {
-    if (disposed || area !== 'local' || !changes[STORAGE_KEY]) return;
-    revision++;
-    const next = preferences({ ...preferences(changes[STORAGE_KEY].newValue), ...pendingPreferences });
-    if (Object.keys(next).some(key => next[key] !== selected[key])) stopReactions();
-    selected = next;
+    if (disposed || area !== 'local') return;
+    const identityChanged = IDENTITY_KEYS.filter(key => Object.hasOwn(changes, key));
+    if (!changes[STORAGE_KEY] && !identityChanged.length) return;
+    for (const key of identityChanged) { accountIdentity[key] = changes[key].newValue; changedIdentityKeys.add(key); }
+    if (changes[STORAGE_KEY]) {
+      revision++;
+      const next = preferences({ ...preferences(changes[STORAGE_KEY].newValue), ...pendingPreferences });
+      if (Object.keys(next).some(key => next[key] !== selected[key])) stopReactions();
+      selected = next;
+    }
     renderPreferences();
   }
   storageEvents?.addListener?.(storageChanged);
@@ -876,7 +934,13 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   renderPreferences(); renderSuggestions(); renderControls();
   const initialRevision = revision;
   const unlockReady = refreshUnlockProgress();
-  if (storage) Promise.all([Promise.resolve().then(() => storage.get(STORAGE_KEY)), unlockReady]).then(([values]) => {
+  const savedSettings = storage && Promise.resolve().then(() => storage.get([STORAGE_KEY, ...IDENTITY_KEYS]));
+  if (savedSettings) savedSettings.then(values => {
+    if (disposed) return;
+    for (const key of IDENTITY_KEYS) if (!changedIdentityKeys.has(key)) accountIdentity[key] = values[key];
+    renderPreferences();
+  }).catch(() => { /* Relative focus still offers an explicit player choice. */ });
+  if (savedSettings) Promise.all([savedSettings, unlockReady]).then(([values]) => {
     if (disposed || revision !== initialRevision) return;
     selected = preferences(values[STORAGE_KEY]); renderPreferences();
   }).catch(() => {
@@ -903,9 +967,11 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
       }
       if (positionChanged) { walkthroughKey = ''; walkthroughAnswer = null; }
       if (changed) walkthroughSource = null;
+      if (changed) manualPlayerSide = null;
       if (positionChanged) celebratedPly = null;
       if (blockedReason || document.hidden) celebratedPly = ply;
       context = { game, result, ply, blockedReason, active, moveReactionsActive };
+      renderFocus();
       renderCompanion();
       if (changed) resetConversation();
       else renderControls();

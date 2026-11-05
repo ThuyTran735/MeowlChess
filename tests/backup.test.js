@@ -105,6 +105,17 @@ test('Baby Meowl preferences roundtrip without unlock progress or saved games', 
   assert.deepEqual(targetSettings.values.coachPreferences, preferences);
 });
 
+test('relative coach focus survives backup export, inspection and restore', async () => {
+  for (const perspective of ['me', 'opponent']) {
+    const preferences = { coach: 'meowl', perspective, commentary: true };
+    const backup = await exportFile(library(memoryStore()), memorySettings({ coachPreferences: preferences }));
+    const inspected = await inspectBackup(JSON.stringify(backup));
+    const targetSettings = memorySettings({ coachPreferences: { perspective: 'both' } });
+    await restoreBackup(inspected.backup, { library: library(memoryStore()), storage: targetSettings });
+    assert.deepEqual(targetSettings.values.coachPreferences, preferences);
+  }
+});
+
 test('preferences replace selected values, merge accounts, and require existing browser grants', async () => {
   const sourceSettings = memorySettings({
     usernames: { chesscom: 'NewName' }, savedAccounts: { chesscom: ['NewName'], lichess: [] },

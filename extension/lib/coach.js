@@ -5,6 +5,7 @@ import { parseCompletedPgn } from './pgn.js';
 import { getPhasePerformance } from './game-performance.js';
 import { recognizeOpening } from './openings.js';
 import { createCoachText } from './coach-notation.js';
+import { normalizeCoachPerspective, resolveCoachFocus } from './coach-focus.js';
 
 import { COACHES, coachResponseText, coachStudyStep, coachMoveLead, coachMoveTask, coachTopicStep } from './coach-personalities.js';
 export { COACHES } from './coach-personalities.js';
@@ -83,12 +84,19 @@ function contextFor(result, game) {
   } catch { return null; }
 }
 
-function selectedSide(question, perspective) {
+const personalQuestion = question => /\b(my|mine|i)\b/i.test(question);
+const opponentQuestion = question => /\b(opponent|their)\b/i.test(question);
+
+function selectedSide(question, perspective, playerSide) {
   const white = /\bwhite\b/i.test(question), black = /\bblack\b/i.test(question);
   if (white !== black) return white ? 'w' : 'b';
   if (white && black) return 'both';
   if (/\b(both|each player|both players)\b/i.test(question)) return 'both';
-  if (/\b(opponent|their)\b/i.test(question) && ['w', 'b'].includes(perspective)) return perspective === 'w' ? 'b' : 'w';
+  if (playerSide !== undefined) {
+    if (opponentQuestion(question)) return ['w', 'b'].includes(playerSide) ? playerSide === 'w' ? 'b' : 'w' : null;
+    if (personalQuestion(question)) return ['w', 'b'].includes(playerSide) ? playerSide : null;
+  } else if (opponentQuestion(question) && ['w', 'b'].includes(perspective)) return perspective === 'w' ? 'b' : 'w';
+  if (perspective === null) return null;
   return ['w', 'b'].includes(perspective) ? perspective : 'both';
 }
 
@@ -368,7 +376,7 @@ export function answerCoach(options = {}) {
   return finishAnswer(answerCoachResponse(options, notation), notation);
 }
 
-function answerCoachResponse({ question, result, game, ply = 0, perspective = 'both', coach = 'meowl', previousPly = null, explanationLength = 'detailed' } = {}, notation) {
+function answerCoachResponse({ question, result, game, ply = 0, perspective = 'both', playerSide, coach = 'meowl', previousPly = null, explanationLength = 'detailed' } = {}, notation) {
   coach = COACHES.some(item => item.id === coach) ? coach : 'meowl';
   if (typeof question !== 'string' || !question.trim()) return response('Ask about this game, choose a suggested question, or select a move to discuss it.', { coach });
   if (question.length > MAX_QUESTION) return response(`Please keep your question under ${MAX_QUESTION} characters and focus on one game question.`, { coach });
@@ -378,13 +386,16 @@ function answerCoachResponse({ question, result, game, ply = 0, perspective = 'b
   context.notation = notation;
   context.brief = explanationLength === 'brief';
   ply = Number.isInteger(ply) && ply >= 0 && ply <= result.moves.length ? ply : 0;
-  perspective = ['w', 'b'].includes(perspective) ? perspective : 'both';
-  const side = selectedSide(question, perspective);
-  const personalQuestion = /\b(my|mine)\b|\bi\b.*\b(play(?:ed)?|do|did|improve|lose|lost|win|won|practi[cs]e|have|had|make|made|get|got|find|found)\b/i.test(question);
-  if (personalQuestion && perspective === 'both' && !/\b(white|black|opening)\b/i.test(question)) {
+  perspective = resolveCoachFocus(normalizeCoachPerspective(perspective), playerSide);
+  const side = selectedSide(question, perspective, playerSide);
+  if (side === null) {
+    return response('I couldn’t identify your side in this game. Check the saved username for this website, or include White or Black in your question.', { coach, suggestions: ["What was White's biggest mistake?", "What was Black's biggest mistake?", 'Summarize both players'] });
+  }
+  const legacyPersonal = /\b(my|mine)\b|\bi\b.*\b(play(?:ed)?|do|did|improve|lose|lost|win|won|practi[cs]e|have|had|make|made|get|got|find|found)\b/i.test(question);
+  if (playerSide === undefined && legacyPersonal && perspective === 'both' && !/\b(white|black|opening)\b/i.test(question)) {
     return response('Choose White or Black in the coach’s player selector so I know which side is yours. You can also include the side in your question.', { coach, suggestions: ["What was White's biggest mistake?", "What was Black's biggest mistake?", 'Summarize both players'] });
   }
-  const found = locateMove(question, context, ply, previousPly, perspective);
+  const found = locateMove(question, context, ply, previousPly, side);
   if (found.error) return response(found.error, { coach, moves: found.moves });
   const move = found.move;
   if (!found.explicit && (/\bnext\s+(?:key|important|critical|learning)\s+(?:moment|position|move)\b/i.test(question)
@@ -443,13 +454,15 @@ function answerCoachResponse({ question, result, game, ply = 0, perspective = 'b
 }
 
 /** A short, evidence-based comment for the exact selected move of a completed review. */
-export function describeCoachMove({ result, game, ply, perspective = 'both', coach = 'meowl', explanationLength = 'detailed' } = {}) {
+export function describeCoachMove({ result, game, ply, perspective = 'both', playerSide, coach = 'meowl', explanationLength = 'detailed' } = {}) {
   const context = contextFor(result, game), notation = createCoachText();
-  return finishAnswer(describeMoveInContext(context ? { ...context, notation } : null, { ply, perspective, coach, explanationLength }), notation);
+  return finishAnswer(describeMoveInContext(context ? { ...context, notation } : null, { ply, perspective, playerSide, coach, explanationLength }), notation);
 }
 
-function describeMoveInContext(context, { ply, perspective = 'both', coach = 'meowl', explanationLength = 'detailed' } = {}) {
+function describeMoveInContext(context, { ply, perspective = 'both', playerSide, coach = 'meowl', explanationLength = 'detailed' } = {}) {
   if (!context || !Number.isInteger(ply) || ply < 1 || ply > context.result.moves.length) return null;
+  perspective = resolveCoachFocus(perspective, playerSide);
+  if (perspective === null) return null;
   const move = context.result.moves[ply - 1];
   if (['w', 'b'].includes(perspective) && move.color !== perspective) return null;
   context.brief = explanationLength === 'brief';
