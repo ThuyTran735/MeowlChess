@@ -1,5 +1,5 @@
 const FACE_LIMITS = Object.freeze({ lookX: [-1, 1], lookY: [-1, 1], headTilt: [-.1, .1], headNod: [-8, 8], blink: [0, 1] });
-const COACHES = new Set(['meowl', 'owl', 'paws', 'mellow', 'scout', 'evil']);
+const COACHES = new Set(['meowl', 'owl', 'paws', 'mellow', 'scout', 'evil', 'baby']);
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 const finite = (value, fallback = 0) => Number.isFinite(value) ? value : fallback;
 const smooth = (start, end, value) => {
@@ -129,7 +129,7 @@ export function animateCoachFace(kind, input, progress, coachId = 'meowl', varia
     pose[key] += value * space * quiet;
   };
   if (kind === 'think' || kind === 'curious') {
-    const lean = { meowl: -.045, owl: -.028, paws: .028, mellow: .035, scout: -.05, evil: .045 }[coach];
+    const lean = { meowl: -.045, owl: -.028, paws: .028, mellow: .035, scout: -.05, evil: .045, baby: -.035 }[coach];
     addIfQuiet('headTilt', lean * beat(time, .055, .24 + accent * .035, .82), .04);
     addIfQuiet('lookY', -.14 * beat(time, .04, .18, .5), .3);
   } else if (kind === 'approve' || kind === 'great') {

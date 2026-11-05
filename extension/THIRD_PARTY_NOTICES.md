@@ -83,11 +83,11 @@ The cat likeness behind the Meowl meme is **Melonpi Cat (瓜皮 / Guapi)**. Cred
 - Cat/photo account: [Melonpi Cat — 瓜皮的id酱](https://weibo.com/melonpi).
 - Original Meowl post: [zhumaokele’s cat/owl images on Weibo, April 28, 2013](https://weibo.com/1505044005/zuePUyE2D), documented in [Know Your Meme’s Meowl history](https://knowyourmeme.com/memes/meowl).
 
-The MeowlChess icon is a chess-themed adaptation of Meowl, featuring Melonpi Cat. The six 2D coach characters in `extension/icons/coaches/` also adapt the Meowl character, with cat-likeness credit to **Melonpi Cat (瓜皮 / Guapi)** and the photo account linked above. The app-icon artwork is stored in `extension/icons/logo.png`; the browser icons are resized copies. Coach SVGs combine the original coach drawings with editable costume and facial-feature layers; `scripts/build-coach-outfits.mjs` reproduces these assets. MeowlChess does not claim authorship or ownership of Melonpi’s photographs or the underlying Meowl meme. These credits do not grant a license to the underlying third-party artwork.
+The MeowlChess icon is a chess-themed adaptation of Meowl, featuring Melonpi Cat. The seven 2D coach characters in `extension/icons/coaches/` also adapt the Meowl character, with cat-likeness credit to **Melonpi Cat (瓜皮 / Guapi)** and the photo account linked above. The app-icon artwork is stored in `extension/icons/logo.png`; the browser icons are resized copies. Coach SVGs combine the original coach drawings with editable costume and facial-feature layers; `scripts/build-coach-outfits.mjs` reproduces these assets. MeowlChess does not claim authorship or ownership of Melonpi’s photographs or the underlying Meowl meme. These credits do not grant a license to the underlying third-party artwork.
 
 ## Recorded coach meows
 
-The 35 WAV clips in `extension/sounds/coaches/` are edited excerpts of real cat recordings released under the [CC0 1.0 Universal Public Domain Dedication](https://creativecommons.org/publicdomain/zero/1.0/):
+The 45 WAV clips in `extension/sounds/coaches/` are edited excerpts of real cat recordings released under the [CC0 1.0 Universal Public Domain Dedication](https://creativecommons.org/publicdomain/zero/1.0/):
 
 | Bundled clips | Recording and creator |
 | --- | --- |
@@ -110,6 +110,14 @@ The 35 WAV clips in `extension/sounds/coaches/` are edited excerpts of real cat 
 | `MeowlChess-meow-33.wav` | [mew.wav — Ayana225](https://freesound.org/people/Ayana225/sounds/615893/) |
 | `MeowlChess-meow-34.wav` | [Cat meow — Sadiquecat](https://freesound.org/people/Sadiquecat/sounds/689324/) |
 | `MeowlChess-meow-35.wav` | [cat meow II — tuberatanka](https://freesound.org/people/tuberatanka/sounds/110010/) |
+| `MeowlChess-meow-36.wav`, `MeowlChess-meow-44.wav` | [Kitten Meowing.wav — lolamadeus](https://freesound.org/people/lolamadeus/sounds/196251/) |
+| `MeowlChess-meow-37.wav` | [Kitten_Meows — Countrygirls13](https://freesound.org/people/Countrygirls13/sounds/725043/) |
+| `MeowlChess-meow-38.wav` | [kitten_meowing.wav — 16FPanskaRollerova_Adriena](https://freesound.org/people/16FPanskaRollerova_Adriena/sounds/498843/) |
+| `MeowlChess-meow-39.wav` | [Cat Purr — Kerne_123](https://freesound.org/people/Kerne_123/sounds/785712/) |
+| `MeowlChess-meow-40.wav` | [Cat Purring.wav — Joao_Janz](https://freesound.org/people/Joao_Janz/sounds/473696/) |
+| `MeowlChess-meow-41.wav` | [Cat_Meow — Countrygirls13](https://freesound.org/people/Countrygirls13/sounds/763906/) |
+| `MeowlChess-meow-42.wav`, `MeowlChess-meow-45.wav` | [Animal - Cat Meow — Vrymaa](https://freesound.org/people/Vrymaa/sounds/756236/) |
+| `MeowlChess-meow-43.wav` | [felicia.m4a — dreamstobecome](https://freesound.org/people/dreamstobecome/sounds/424357/) |
 
 The source pages' public high-quality MP3 previews were used as complete short calls or trimmed into individual calls, converted to mono 32 kHz PCM, normalized, and given short edge fades. Original pitch and playback speed are preserved. `extension/sounds/coaches/NOTICE.txt` and `provenance.json` include source links, excerpt times, and file hashes. Attribution does not imply endorsement by the recordists.
 

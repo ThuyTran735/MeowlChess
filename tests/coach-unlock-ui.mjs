@@ -52,7 +52,7 @@ try {
   const evil = page.locator('.coach-choice[data-coach="evil"]');
   await count(7);
   stage = 'locked coach is visible and rejects saved, mouse and native-select requests';
-  assert.equal(await page.locator('.coach-choice').count(), 6); assert.equal(await current(), 'meowl');
+  assert.equal(await page.locator('.coach-choice').count(), 7); assert.equal(await current(), 'meowl');
   assert.equal(await evil.getAttribute('aria-disabled'), 'true');
   assert(await page.locator('.coach-companion-choice option[value="evil"]').isDisabled());
   const lockedBounds = await evil.boundingBox();

@@ -71,6 +71,7 @@ const PERSONALITIES = {
   mellow: { pace: 1.18, wing: .6, tilt: .6, mouth: .8 },
   scout: { pace: .95, wing: .9, tilt: -.9, mouth: .94 },
   evil: { pace: 1.06, wing: .8, tilt: -.8, mouth: .9 },
+  baby: { pace: .98, wing: .75, tilt: .65, mouth: .9 },
 };
 
 /** A fixed, finite timeline for the original drawing's moving parts. */

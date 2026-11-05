@@ -1,5 +1,6 @@
 const PORTRAITS = Object.freeze({
   meowl: new URL('../icons/coaches/MeowlChess-coach-meowl.svg', import.meta.url).href,
+  baby: new URL('../icons/coaches/MeowlChess-coach-baby.svg', import.meta.url).href,
   owl: new URL('../icons/coaches/MeowlChess-coach-owl.svg', import.meta.url).href,
   paws: new URL('../icons/coaches/MeowlChess-coach-paws.svg', import.meta.url).href,
   mellow: new URL('../icons/coaches/MeowlChess-coach-mellow.svg', import.meta.url).href,
@@ -8,7 +9,7 @@ const PORTRAITS = Object.freeze({
 });
 
 // Keep stored IDs stable. Every coach now has a distinct, locally bundled outfit.
-const ARTWORK = Object.freeze({ meowl: 'meowl', owl: 'owl', paws: 'paws', mellow: 'mellow', scout: 'scout', evil: 'evil' });
+const ARTWORK = Object.freeze({ meowl: 'meowl', baby: 'baby', owl: 'owl', paws: 'paws', mellow: 'mellow', scout: 'scout', evil: 'evil' });
 export function coachArtworkId(id) {
   return typeof id === 'string' && Object.hasOwn(ARTWORK, id) ? ARTWORK[id] : 'meowl';
 }

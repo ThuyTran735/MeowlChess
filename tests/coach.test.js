@@ -91,7 +91,7 @@ test('brief topic answers retain ending uncertainty, category counts and score p
 });
 
 test('coach profiles are distinct and only change presentation of the same facts', () => {
-  assert.equal(COACHES.length, 6);
+  assert.equal(COACHES.length, 7);
   assert.equal(new Set(COACHES.map(item => item.id)).size, COACHES.length);
   const input = withError(fixture(), 3);
   const answers = COACHES.map(coach => answerCoach({ ...input, question: 'Summarize this game', coach: coach.id }));
@@ -461,7 +461,7 @@ test('label definitions and specific move questions do not turn into category se
 });
 
 test('all Meowl personalities provide valid chat and walkthrough wording for every grade', () => {
-  assert.deepEqual(COACHES.map(coach => coach.id), ['meowl', 'owl', 'paws', 'mellow', 'scout', 'evil']);
+  assert.deepEqual(COACHES.map(coach => coach.id), ['meowl', 'baby', 'owl', 'paws', 'mellow', 'scout', 'evil']);
   assert.equal(COACHES.find(coach => coach.id === 'owl').name, 'Professor Meowl');
   const input = ratingFixture();
   for (const coach of COACHES) {

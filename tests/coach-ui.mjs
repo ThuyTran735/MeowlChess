@@ -106,7 +106,7 @@ try {
   const sampleRecord = await savedRecord('MeowlChess sample'); assert(sampleRecord);
   const workersBeforeChat = await page.evaluate(() => window.coachWorkerStarts);
   await coach();
-  assert.deepEqual(await page.locator('.coach-select option').evaluateAll(options => options.map(option => option.value)), ['meowl', 'owl', 'paws', 'mellow', 'scout', 'evil']);
+  assert.deepEqual(await page.locator('.coach-select option').evaluateAll(options => options.map(option => option.value)), ['meowl', 'baby', 'owl', 'paws', 'mellow', 'scout', 'evil']);
   assert(await page.locator('.coach-select option[value="evil"]').isDisabled(), 'Evil Meowl remains locked for a new installation.');
   assert(await page.locator('.coach-commentary-toggle').isChecked(), 'Automatic move explanations start enabled.');
   await expectPortrait(page.locator('.coach-avatar'), 'meowl');

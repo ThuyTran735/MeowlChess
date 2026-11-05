@@ -81,10 +81,9 @@ const leftWing = 'M350 580 L468 580 L488 648 L501 743 L500 840 L477 929 L467 958
 const rightWing = 'M777 578 L903 578 L912 918 L844 969 L819 953 L783 906 L759 836 L753 741 L761 668 Z';
 const collarWing = 'M791 578 L903 578 L912 918 L844 969 L819 953 L783 906 L759 836 L753 741 L781 693 Q783 700 794 672 C802 650 798 606 791 578 Z';
 
-// Keep the original illustrated SVG portraits. Only Evil's bent holding pose
-// needs the native renderer to share its exact wing joint and prop occlusion.
-// Editable bases stay unposed and prop-free. Normal npm build is separate.
-async function renderHeldEvilPortrait() {
+// Render poses with special composition through the same native drawing used
+// in animation. Editable bases stay in the shared rig's source coordinates.
+async function renderNativePortraits(ids) {
   const { chromium } = await import('playwright-core');
   const { closeTestContext } = await import('../tests/ui-helpers.mjs');
   const extension=resolve(directory,'../..'),prefix='MeowlChess-coach-art-build-';
@@ -121,11 +120,15 @@ async function renderHeldEvilPortrait() {
         result[id]=canvas.toDataURL('image/png');
       }
       return result;
-    },['evil']);
+    },ids);
   }finally{await closeTestContext(context,profile,prefix);}
 }
 
-for (const [id, outfit] of Object.entries(outfits)) {
+// Optional IDs allow adding a coach without rewriting unrelated approved art.
+const requested=process.argv.slice(2);
+if(requested.some(id=>!Object.hasOwn(outfits,id)))throw new Error('Unknown coach artwork requested.');
+const selected=requested.length?requested:Object.keys(outfits);
+for (const [id, outfit] of Object.entries(outfits).filter(([id])=>selected.includes(id))) {
   const captainHead = id === 'paws' ? `<image width="1254" height="1254" href="data:image/png;base64,${drawings.paws}" clip-path="url(#upper-head)"/>` : '';
   const horns=id==='evil'?DEVIL_HORNS_SVG:'';
   // Expanded cloth belongs beneath the untouched painted wings. Restoring the
@@ -136,7 +139,10 @@ for (const [id, outfit] of Object.entries(outfits)) {
   const composition = outfit ? `${wingDefs}${plain}${captainHead}${coachGarmentSvg(id)}${horns}<use href="#original-coach" clip-path="url(#painted-wings)"/>` : original;
   const shell = `<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254"><title>${id === 'meowl' ? 'Meowl, the friendly companion' : `${id} Meowl coach`}</title>${id==='evil'?commonDefs(devilBody,devilHead):commonDefs()}${composition}`;
   await writeFile(resolve(directory, `MeowlChess-coach-${id}-base.svg`), `${shell}</svg>\n`);
-  if(id!=='evil')await writeFile(resolve(directory,`MeowlChess-coach-${id}.svg`),`${shell}${coachFaceSvg(id)}${id==='owl'?COACH_GLASSES_SVG:''}</svg>\n`);
+  if(!['evil','baby'].includes(id))await writeFile(resolve(directory,`MeowlChess-coach-${id}.svg`),`${shell}${coachFaceSvg(id)}${id==='owl'?COACH_GLASSES_SVG:''}</svg>\n`);
 }
-const {evil:portrait}=await renderHeldEvilPortrait();
-await writeFile(resolve(directory,'MeowlChess-coach-evil.svg'),`<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" data-render-source="coach-action-renderer"><title>Evil Meowl holding a pitchfork</title><desc>The original illustrated Meowl with the shared native wing grip. Editable source: MeowlChess-coach-evil-base.svg.</desc><image width="1254" height="1254" href="${portrait}"/></svg>\n`);
+const native=selected.filter(id=>['evil','baby'].includes(id));
+if(native.length)for(const [id,portrait]of Object.entries(await renderNativePortraits(native))){
+  const title=id==='evil'?'Evil Meowl holding a pitchfork':'Baby Meowl, the little feathered companion';
+  await writeFile(resolve(directory,`MeowlChess-coach-${id}.svg`),`<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" data-render-source="coach-action-renderer"><title>${title}</title><desc>The original illustrated Meowl with the shared native composition. Editable source: MeowlChess-coach-${id}-base.svg.</desc><image width="1254" height="1254" href="${portrait}"/></svg>\n`);
+}

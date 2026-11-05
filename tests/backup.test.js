@@ -93,6 +93,18 @@ test('duplicate review analysis and existing notes stay intact while missing boo
   assert.equal(second.bookmarksAdded, 0); assert.equal(second.coachGames, 1);
 });
 
+test('Baby Meowl preferences roundtrip without unlock progress or saved games', async () => {
+  const preferences = { coach: 'baby', perspective: 'both', sounds: false, volume: 0.4, motion: true, commentary: true, explanationLength: 'brief' };
+  const backup = await exportFile(library(memoryStore()), memorySettings({ coachPreferences: preferences }));
+  const inspected = await inspectBackup(JSON.stringify(backup));
+  assert.equal(inspected.summary.reviews, 0);
+  assert.equal(inspected.summary.coachGames, 0);
+  const targetSettings = memorySettings({ coachPreferences: { coach: 'meowl' } });
+  const result = await restoreBackup(inspected.backup, { library: library(memoryStore()), storage: targetSettings });
+  assert.equal(result.settingsRestored, true);
+  assert.deepEqual(targetSettings.values.coachPreferences, preferences);
+});
+
 test('preferences replace selected values, merge accounts, and require existing browser grants', async () => {
   const sourceSettings = memorySettings({
     usernames: { chesscom: 'NewName' }, savedAccounts: { chesscom: ['NewName'], lichess: [] },

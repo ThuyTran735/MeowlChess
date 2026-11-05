@@ -4,10 +4,10 @@ import {readFile,readdir} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {COACH_MEOW_CLIPS} from '../extension/lib/coach-audio-clips.js';
 const folder=new URL('../extension/sounds/coaches/',import.meta.url);
-test('the expanded local sound bank contains35distinct documented real recordings',async()=>{
+test('the expanded local sound bank contains 45 distinct documented real cat clips',async()=>{
  const manifest=JSON.parse(await readFile(new URL('provenance.json',folder),'utf8'));
  const files=(await readdir(folder)).filter(name=>name.endsWith('.wav')).sort();
- assert(COACH_MEOW_CLIPS.length>=35);assert.deepEqual(COACH_MEOW_CLIPS.map(c=>c.file).sort(),files);
+ assert(COACH_MEOW_CLIPS.length>=45);assert.deepEqual(COACH_MEOW_CLIPS.map(c=>c.file).sort(),files);
  const digests=new Set(),newSources=new Set();
  for(const clip of COACH_MEOW_CLIPS){
   const bytes=await readFile(new URL(clip.file,folder)),record=manifest.clips.find(c=>c.file===clip.file);
@@ -20,4 +20,13 @@ test('the expanded local sound bank contains35distinct documented real recording
   if(Number(clip.id.slice(5))>=26){newSources.add(record.source.id);assert(record.source.checked>='2026-11-04');assert.match(record.processing,/Original pitch and speed preserved/);assert.equal(bytes.readInt16LE(44),0);assert.equal(bytes.readInt16LE(bytes.length-2),0);}
  }
  assert(newSources.size>=10,'New calls come from10distinct recordings, not pitch variants of old clips.');
+});
+
+test('Baby and Mellow have real kitten and purr voices with distinct reaction choices',()=>{
+ const kitten=COACH_MEOW_CLIPS.filter(c=>c.sound==='kitten-meow'&&c.coaches?.includes('baby'));
+ const purr=COACH_MEOW_CLIPS.filter(c=>c.sound==='purr'&&c.coaches?.includes('mellow'));
+ assert(kitten.length>=4,'Baby needs several genuine kitten calls');
+ for(const kind of ['talk','greeting','curious','encourage','brilliant','celebrate']) assert(kitten.filter(c=>c.kinds.includes(kind)).length>=3,kind+' needs a varied kitten bank');
+ assert.notDeepEqual(kitten.filter(c=>c.kinds.includes('talk')).map(c=>c.id),kitten.filter(c=>c.kinds.includes('brilliant')).map(c=>c.id));
+ for(const kind of ['talk','greeting','encourage']) assert(purr.filter(c=>c.kinds.includes(kind)).length>=2,kind+' needs calm purr choices');
 });

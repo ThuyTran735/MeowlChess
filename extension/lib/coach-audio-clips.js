@@ -380,5 +380,175 @@ export const COACH_MEOW_CLIPS = Object.freeze([
       "brilliant"
     ],
     "sound": "meow"
+  },
+  {
+    "id": "meow-36",
+    "file": "MeowlChess-meow-36.wav",
+    "kinds": [
+      "talk",
+      "greeting",
+      "curious",
+      "encourage",
+      "approve",
+      "great",
+      "celebrate",
+      "brilliant"
+    ],
+    "sound": "kitten-meow",
+    "coaches": [
+      "baby"
+    ]
+  },
+  {
+    "id": "meow-37",
+    "file": "MeowlChess-meow-37.wav",
+    "kinds": [
+      "talk",
+      "greeting",
+      "curious",
+      "encourage",
+      "approve",
+      "great",
+      "celebrate",
+      "brilliant"
+    ],
+    "sound": "kitten-meow",
+    "coaches": [
+      "baby"
+    ]
+  },
+  {
+    "id": "meow-38",
+    "file": "MeowlChess-meow-38.wav",
+    "kinds": [
+      "talk",
+      "greeting",
+      "curious",
+      "encourage",
+      "approve"
+    ],
+    "sound": "kitten-meow",
+    "coaches": [
+      "baby"
+    ]
+  },
+  {
+    "id": "meow-39",
+    "file": "MeowlChess-meow-39.wav",
+    "kinds": [
+      "talk",
+      "greeting",
+      "curious",
+      "encourage",
+      "approve"
+    ],
+    "sound": "purr",
+    "coaches": [
+      "mellow"
+    ]
+  },
+  {
+    "id": "meow-40",
+    "file": "MeowlChess-meow-40.wav",
+    "kinds": [
+      "talk",
+      "greeting",
+      "curious",
+      "encourage",
+      "approve"
+    ],
+    "sound": "purr",
+    "coaches": [
+      "mellow"
+    ]
+  },
+  {
+    "id": "meow-41",
+    "file": "MeowlChess-meow-41.wav",
+    "kinds": [
+      "talk",
+      "greeting",
+      "curious",
+      "encourage",
+      "approve",
+      "great",
+      "celebrate",
+      "brilliant"
+    ],
+    "sound": "meow",
+    "coaches": [
+      "paws",
+      "evil"
+    ]
+  },
+  {
+    "id": "meow-42",
+    "file": "MeowlChess-meow-42.wav",
+    "kinds": [
+      "talk",
+      "greeting",
+      "curious",
+      "encourage",
+      "approve",
+      "great",
+      "celebrate",
+      "brilliant"
+    ],
+    "sound": "meow",
+    "coaches": [
+      "meowl",
+      "scout"
+    ]
+  },
+  {
+    "id": "meow-43",
+    "file": "MeowlChess-meow-43.wav",
+    "kinds": [
+      "talk",
+      "greeting",
+      "curious",
+      "encourage",
+      "approve",
+      "great",
+      "celebrate",
+      "brilliant"
+    ],
+    "sound": "purr-chirp",
+    "coaches": [
+      "owl",
+      "scout"
+    ]
+  },
+  {
+    "id": "meow-44",
+    "file": "MeowlChess-meow-44.wav",
+    "kinds": [
+      "great",
+      "celebrate",
+      "brilliant"
+    ],
+    "sound": "kitten-meow",
+    "coaches": [
+      "baby"
+    ]
+  },
+  {
+    "id": "meow-45",
+    "file": "MeowlChess-meow-45.wav",
+    "kinds": [
+      "talk",
+      "greeting",
+      "curious",
+      "encourage",
+      "approve",
+      "great",
+      "celebrate",
+      "brilliant"
+    ],
+    "sound": "meow",
+    "coaches": [
+      "evil",
+      "paws"
+    ]
   }
 ]);

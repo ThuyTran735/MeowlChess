@@ -1,4 +1,5 @@
 import { COACH_IDLE_LABELS, applyCoachIdleRepertoire } from './coach-idle-repertoire.js';
+import { BABY_ANIMATION_LABELS, babyReactionPose } from './coach-baby-motion.js';
 
 const LIMITS = Object.freeze({
   mouth: [0,1], blink: [0,1], lookX: [-1,1], leftWing: [0,1.35], rightWing: [0,1.35],
@@ -10,7 +11,7 @@ const LIMITS = Object.freeze({
   steamPhase: [0,1], magnifier: [0,1], glassAngle: [-.4,.4], pennant: [0,1], flagFlutter: [-.4,.4],
 });
 const REMOVED = ['winkLeft','winkRight','blep','eyeSmile','squash','bodyBend','leftFlop','rightFlop','breathe','leftReach','rightReach','hug','wing'];
-const COACHES = ['meowl','owl','paws','mellow','scout','evil'];
+const COACHES = ['meowl','owl','paws','mellow','scout','evil','baby'];
 const clamp = (value,low,high) => Math.max(low,Math.min(high,value));
 
 function track(time, points, initial = 0, final = 0) {
@@ -267,9 +268,9 @@ const TALK_LABELS = {
 };
 
 export const COACH_ANIMATION_LABELS = Object.freeze(Object.fromEntries([
-  ...Object.entries(PLAN).map(([kind,coaches])=>[kind,Object.freeze(Object.fromEntries(COACHES.map(coach=>[coach,Object.freeze(coaches[coach].map(id=>LABELS[coach][id]))])))]),
+  ...Object.entries(PLAN).map(([kind,coaches])=>[kind,Object.freeze(Object.fromEntries(COACHES.map(coach=>[coach,coach==='baby'?BABY_ANIMATION_LABELS[kind]:Object.freeze(coaches[coach].map(id=>LABELS[coach][id]))])))]),
   ['idle',COACH_IDLE_LABELS],
-  ['talk',Object.freeze(Object.fromEntries(COACHES.map(coach=>[coach,Object.freeze(TALK_LABELS[coach])])))] ,
+  ['talk',Object.freeze(Object.fromEntries(COACHES.map(coach=>[coach,coach==='baby'?BABY_ANIMATION_LABELS.talk:Object.freeze(TALK_LABELS[coach])])))] ,
 ]));
 
 export const COACH_ANIMATION_TAKE_COUNTS = Object.freeze(Object.fromEntries(
@@ -322,6 +323,7 @@ export function applyCoachRepertoire(kind,basePose,progress,coachId='meowl',vari
   if (!Number.isFinite(progress)||progress<=0||progress>=1) { for (const key of Object.keys(pose)) pose[key]=0; return pose; }
   if (!Object.hasOwn(COACH_ANIMATION_LABELS,kind)) return pose;
   coachId=COACHES.includes(coachId)?coachId:'meowl';
+  if(coachId==='baby')return babyReactionPose(kind,progress,variation,pose);
   const count=coachAnimationTakeCount(kind,coachId);
   const take=Number.isFinite(variation)?((Math.trunc(variation)%count)+count)%count:0;
   if (kind==='signature'&&take===0&&coachId!=='evil') return pose;

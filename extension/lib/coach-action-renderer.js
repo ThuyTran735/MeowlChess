@@ -5,6 +5,7 @@ import { createCoachEyes, drawCoachEyes, drawCoachMouth } from './coach-eye-rend
 import { createCoachBodyBacking } from './coach-body-backing.js';
 import { drawCoachGarment } from './coach-garment-art.js';
 import { drawCoachPitchfork, resolveEvilPitchforkPose } from './coach-pitchfork.js';
+import { babyBodyFrame, babyHeadFrame, babyWingFrame, prepareBabyArtwork } from './coach-baby-art.js';
 
 const LEFT_WING = [[350,580],[468,580],[488,648],[501,743],[500,840],[477,929],[467,958],[419,961],[350,880]];
 const RIGHT_WING = [[777,578],[903,578],[912,918],[844,969],[819,953],[783,906],[759,836],[753,741],[761,668]];
@@ -49,9 +50,10 @@ function wingParts(artwork, document, polygonPoints, bounds, elbow, gripLength=5
   return { painted,upper,lower,grip,...bounds,elbow };
 }
 
-/** Cache fixed-size pieces of the approved drawing. No mesh or shape scaling. */
+/** Cache fixed-size pieces of the approved drawing for rigid joint animation. */
 export function createCoachPuppet(image, document=globalThis.document, coachId='meowl') {
   const artwork=canvas(document,image.naturalWidth,image.naturalHeight);artwork.getContext('2d').drawImage(image,0,0);
+  if(coachId==='baby')prepareBabyArtwork(artwork);
   const rightOutline=['owl','mellow'].includes(coachId)?COLLAR_WING:RIGHT_WING;
   const front=canvas(document,artwork.width,artwork.height),source=front.getContext('2d');
   source.drawImage(artwork,0,0);source.globalCompositeOperation='destination-out';
@@ -70,9 +72,10 @@ export function createCoachPuppet(image, document=globalThis.document, coachId='
     body.globalCompositeOperation='source-over';
   }
   body.drawImage(front,0,0);
+  const rigid=createRigidParts(artwork,document,torso,coachId);
   return {
     image:artwork,document,coachId,width:artwork.width,height:artwork.height,eyes:createCoachEyes(artwork,document,coachId),
-    rigid:createRigidParts(artwork,document,torso,coachId),
+    rigid,
     left:wingParts(artwork,document,LEFT_WING,{x:350,y:580,width:153,height:383},[455,785],coachId==='evil'?58:54),
     right:wingParts(artwork,document,rightOutline,{x:753,y:578,width:159,height:391},[809,785]),
   };
@@ -172,6 +175,24 @@ export function drawCoachPuppet(context,puppet,pose={}) {
   const originalPose=pose;
   pose=resolveCoachWingPose(pose,puppet.coachId);
   const moving=Object.values(pose).some(value=>Number.isFinite(value)&&Math.abs(value)>.0001);
+  if(puppet.coachId==='baby') {
+    // Use the same composition even at rest, so the static portrait, blinking,
+    // talking and full-body actions share Baby's fixed juvenile proportions.
+    context.save();context.translate(pose.bodyX||0,pose.lift||0);
+    context.translate(626,1150);context.rotate(pose.tilt||0);context.translate(-626,-1150);
+    context.save();babyBodyFrame(context);drawRigidBody(context,puppet.rigid,pose);context.restore();
+    context.save();babyHeadFrame(context);
+    drawRigidHead(context,puppet.rigid,pose,()=>{
+      drawCoachEyes(context,puppet.eyes,pose.blink,pose.lookX,pose.lookY);
+      drawCoachMouth(context,puppet.eyes,pose.mouth);
+    });
+    context.restore();
+    context.save();babyWingFrame(context,'left');
+    drawWing(context,puppet.left,[468,624],pose.leftWing||0,-(pose.leftElbow||0));
+    context.restore();context.save();babyWingFrame(context,'right');
+    drawWing(context,puppet.right,[780,624],-(pose.rightWing||0),pose.rightElbow||0);
+    context.restore();context.restore();return;
+  }
   if(puppet.coachId==='evil')pose=resolveEvilPitchforkPose(pose);
   // The permanently held staff shares the same layered rest/action drawing.
   // Avoid painting a second copy of the wing's antialiased edge at rest.

@@ -95,3 +95,39 @@ CC0 1.0. Their complete short public high-quality MP3 previews were converted
 to mono 32 kHz PCM with DC removal, bounded level matching, and 8 ms edge
 fades. No pitch or playback-speed changes, synthesized calls, or duplicates
 were added. Exact source and bundled-file hashes appear in provenance.json.
+
+Additional coach-specific kitten, purr, and meow recordings (checked 2026-11-05)
+
+MeowlChess-meow-36.wav, MeowlChess-meow-44.wav
+"Kitten Meowing.wav" by lolamadeus
+https://freesound.org/people/lolamadeus/sounds/196251/
+
+MeowlChess-meow-37.wav
+"Kitten_Meows" by Countrygirls13
+https://freesound.org/people/Countrygirls13/sounds/725043/
+
+MeowlChess-meow-38.wav
+"kitten_meowing.wav" by 16FPanskaRollerova_Adriena
+https://freesound.org/people/16FPanskaRollerova_Adriena/sounds/498843/
+
+MeowlChess-meow-39.wav
+"Cat Purr" by Kerne_123
+https://freesound.org/people/Kerne_123/sounds/785712/
+
+MeowlChess-meow-40.wav
+"Cat Purring.wav" by Joao_Janz
+https://freesound.org/people/Joao_Janz/sounds/473696/
+
+MeowlChess-meow-41.wav
+"Cat_Meow" by Countrygirls13
+https://freesound.org/people/Countrygirls13/sounds/763906/
+
+MeowlChess-meow-42.wav, MeowlChess-meow-45.wav
+"Animal - Cat Meow" by Vrymaa
+https://freesound.org/people/Vrymaa/sounds/756236/
+
+MeowlChess-meow-43.wav
+"felicia.m4a" by dreamstobecome
+https://freesound.org/people/dreamstobecome/sounds/424357/
+
+All ten excerpts above are from CC0 1.0 real cat recordings. Baby's four calls come from genuine kitten recordings. Mellow's two purrs are short excerpts of recorded purring. Converted to mono 32 kHz PCM with DC removal, bounded level matching, and 8 ms edge fades. Original pitch and speed preserved. No synthesized or pitch-shifted calls. Exact excerpt times and source/bundled-file SHA-256 hashes appear in provenance.json.

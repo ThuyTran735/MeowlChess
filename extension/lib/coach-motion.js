@@ -3,9 +3,9 @@ import { coachArtworkId, coachPuppetUrl } from './coach-portraits.js';
 import { COACH_ANIMATION_LABELS } from './coach-repertoire.js';
 import { createCoachIdleCycle } from './coach-idle-cycle.js';
 
-const COACH_IDS = new Set(['meowl', 'owl', 'paws', 'mellow', 'scout', 'evil']);
+const COACH_IDS = new Set(['meowl', 'owl', 'paws', 'mellow', 'scout', 'evil', 'baby']);
 const MOVE_GRADES = new Set(['Brilliant', 'Great', 'Best', 'Excellent', 'Good', 'Book', 'Inaccuracy', 'Mistake', 'Miss', 'Blunder']);
-const IDLE_DELAYS = Object.freeze({ meowl: 9000, owl: 11000, paws: 8000, mellow: 13000, scout: 10000, evil: 11000 });
+const IDLE_DELAYS = Object.freeze({ meowl: 9000, owl: 11000, paws: 8000, mellow: 13000, scout: 10000, evil: 11000, baby: 10000 });
 const FRAME_INTERVAL = 1000 / 60;
 const COMPACT_FRAME_INTERVAL = 1000 / 30;
 const START_WAIT_LIMIT = 2500;
@@ -13,7 +13,7 @@ const SETTLE_DURATION = 180;
 const AMBIENT_DURATION = 1100;
 const AMBIENT_GESTURE_GAP = 450;
 const VOICE_WAIT_LIMIT = 15000;
-const puppets = new Map();
+const puppets = new Map(), readyPuppets = new Map();
 
 function ambientPoseAt(elapsed, coachId, take) {
   const pose = { blink: 0, lookX: 0, lookY: 0 };
@@ -22,7 +22,7 @@ function ambientPoseAt(elapsed, coachId, take) {
     const t = Math.max(0, Math.min(1, (elapsed - from) / (to - from)));
     return t * t * (3 - 2 * t);
   };
-  const pace = coachId === 'mellow' ? 1.15 : 1;
+  const pace = coachId === 'mellow' ? 1.15 : coachId === 'baby' ? 1.1 : 1;
   // Both eyelids close together, pause briefly, then reopen more gently. The
   // small occasional glance happens while closed and returns to eye contact.
   pose.blink = smooth(100, 170 * pace) * (1 - smooth(240 * pace, 370 * pace));
@@ -59,6 +59,7 @@ function loadPuppet(coachId) {
     image.src = coachPuppetUrl(coachId);
   }).then(puppet => {
     if (!puppet) puppets.delete(coachId);
+    else readyPuppets.set(coachId, puppet);
     return puppet;
   });
   puppets.set(coachId, pending);
@@ -112,11 +113,23 @@ export function createCoachMotion({ isEnabled = () => true, isVisible = () => tr
     const reaction = { actor, image, effects: [], pausedEffects: [], coachId: voice.coachId, kind: 'voice', poseKind: null,
       duration: Math.max(1, voice.expiresAt - now()), variation: 0, voiceControlled: true,
       started: null, timer: null, frameHandle: null, frameInterval: FRAME_INTERVAL,
-      canvas: handoff.canvas || null, puppet: handoff.puppet || null, lastPose: null,
+      canvas: handoff.canvas || null, puppet: handoff.puppet || readyPuppets.get(voice.coachId) || null, lastPose: null,
       transition: null, ending: false, bubble: null, animationVersion: 0 };
     active.set(image, reaction);
     reaction.timer = setTimeout(() => finish(image, reaction), START_WAIT_LIMIT);
     void animate(image, reaction); syncObserver();
+  }
+
+  /** Prepare the visible mouth before a short recording starts. */
+  async function prepareVoice(image, { coachId = 'meowl' } = {}) {
+    const visible = () => !disposed && isVisible() && document?.visibilityState !== 'hidden'
+      && image?.tagName === 'IMG' && image.isConnected && image.getClientRects().length > 0;
+    if (!visible()) return false;
+    // Sound remains independent when the user explicitly disables movement.
+    if (!isEnabled() || reducedMotion?.matches) return true;
+    coachId = COACH_IDS.has(coachId) ? coachId : 'meowl';
+    const puppet = await loadPuppet(coachId);
+    return !!puppet && visible();
   }
 
   /** Attach a real audio playback clock without replacing the current gesture. */
@@ -516,6 +529,7 @@ export function createCoachMotion({ isEnabled = () => true, isVisible = () => tr
   reducedMotion?.addEventListener?.('change', onMotionChange);
   return {
     react,
+    prepareVoice,
     setVoice,
     setIdle,
     stop,

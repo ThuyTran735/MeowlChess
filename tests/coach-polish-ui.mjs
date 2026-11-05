@@ -53,13 +53,13 @@ try {
   const update = patch => page.evaluate(patch => window.polish.update(patch), patch);
   const lastAnswer = page.locator('.coach-message[data-role="coach"]').last();
   stage = 'visual choices and keyboard';
-  assert.equal(await page.locator('.coach-choice').count(), 6);
+  assert.equal(await page.locator('.coach-choice').count(), 7);
   assert.equal(await page.locator('.coach-select').isVisible(), false);
-  await poll(() => page.locator('.coach-choice-portrait').evaluateAll(images => images.every(image => image.complete && image.naturalWidth)), 'All six portraits load');
-  assert.equal(new Set(await page.locator('.coach-choice-portrait').evaluateAll(images => images.map(image => image.src))).size, 6);
+  await poll(() => page.locator('.coach-choice-portrait').evaluateAll(images => images.every(image => image.complete && image.naturalWidth)), 'All seven portraits load');
+  assert.equal(new Set(await page.locator('.coach-choice-portrait').evaluateAll(images => images.map(image => image.src))).size, 7);
   await page.locator('.coach-choice[data-coach="meowl"]').focus();
   await page.keyboard.press('ArrowRight');
-  assert.equal(await page.locator('.coach-choice[aria-pressed="true"]').getAttribute('data-coach'), 'owl');
+  assert.equal(await page.locator('.coach-choice[aria-pressed="true"]').getAttribute('data-coach'), 'baby');
   await page.keyboard.press('End');
   assert.equal(await page.locator('.coach-choice[aria-pressed="true"]').getAttribute('data-coach'), 'scout');
   await page.keyboard.press('Home');

@@ -12,8 +12,8 @@ try {
   await context.route('**/*',async route=>{
     const url=new URL(route.request().url());
     if(url.hostname!=='meowlchess.test')return route.abort();
-    if(url.pathname==='/coach-garment-art.js')return route.fulfill({body:await readFile(join(root,'extension/lib/coach-garment-art.js')),contentType:'text/javascript'});
-    if(/^\/icons\/coaches\/MeowlChess-coach-(owl|paws|mellow|scout|evil)-base\.svg$/.test(url.pathname))return route.fulfill({body:await readFile(join(root,'extension',url.pathname)),contentType:'image/svg+xml'});
+    if(['/coach-garment-art.js','/coach-baby-art.js'].includes(url.pathname))return route.fulfill({body:await readFile(join(root,'extension/lib',url.pathname.slice(1))),contentType:'text/javascript'});
+    if(/^\/icons\/coaches\/MeowlChess-coach-(owl|paws|mellow|scout|evil|baby)-base\.svg$/.test(url.pathname))return route.fulfill({body:await readFile(join(root,'extension',url.pathname)),contentType:'image/svg+xml'});
     return route.fulfill({body:'<!doctype html><html><body></body></html>',contentType:'text/html'});
   });
   const page=await context.newPage();await page.goto('http://meowlchess.test/');
@@ -33,7 +33,7 @@ try {
         if(a[p+3]<20&&b[p+3]>230)addedFabric++;
       }
       let wingDifferences=0,comparedWingPixels=0;
-      if(id!=='meowl'){
+      if(!['meowl','baby'].includes(id)){
         const svg=await(await fetch(`/icons/coaches/MeowlChess-coach-${id}-base.svg`)).text();
         const doc=new DOMParser().parseFromString(svg,'image/svg+xml'),element=doc.documentElement;
         for(const child of Array.from(element.children))if(child.tagName!=='defs')child.remove();
@@ -59,7 +59,7 @@ try {
   console.log(JSON.stringify(results,null,2));
   for(const result of results){
     assert(result.centralDifferences<100,`${result.id}: original front details changed (${result.centralDifferences} pixels)`);
-    if(result.id==='meowl')assert.equal(result.addedFabric,0);
+    if(['meowl','baby'].includes(result.id))assert.equal(result.addedFabric,0,`${result.id}: a bare torso must not become a shirt`);
     else {
       assert(result.addedFabric>12000,`${result.id}: fabric must extend behind both wings`);
       assert(result.comparedWingPixels>30000,`${result.id}: preserved wing sample must include both painted wings`);

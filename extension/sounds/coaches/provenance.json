@@ -700,6 +700,216 @@
       "sound": "meow",
       "sha256": "bf1db2169e385cca3beccc5de9244edf34e81cf0f9ec3622891514ea4b3921c4",
       "processing": "Complete short call; mono 32 kHz PCM conversion, DC removal, bounded peak normalization, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-36.wav",
+      "source": {
+        "id": "196251",
+        "page": "https://freesound.org/people/lolamadeus/sounds/196251/",
+        "license": "CC0-1.0",
+        "author": "lolamadeus",
+        "audio": "https://cdn.freesound.org/previews/196/196251_544580-hq.mp3",
+        "checked": "2026-11-05",
+        "title": "Kitten Meowing.wav",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "5b48d90e075907aadc3278446e6c03b3453b192bd9004fc53d83a4c929d1a2f8"
+      },
+      "excerpt_seconds": [
+        0.42,
+        1.12
+      ],
+      "sound": "kitten-meow",
+      "sha256": "c3028497819fc7feffea900366cbe869257197dad195eacc1013c82b4137fe18",
+      "processing": "Selected short call or steady purr excerpt; mono 32 kHz PCM conversion, DC removal, bounded level matching, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-37.wav",
+      "source": {
+        "id": "725043",
+        "page": "https://freesound.org/people/Countrygirls13/sounds/725043/",
+        "license": "CC0-1.0",
+        "author": "Countrygirls13",
+        "audio": "https://cdn.freesound.org/previews/725/725043_13111422-hq.mp3",
+        "checked": "2026-11-05",
+        "title": "Kitten_Meows",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "05e48313276d80993ad56ebdaf338f0b1cd624031efc128ff1bac22365afdd5a"
+      },
+      "excerpt_seconds": [
+        2.8,
+        3.9
+      ],
+      "sound": "kitten-meow",
+      "sha256": "d1012d3922e94fe4c05bddd34f905a9de2b0326b508c4832fe9823b07c648e47",
+      "processing": "Selected short call or steady purr excerpt; mono 32 kHz PCM conversion, DC removal, bounded level matching, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-38.wav",
+      "source": {
+        "id": "498843",
+        "page": "https://freesound.org/people/16FPanskaRollerova_Adriena/sounds/498843/",
+        "license": "CC0-1.0",
+        "author": "16FPanskaRollerova_Adriena",
+        "audio": "https://cdn.freesound.org/previews/498/498843_10807806-hq.mp3",
+        "checked": "2026-11-05",
+        "title": "kitten_meowing.wav",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "9bfe0543af864b5659523c982aefe8a833046cf07a760365c71a7fdc8ec18a84"
+      },
+      "excerpt_seconds": [
+        1.98,
+        2.975
+      ],
+      "sound": "kitten-meow",
+      "sha256": "fa00576a171933bbcebb3ddd02b8ff6ca45d235ddbaec7a64bc919924fc09e5c",
+      "processing": "Selected short call or steady purr excerpt; mono 32 kHz PCM conversion, DC removal, bounded level matching, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-39.wav",
+      "source": {
+        "id": "785712",
+        "page": "https://freesound.org/people/Kerne_123/sounds/785712/",
+        "license": "CC0-1.0",
+        "author": "Kerne_123",
+        "audio": "https://cdn.freesound.org/previews/785/785712_14927955-hq.mp3",
+        "checked": "2026-11-05",
+        "title": "Cat Purr",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "5d39d598b2030d4302ea8c30b6e097b813d0f2006319db5dd7c789da109cc26e"
+      },
+      "excerpt_seconds": [
+        4.35,
+        6.25
+      ],
+      "sound": "purr",
+      "sha256": "e8eaa4ff6bb3c38f8b448068b67b5b11b8d04c1a7a43e3f7b416322f5c353e50",
+      "processing": "Selected short call or steady purr excerpt; mono 32 kHz PCM conversion, DC removal, bounded level matching, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-40.wav",
+      "source": {
+        "id": "473696",
+        "page": "https://freesound.org/people/Joao_Janz/sounds/473696/",
+        "license": "CC0-1.0",
+        "author": "Joao_Janz",
+        "audio": "https://cdn.freesound.org/previews/473/473696_9961300-hq.mp3",
+        "checked": "2026-11-05",
+        "title": "Cat Purring.wav",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "136bea14282d0df47bef7fadd47e7140e9b84cab0b3046ef86e36fc45d548117"
+      },
+      "excerpt_seconds": [
+        1.1,
+        3.2
+      ],
+      "sound": "purr",
+      "sha256": "f5c7291f0b2bd84673a2432135f9f900bf5746f20102c0da5ab0869d94bc76b7",
+      "processing": "Selected short call or steady purr excerpt; mono 32 kHz PCM conversion, DC removal, bounded level matching, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-41.wav",
+      "source": {
+        "id": "763906",
+        "page": "https://freesound.org/people/Countrygirls13/sounds/763906/",
+        "license": "CC0-1.0",
+        "author": "Countrygirls13",
+        "audio": "https://cdn.freesound.org/previews/763/763906_13111422-hq.mp3",
+        "checked": "2026-11-05",
+        "title": "Cat_Meow",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "59fb080659e88f5d96c4034bd0e967745aefd981efa9b653ec0d6fc8154ccae8"
+      },
+      "excerpt_seconds": [
+        0.78,
+        1.655
+      ],
+      "sound": "meow",
+      "sha256": "99d8b217d4805b6b14861a6a4d507897d520738c5366856fb3fd4c8ca55e12e7",
+      "processing": "Selected short call or steady purr excerpt; mono 32 kHz PCM conversion, DC removal, bounded level matching, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-42.wav",
+      "source": {
+        "id": "756236",
+        "page": "https://freesound.org/people/Vrymaa/sounds/756236/",
+        "license": "CC0-1.0",
+        "author": "Vrymaa",
+        "audio": "https://cdn.freesound.org/previews/756/756236_13973196-hq.mp3",
+        "checked": "2026-11-05",
+        "title": "Animal - Cat Meow",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "53fb42f348e1823eda009c6a655fabc8cc912f36ba6d10962c9f1a75b4acf975"
+      },
+      "excerpt_seconds": [
+        0.12,
+        1.35
+      ],
+      "sound": "meow",
+      "sha256": "a157a30dc149389f85cf2866fe935584c249bb9452b3aa5d89dd144d55a0cceb",
+      "processing": "Selected short call or steady purr excerpt; mono 32 kHz PCM conversion, DC removal, bounded level matching, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-43.wav",
+      "source": {
+        "id": "424357",
+        "page": "https://freesound.org/people/dreamstobecome/sounds/424357/",
+        "license": "CC0-1.0",
+        "author": "dreamstobecome",
+        "audio": "https://cdn.freesound.org/previews/424/424357_7758073-hq.mp3",
+        "checked": "2026-11-05",
+        "title": "felicia.m4a",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "43dda4fdc677cfea8abe9f1c905bc74aa07f4cbb82c6f94d466f82050a1ef730"
+      },
+      "excerpt_seconds": [
+        51.45,
+        52.2
+      ],
+      "sound": "purr-chirp",
+      "sha256": "0c7c0fe0738c7fc4645a6b6a7985a722874a8a097c1944084e3db8d77e5d16af",
+      "processing": "Selected short call or steady purr excerpt; mono 32 kHz PCM conversion, DC removal, bounded level matching, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-44.wav",
+      "source": {
+        "id": "196251",
+        "page": "https://freesound.org/people/lolamadeus/sounds/196251/",
+        "license": "CC0-1.0",
+        "author": "lolamadeus",
+        "audio": "https://cdn.freesound.org/previews/196/196251_544580-hq.mp3",
+        "checked": "2026-11-05",
+        "title": "Kitten Meowing.wav",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "5b48d90e075907aadc3278446e6c03b3453b192bd9004fc53d83a4c929d1a2f8"
+      },
+      "excerpt_seconds": [
+        4.68,
+        5.62
+      ],
+      "sound": "kitten-meow",
+      "sha256": "ad4aa5a02e6a2988c7f1e0791958dbd51c7d2054c451ed92862bb689b14bc8d4",
+      "processing": "Selected short call or steady purr excerpt; mono 32 kHz PCM conversion, DC removal, bounded level matching, 8 ms edge fades. Original pitch and speed preserved."
+    },
+    {
+      "file": "MeowlChess-meow-45.wav",
+      "source": {
+        "id": "756236",
+        "page": "https://freesound.org/people/Vrymaa/sounds/756236/",
+        "license": "CC0-1.0",
+        "author": "Vrymaa",
+        "audio": "https://cdn.freesound.org/previews/756/756236_13973196-hq.mp3",
+        "checked": "2026-11-05",
+        "title": "Animal - Cat Meow",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "sha256": "53fb42f348e1823eda009c6a655fabc8cc912f36ba6d10962c9f1a75b4acf975"
+      },
+      "excerpt_seconds": [
+        5.5,
+        6.65
+      ],
+      "sound": "meow",
+      "sha256": "7973adc3a841a5606e6f9552ed76d4d23ed2d2bc997b456ee7468f911841ad66",
+      "processing": "Selected short call or steady purr excerpt; mono 32 kHz PCM conversion, DC removal, bounded level matching, 8 ms edge fades. Original pitch and speed preserved."
     }
   ]
 }

@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCoachSounds } from '../extension/lib/coach-sounds.js';
+import { COACH_MEOW_CLIPS } from '../extension/lib/coach-audio-clips.js';
+import { COACH_SOUND_PROFILES, coachSoundBank, coachSoundKind, getCoachSoundProfile } from '../extension/lib/coach-sound-profiles.js';
 
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
 const kinds = ['talk', 'brilliant', 'celebrate', 'curious', 'greeting'];
@@ -30,7 +32,8 @@ function fixture({ state = 'running', resume, fetch, decode, failGain = false, r
     async fetchAudio(url, options) {
       fetches.push({ url, options });
       if (fetch) return fetch(url, options);
-      const id = Number(url.match(/cat-(\d+)\.wav$/)?.[1] ?? 0);
+      const file = new URL(url).pathname.split('/').at(-1);
+      const id = catalog.findIndex(clip => clip.file === file);
       return { ok: true, async arrayBuffer() { return new Uint8Array([id, 42]).buffer; } };
     },
   });
@@ -80,9 +83,92 @@ test('Evil uses real chirps for asides and meows for celebrations without pitch 
   f.sounds.dispose();
 });
 
+test('Baby favors varied real chirps and purr-chirps at the original pitch and selected volume', async () => {
+  const f=fixture({getVolume:()=>.6,catalog:clips.map((clip,index)=>({...clip,sound:index<3?'chirp':index===3?'purr-chirp':'meow'}))});
+  let last;
+  for(const kind of kinds){
+    const heard=new Set();
+    for(let index=0;index<4;index++){
+      assert.equal(await f.sounds.play({coach:'baby',kind}),true);
+      const source=f.sources.at(-1),recording=source.buffer.recording;
+      assert(recording<4);assert.notEqual(recording,last);heard.add(recording);last=recording;
+      assert.deepEqual(source.playbackRate.calls,[['set',1,8]]);
+      assert.equal(Math.max(...f.gains.at(-1).gain.calls.map(([,value])=>value)),.39);
+    }
+    assert.equal(heard.size,4);
+  }
+  f.sounds.dispose();
+});
+
+test('all seven coaches have distinct immutable recording banks with gentle alternatives to celebrations', () => {
+  const voices = new Set(), descriptions = new Set();
+  const supported = ['talk','greeting','curious','encourage','approve','great','celebrate','brilliant'];
+  assert.equal(Object.keys(COACH_SOUND_PROFILES).length,7);
+  for (const [coach, profile] of Object.entries(COACH_SOUND_PROFILES)) {
+    assert(Object.isFrozen(profile));assert(Object.isFrozen(profile.banks));assert(Object.isFrozen(profile.sounds));
+    assert.equal(getCoachSoundProfile(coach),profile);descriptions.add(profile.description);
+    for (const ids of Object.values(profile.banks)) {
+      assert(Object.isFrozen(ids));assert(ids.length>=3);assert.equal(new Set(ids).size,ids.length);
+      for(const id of ids)assert(COACH_MEOW_CLIPS.some(clip=>clip.id===id),`${coach} references a bundled recording`);
+    }
+    const talk = coachSoundBank(COACH_MEOW_CLIPS,coach,'talk').map(clip=>clip.id).sort();voices.add(talk.join(','));
+    assert(talk.length>=2&&talk.length<COACH_MEOW_CLIPS.length,`${coach} has its own speech bank`);
+    for(const kind of supported) {
+      const bank=coachSoundBank(COACH_MEOW_CLIPS,coach,kind);
+      assert(bank.length>=2);assert.equal(new Set(bank.map(clip=>clip.id)).size,bank.length);
+    }
+    assert.notDeepEqual(coachSoundBank(COACH_MEOW_CLIPS,coach,'encourage').map(clip=>clip.id),coachSoundBank(COACH_MEOW_CLIPS,coach,'brilliant').map(clip=>clip.id));
+  }
+  assert.equal(voices.size,7);assert.equal(descriptions.size,7);
+  assert.equal(getCoachSoundProfile('__proto__'),COACH_SOUND_PROFILES.meowl);
+});
+
+test('real profile playback stays in each coach’s reaction bank without repeats or pitch changes', async () => {
+  let seed=73,last;
+  const f=fixture({catalog:COACH_MEOW_CLIPS,random:()=>((seed=(Math.imul(seed,1664525)+1013904223)>>>0)/4294967296),getVolume:()=>.5});
+  for(const coach of Object.keys(COACH_SOUND_PROFILES))for(const kind of ['talk','encourage','great','brilliant','greeting','approve','curious','celebrate']) {
+    const bank=coachSoundBank(COACH_MEOW_CLIPS,coach,kind),allowed=new Set(bank.map(clip=>clip.id)),heard=new Set();
+    for(let index=0;index<bank.length*2;index++) {
+      assert.equal(await f.sounds.play({coach,kind}),true);
+      const source=f.sources.at(-1),clip=COACH_MEOW_CLIPS[source.buffer.recording];
+      assert(allowed.has(clip.id),`${coach}/${kind} keeps its character bank`);assert.notEqual(clip.id,last);heard.add(clip.id);last=clip.id;
+      assert.deepEqual(source.playbackRate.calls,[['set',1,8]]);
+      assert.equal(Math.max(...f.gains.at(-1).gain.calls.map(([,value])=>value)),.325);
+    }
+    assert.equal(heard.size,bank.length,`${coach}/${kind} reaches every recording`);
+  }
+  f.sounds.dispose();
+});
+
+test('tagged new recordings join only their intended coach and reaction, while older banks still work', () => {
+  const extra={id:'new-purr',file:'MeowlChess-new-purr.wav',sound:'purr',coaches:['mellow'],kinds:['encourage']};
+  const extended=[...COACH_MEOW_CLIPS,extra],before=JSON.stringify(extended);
+  assert(coachSoundBank(extended,'mellow','encourage').some(clip=>clip===extra));
+  assert(!coachSoundBank(extended,'mellow','brilliant').some(clip=>clip===extra));
+  assert(!coachSoundBank(extended,'baby','encourage').some(clip=>clip===extra));
+  assert.equal(JSON.stringify(extended),before);
+  assert.equal(coachSoundKind('think'),'curious');assert.equal(coachSoundKind('signature'),'greeting');
+  for(const kind of ['encourage','great','approve'])assert.equal(coachSoundKind(kind),kind);
+  assert.deepEqual(coachSoundBank(extended,'mellow','idle'),[]);
+  assert.deepEqual(coachSoundBank(null,'baby','talk'),[]);
+  assert.deepEqual(coachSoundBank(clips,'baby','talk'),clips);
+  assert.deepEqual(coachSoundBank(clips,'__proto__','unknown'),clips);
+});
+
+test('Baby prefers genuine kitten calls and Mellow prefers real purring without shrinking to a repeating single clip', () => {
+  const kittens=Array.from({length:3},(_,i)=>({id:`kitten-${i}`,file:`MeowlChess-kitten-${i}.wav`,sound:'kitten-meow',coaches:['baby'],kinds:['talk','encourage','brilliant']}));
+  const purrs=Array.from({length:2},(_,i)=>({id:`purr-${i}`,file:`MeowlChess-purr-${i}.wav`,sound:'purr',coaches:['mellow'],kinds:['talk','greeting','encourage']}));
+  const extended=[...COACH_MEOW_CLIPS.filter(clip=>!clip.coaches),...kittens,...purrs];
+  for(const kind of ['talk','encourage','brilliant'])assert.deepEqual(coachSoundBank(extended,'baby',kind),kittens);
+  const mellow=[COACH_MEOW_CLIPS.find(clip=>clip.id==='meow-25'),...purrs];
+  for(const kind of ['talk','greeting','encourage'])assert.deepEqual(coachSoundBank(extended,'mellow',kind),mellow);
+  const partial=extended.filter(clip=>!['kitten-1','kitten-2','purr-1'].includes(clip.id));
+  assert(coachSoundBank(partial,'baby','talk').length>=3);assert(coachSoundBank(partial,'mellow','talk').length>=2);
+});
+
 test('idle never allocates or plays audio, even when sound is enabled for Evil', async () => {
   const f=fixture();
-  for(const coach of ['evil','meowl','owl','paws','mellow','scout'])assert.equal(await f.sounds.play({coach,kind:'idle'}),false);
+  for(const coach of ['evil','meowl','owl','paws','mellow','scout','baby'])assert.equal(await f.sounds.play({coach,kind:'idle'}),false);
   assert.equal(f.creations,0);assert.equal(f.fetches.length,0);assert.equal(f.sources.length,0);
   f.sounds.dispose();
 });
@@ -91,7 +177,7 @@ test('all kinds and coaches shuffle the recordings without consecutive repeats',
   let seed = 123;
   const f = fixture({ random: () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296) });
   let last;
-  for (const coach of ['meowl', 'owl', 'paws', 'mellow', 'scout', 'evil']) {
+  for (const coach of ['meowl', 'owl', 'paws', 'mellow', 'scout', 'evil', 'baby']) {
     for (const kind of kinds) {
       for (let cycle = 0; cycle < 3; cycle++) {
         const heard = new Set();
@@ -240,5 +326,50 @@ test('blocked or canceled sound never notifies the mouth; a view callback failur
   assert.equal(await f.sounds.play({ onStart() { called++; } }), false);
   assert.equal(called, 0); f.enabled(true);
   assert.equal(await f.sounds.play({ onStart() { throw Error('View removed'); } }), true);
+  f.sounds.dispose();
+});
+
+test('a short call waits for its visible mouth and uses the playback clock after preparation', async () => {
+  const gate = deferred(), f = fixture();
+  let notified = false;
+  const playing = f.sounds.play({ beforeStart: () => gate.promise, onStart() { notified = true; } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.decodes.length, 1);
+  assert.equal(f.sources.length, 0);
+  assert.equal(notified, false);
+  f.audio.currentTime = 12;
+  gate.resolve(true);
+  assert.equal(await playing, true);
+  assert.deepEqual(f.sources[0].starts, [12]);
+  assert.equal(notified, true);
+  f.sounds.dispose();
+});
+
+test('waiting for artwork cannot revive a canceled, replaced, muted or hidden call', async () => {
+  for (const action of ['stop', 'dispose', 'replace', 'enabled', 'visible', 'volume', 'suspended']) {
+    let volume = 1, notified = 0;
+    const gate = deferred(), f = fixture({ getVolume: () => volume });
+    const playing = f.sounds.play({ beforeStart: () => gate.promise, onStart() { notified++; } });
+    await new Promise(resolve => setImmediate(resolve));
+    if (action === 'replace') assert.equal(await f.sounds.play(), true);
+    else if (action === 'enabled' || action === 'visible') f[action](false);
+    else if (action === 'volume') volume = 0;
+    else if (action === 'suspended') f.audio.state = 'suspended';
+    else f.sounds[action]();
+    gate.resolve(true);
+    assert.equal(await playing, false, action);
+    assert.equal(notified, 0, action);
+    assert.equal(f.sources.length, action === 'replace' ? 1 : 0, action);
+    f.sounds.dispose();
+  }
+});
+
+test('a missing mouth stays silent and a failed preparation does not poison later previews', async () => {
+  const f = fixture();
+  for (const beforeStart of [() => false, () => { throw Error('Artwork unavailable'); }]) {
+    assert.equal(await f.sounds.play({ beforeStart }), false);
+    assert.equal(f.sources.length, 0);
+  }
+  assert.equal(await f.sounds.play({ beforeStart: () => true }), true);
   f.sounds.dispose();
 });

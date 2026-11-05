@@ -58,6 +58,9 @@ export function applyCoachAction(kind, basePose, progress, coachId = 'meowl', va
     for (const key of Object.keys(pose)) pose[key] = 0;
     return pose;
   }
+  // Baby's dedicated repertoire authors every gesture; preserve only the
+  // upstream speech/blink timing here instead of borrowing an adult signature.
+  if (coachId === 'baby') return pose;
   if (!ACTIONS.has(kind) && kind !== 'talk') {
     pose.lift = 0;
     if (!(pose.feather > 0)) pose.featherY = 0;

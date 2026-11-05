@@ -105,8 +105,12 @@ export function createRigidParts(artwork, document = globalThis.document, bodyWi
     earBoundary(context, false); context.fill(); earBoundary(context, true);
   });
   // The untouched torso fur continues beneath the soft internal chin edge.
-  const body = part(bodyWithoutWings, document, BODY_BOUNDS, null, context => headBoundary(context, 22));
-  const torso = part(body, document, BODY_BOUNDS, null, context => {
+  // Baby's shorter torso needs extra fur behind the unchanged head fade.
+  // Without this overlap the two fixed coordinate frames leave a faint chin
+  // arc even at rest. The original six keep their approved boundary.
+  const bodyBounds=coachId==='baby'?{x:350,y:430,width:570,height:780}:BODY_BOUNDS;
+  const body = part(bodyWithoutWings, document, bodyBounds, null, context => headBoundary(context, coachId==='baby'?70:22));
+  const torso = part(body, document, bodyBounds, null, context => {
     context.beginPath(); context.rect(0, 1083, 1254, 171);
   });
   return {

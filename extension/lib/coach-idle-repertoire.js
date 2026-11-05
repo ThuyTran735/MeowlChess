@@ -1,4 +1,5 @@
 import { COACH_FULL_BODY_IDLES } from './coach-idle-scenes.js';
+import { BABY_IDLE_REPERTOIRE, BABY_IDLE_LABELS, babyIdlePose } from './coach-baby-motion.js';
 
 const COACHES = ['meowl','owl','paws','mellow','scout','evil'];
 const LIMITS = Object.freeze({
@@ -292,12 +293,13 @@ for(const coach of COACHES){
   for(const item of RECIPES[coach]){for(const beat of item.beats)Object.freeze(beat);Object.freeze(item.beats);Object.freeze(item);}
   Object.freeze(RECIPES[coach]);
 }
-export const COACH_IDLE_REPERTOIRE=Object.freeze(RECIPES);
-export const COACH_IDLE_LABELS=Object.freeze(Object.fromEntries(COACHES.map(coach=>[coach,Object.freeze(RECIPES[coach].map(item=>item.label))])));
-export const COACH_IDLE_TAKE_COUNTS=Object.freeze(Object.fromEntries(COACHES.map(coach=>[coach,RECIPES[coach].length])));
+export const COACH_IDLE_REPERTOIRE=Object.freeze({...RECIPES,baby:BABY_IDLE_REPERTOIRE});
+export const COACH_IDLE_LABELS=Object.freeze({...Object.fromEntries(COACHES.map(coach=>[coach,Object.freeze(RECIPES[coach].map(item=>item.label))])),baby:BABY_IDLE_LABELS});
+export const COACH_IDLE_TAKE_COUNTS=Object.freeze({...Object.fromEntries(COACHES.map(coach=>[coach,RECIPES[coach].length])),baby:BABY_IDLE_LABELS.length});
 
 /** Quiet, finite idle scenes. Every joint returns to rest; prop poses keep their supporting wings. */
 export function applyCoachIdleRepertoire(progress,coachId='meowl',variation=0){
+  if(coachId==='baby')return babyIdlePose(progress,variation);
   const pose=Object.fromEntries(Object.keys(LIMITS).map(key=>[key,0]));
   if(!Number.isFinite(progress)||progress<=0||progress>=1)return pose;
   coachId=COACHES.includes(coachId)?coachId:'meowl';

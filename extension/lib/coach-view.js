@@ -2,6 +2,7 @@ import { COACHES, answerCoach, createCoachWalkthrough } from './coach.js';
 import { coachPortraitUrl } from './coach-portraits.js';
 import { createCoachMotion } from './coach-motion.js';
 import { createCoachSounds } from './coach-sounds.js';
+import { getCoachSoundProfile } from './coach-sound-profiles.js';
 import { COACH_ANIMATION_LABELS } from './coach-repertoire.js';
 import { getCoachUnlockProgress, subscribeCoachUnlockProgress, COACH_REVIEW_UNLOCK_GOAL } from './coach-unlocks.js';
 import { renderCoachText } from './coach-notation.js';
@@ -59,7 +60,7 @@ function actionIcon(name) {
   return svg;
 }
 
-const COACH_SHORT_NAMES = { meowl: 'Meowl', owl: 'Professor', paws: 'Captain', mellow: 'Mellow', scout: 'Scout', evil: 'Evil Meowl' };
+const COACH_SHORT_NAMES = { meowl: 'Meowl', baby: 'Baby Meowl', owl: 'Professor', paws: 'Captain', mellow: 'Mellow', scout: 'Scout', evil: 'Evil Meowl' };
 const ANIMATION_KINDS = [['signature','Signature action'],['greeting','Hello'],['talk','Talking'],['think','Thinking'],['curious','Looking closer'],['brilliant','Brilliant'],['great','Great'],['celebrate','Best'],['approve','Good move'],['encourage','Encouragement'],['idle','While waiting']];
 const QUESTION_LABELS = {
   'Summarize this game': ['Game recap', 'recap'],
@@ -127,10 +128,15 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   function stopReactions(options) { motion.stop(options); sounds.stop(); syncIdle(); }
   function playSound(kind, targets) {
     const coachId = selected.coach;
-    void sounds.play({ kind: kind === 'encourage' ? 'curious' : kind, coach: coachId,
+    const images = [...new Set(targets)].filter(image => image?.isConnected);
+    void sounds.play({ kind, coach: coachId,
+      async beforeStart() {
+        const ready = await Promise.all(images.map(image => motion.prepareVoice(image, { coachId })));
+        return !disposed && selected.coach === coachId && ready.some(Boolean);
+      },
       onStart(playback) {
         if (disposed || selected.coach !== coachId) return;
-        for (const image of new Set(targets)) if (image?.isConnected) motion.setVoice(image, { coachId, ...playback });
+        for (const image of images) if (image?.isConnected) motion.setVoice(image, { coachId, ...playback });
       },
     });
   }
@@ -138,7 +144,8 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
     const move = context.result?.moves?.[ply - 1];
     if (!move || (selected.perspective !== 'both' && selected.perspective !== move.color)) return 'talk';
     if (move.label === 'Brilliant') return 'brilliant';
-    if (['Great', 'Best'].includes(move.label)) return 'celebrate';
+    if (move.label === 'Great') return 'great';
+    if (move.label === 'Best') return 'celebrate';
     if (['Inaccuracy', 'Mistake', 'Miss', 'Blunder'].includes(move.label)) return 'encourage';
     if (['Excellent', 'Good', 'Book'].includes(move.label)) return 'approve';
     return 'talk';
@@ -261,6 +268,8 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   const soundPreview = node('button', 'coach-sound-preview', 'Preview'); soundPreview.type = 'button';
   soundPreview.setAttribute('aria-label', 'Preview a meow at this volume');
   volumeControls.append(volumeLabel, volume, volumeValue, soundPreview);
+  const soundProfile = node('p', 'coach-sound-profile');
+  volumeControls.append(soundProfile);
   const preferenceStatus = node('p', 'coach-preference-status'); preferenceStatus.setAttribute('role', 'status');
   const animationControls = node('div', 'coach-animation-controls');
   const animationLabel = node('label', 'coach-label', 'Animation preview'); animationLabel.htmlFor = `${id}-animation`;
@@ -560,6 +569,8 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
     root.dataset.coach = selected.coach;
     const coach = COACHES.find(item => item.id === selected.coach) || COACHES[0];
     coachName.textContent = coach.name;
+    soundProfile.textContent = getCoachSoundProfile(coach.id).description;
+    soundPreview.setAttribute('aria-label', `Preview ${coach.name}'s voice at this volume`);
     for (const [kind, label] of ANIMATION_KINDS) {
       const names = COACH_ANIMATION_LABELS[kind]?.[coach.id] || [label];
       const option = animationChoice.querySelector(`[value="${kind}"]`);
@@ -802,7 +813,9 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
     if (bounds.top < 0 || bounds.bottom > innerHeight) avatar.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     const kind = animationChoice.value;
     const grade = { brilliant: 'Brilliant', great: 'Great', celebrate: 'Best', approve: 'Good' }[kind];
-    motion.react(avatar, { kind, grade, coachId: selected.coach, durationMs: kind === 'talk' ? 3000 : undefined });
+    motion.react(avatar, { kind, grade, coachId: selected.coach, durationMs: kind === 'talk' ? 3000 : undefined,
+      waitForVoice: kind !== 'idle' && selected.sounds && selected.volume > 0 });
+    if (kind !== 'idle') playSound(kind, [avatar]);
   });
   if (greet) listen(greet, 'click', () => {
     if (!companionReady() || Date.now() - lastGreeting < 1800) return;

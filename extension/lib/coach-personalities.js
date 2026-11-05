@@ -1,9 +1,11 @@
 import { EVIL_COACH, EVIL_VOICE } from './coach-evil-personality.js';
+import { BABY_COACH, BABY_VOICE } from './coach-baby-personality.js';
 
 const profile = (value) => Object.freeze({ ...value, traits: Object.freeze(value.traits), suggestions: Object.freeze(value.suggestions) });
 
 export const COACHES = Object.freeze([
   profile({ id: 'meowl', name: 'Meowl', description: 'A curious study buddy with a playful streak. Let’s find the idea together.', traits: ['Curious', 'Playful'], suggestions: ['Summarize this game', 'Show Brilliant and Great moves', 'What should I practice?', 'Explain this position'] }),
+  profile(BABY_COACH),
   profile({ id: 'owl', name: 'Professor Meowl', description: 'Evidence first, then a clear lesson to take away.', traits: ['Analytical', 'Methodical'], suggestions: ['Explain this position', 'What was the biggest mistake?', 'How were the phases?', 'Summarize this game'] }),
   profile({ id: 'paws', name: 'Captain Paws', description: 'An upbeat captain who turns review into small challenges.', traits: ['Energetic', 'Playful'], suggestions: ['Next key moment', 'What should I practice?', 'Show Brilliant and Great moves', 'Summarize this game'] }),
   profile({ id: 'mellow', name: 'Mellow Meowl', description: 'A patient companion. No rush, no scolding.', traits: ['Patient', 'Reassuring'], suggestions: ['Summarize this game', 'Explain this position', 'What opening is this?', 'What should I practice?'] }),
@@ -12,6 +14,8 @@ export const COACHES = Object.freeze([
 ]);
 
 export function coachId(value) { return COACHES.some(item => item.id === value) ? value : 'meowl'; }
+
+const EXTRA_VOICES = { evil: EVIL_VOICE, baby: BABY_VOICE };
 
 const LEADS = {
   summary: { meowl: 'Let’s find one useful thing to take into the next game.', owl: 'Review notes', paws: 'Captain’s log. Let’s pick the next training stop.', mellow: 'There’s no need to fix everything at once.', scout: 'Let’s follow the important clues in this game.' },
@@ -36,9 +40,10 @@ const pick = (choices, ply = 0) => choices[(Number.isInteger(ply) && ply > 0 ? p
 /** Presentation only: facts, ratings and move references are built by the validated review. */
 export function coachResponseText(text, { coach = 'meowl', kind = '', ply = 0, label } = {}) {
   coach = coachId(coach);
+  const voice = EXTRA_VOICES[coach];
   const lead = kind === 'move' && label ? coachMoveLead(coach, label, ply)
-    : kind === 'position' ? pick(coach === 'evil' ? EVIL_VOICE.positions : POSITION_LEADS[coach], ply)
-    : coach === 'evil' ? EVIL_VOICE.leads[kind] : LEADS[kind]?.[coach];
+    : kind === 'position' ? pick(voice ? voice.positions : POSITION_LEADS[coach], ply)
+    : voice ? voice.leads[kind] : LEADS[kind]?.[coach];
   if (!lead) return text;
   const paragraphs = text.split('\n\n');
   // Professor keeps a compact note structure; the other coaches speak conversationally.
@@ -50,6 +55,7 @@ export function coachResponseText(text, { coach = 'meowl', kind = '', ply = 0, l
 export function coachStudyStep(coach, target = '', hasErrors = true) {
   const place = target ? `the position before ${target}` : 'one close decision in the move list';
   if (coachId(coach) === 'evil') return `Take ${place} back to the lair. Choose a candidate, try to spoil it with a legal reply, then compare the saved line. The evil laugh comes after the evidence.`;
+  if (coachId(coach) === 'baby') return `Hop back to ${place}. Pick one candidate, try a legal reply, then compare the saved line. That’s one little lesson for our collection.`;
   return {
     meowl: `Start with ${place}. Try a candidate, then compare it with the engine suggestion. One useful idea is enough for today.`,
     owl: `Study ${place}. Record a candidate and its strongest reply, then compare both with the saved line.`,
@@ -60,7 +66,8 @@ export function coachStudyStep(coach, target = '', hasErrors = true) {
 }
 
 export function coachPositionStep(coach) {
-  if (coachId(coach) === 'evil') return EVIL_VOICE.positionStep;
+  const voice = EXTRA_VOICES[coachId(coach)];
+  if (voice) return voice.positionStep;
   return {
     meowl: 'Try the first move on the board and see how the reply fits.',
     owl: 'Compare the first candidate with the strongest legal reply before drawing a conclusion.',
@@ -156,7 +163,8 @@ export function coachMoveTask(coach, { ply = 0, label, ending = false, inCheck =
   coach = coachId(coach);
   const situation = ending ? 'ending' : inCheck ? 'check' : promotion ? 'promotion' : capture ? 'capture' : castle ? 'castle'
     : label === 'Book' ? 'book' : !hasLine ? 'missing' : !hasReply ? 'short' : label === 'Brilliant' ? 'sacrifice' : alternative ? 'alternative' : '';
-  if (coach === 'evil') return situation ? EVIL_VOICE.moveTasks[situation] : pick(EVIL_VOICE.ordinaryTasks, ply);
+  const voice = EXTRA_VOICES[coach];
+  if (voice) return situation ? voice.moveTasks[situation] : pick(voice.ordinaryTasks, ply);
   return situation ? MOVE_TASKS[situation][coach] : pick(ORDINARY_TASKS[coach], ply);
 }
 
@@ -191,7 +199,8 @@ const TOPIC_TASKS = {
   },
 };
 export function coachTopicStep(coach, topic) {
-  return (coachId(coach) === 'evil' ? EVIL_VOICE.topics[topic] : TOPIC_TASKS[topic]?.[coachId(coach)]) || '';
+  const voice = EXTRA_VOICES[coachId(coach)];
+  return (voice ? voice.topics[topic] : TOPIC_TASKS[topic]?.[coachId(coach)]) || '';
 }
 
 // Familiar grade wording combines with two more character-specific leads below.
@@ -313,7 +322,8 @@ const EXTRA_REACTIONS = {
 
 export function coachMoveLead(coach, label, ply) {
   coach = coachId(coach);
-  if (coach === 'evil') return EVIL_VOICE.reactions[label] ? pick(EVIL_VOICE.reactions[label], ply) : '';
+  const voice = EXTRA_VOICES[coach];
+  if (voice) return voice.reactions[label] ? pick(voice.reactions[label], ply) : '';
   const choices = REACTIONS[coach][label];
   if (!choices) return '';
   return pick([...choices, ...EXTRA_REACTIONS[coach][label]], ply);

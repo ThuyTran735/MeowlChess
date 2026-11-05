@@ -34,6 +34,7 @@ export function personalizeCoachPose(kind, input, progress, coachId = 'meowl') {
     return pose;
   }
   if (!REACTIONS.has(kind)) return pose;
+  if (coachId === 'baby') return pose;
   coachId = COACHES.has(coachId) ? coachId : 'meowl';
   const gesture = pulse(progress, .08, .84);
   const talking = kind === 'talk' || kind === 'greeting';

@@ -1,9 +1,9 @@
 import { COACH_MEOW_CLIPS } from './coach-audio-clips.js';
 import { createCoachMouthEnvelope } from './coach-mouth-envelope.js';
+import { coachSoundBank, coachSoundKind } from './coach-sound-profiles.js';
 
 // Real cat recordings bundled with the extension. No microphone or remote audio.
-const KINDS = new Set(['talk', 'brilliant', 'celebrate', 'curious', 'greeting']);
-const COACHES = new Set(['meowl', 'owl', 'paws', 'mellow', 'scout', 'evil']);
+const COACHES = new Set(['meowl', 'owl', 'paws', 'mellow', 'scout', 'evil', 'baby']);
 const MASTER_GAIN = 0.65;
 
 export function createCoachSounds({
@@ -18,7 +18,8 @@ export function createCoachSounds({
   const catalog = Array.isArray(clips) ? clips.filter((clip, index, all) =>
     clip && typeof clip.id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*\.(?:wav|mp3|ogg)$/i.test(clip.file)
     && all.findIndex(item => item?.id === clip.id) === index
-  ).map(clip => ({ ...clip, kinds: Array.isArray(clip.kinds) ? [...clip.kinds] : [] })) : [];
+  ).map(clip => ({ ...clip, kinds: Array.isArray(clip.kinds) ? [...clip.kinds] : [],
+    coaches: Array.isArray(clip.coaches) ? clip.coaches.filter(coach => COACHES.has(coach)) : [] })) : [];
   let context = null, voice = null, pendingLoad = null, revision = 0, disposed = false, lastClip = null;
   const buffers = new Map(), mouthEnvelopes = new Map(), variations = new Map(), lastByCoach = new Map();
   const allowed = () => !disposed && isEnabled() && isVisible() && globalThis.document?.visibilityState !== 'hidden';
@@ -43,13 +44,7 @@ export function createCoachSounds({
   }
 
   function nextClip(coach, kind) {
-    const matching = catalog.filter(clip => clip.kinds.includes(kind));
-    const available = matching.length ? matching : catalog;
-    // Short real chirps suit Evil Meowl's asides; celebrations use full meows.
-    // Keep every recording at its original pitch and fall back for older banks.
-    const preferred = coach === 'evil' ? available.filter(clip => clip.sound ===
-      (kind === 'brilliant' || kind === 'celebrate' ? 'meow' : 'chirp')) : [];
-    const bank = preferred.length >= 2 ? preferred : available;
+    const bank = coachSoundBank(catalog, coach, kind);
     if (!bank.length) return null;
     const key = `${coach}:${kind}`;
     let remaining = variations.get(key);
@@ -60,7 +55,8 @@ export function createCoachSounds({
     // A different reaction may have just used the final clip in this bag.
     // Prefer a fresh recording over repeating that sound across categories.
     const alternatives = bank.filter(clip => clip.id !== lastClip);
-    const fallback = alternatives.length ? alternatives : catalog.filter(clip => clip.id !== lastClip);
+    const characterFallback = coachSoundBank(catalog, coach, 'talk').filter(clip => clip.id !== lastClip);
+    const fallback = alternatives.length ? alternatives : characterFallback.length ? characterFallback : catalog.filter(clip => clip.id !== lastClip);
     return fallback.length ? shuffled(fallback).pop() : remaining.pop();
   }
 
@@ -117,7 +113,7 @@ export function createCoachSounds({
   return {
     unlock() { return ready(); },
     stop,
-    async play({ kind = 'talk', coach = 'meowl', onStart } = {}) {
+    async play({ kind = 'talk', coach = 'meowl', beforeStart, onStart } = {}) {
       stop();
       if (kind === 'idle') return false;
       if (!allowed() || !volumeLevel() || !catalog.length) return false;
@@ -125,10 +121,17 @@ export function createCoachSounds({
       const audio = await ready();
       if (!audio || currentRevision !== revision || !allowed()) return false;
       coach = COACHES.has(coach) ? coach : 'meowl';
-      kind = KINDS.has(kind) ? kind : 'talk';
+      kind = coachSoundKind(kind);
       const clip = nextClip(coach, kind);
       const buffer = clip && await decoded(clip, audio, currentRevision);
       if (!buffer || currentRevision !== revision || !allowed()) return false;
+      // Short calls must not outrun the character's first local artwork load.
+      // Keep this wait inside the request so canceling or replacing it also
+      // cancels the sound, even if the character finishes loading later.
+      if (typeof beforeStart === 'function') {
+        try { if (await beforeStart() === false) return false; } catch { return false; }
+      }
+      if (currentRevision !== revision || context !== audio || audio.state !== 'running' || !allowed()) return false;
       const volume = volumeLevel();
       if (!volume) return false;
       const current = { nodes: [], source: null, released: false }; voice = current;

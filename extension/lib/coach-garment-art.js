@@ -2,6 +2,7 @@
 const outline = 'stroke="#49382d" stroke-width="12" stroke-linejoin="round" stroke-linecap="round"';
 export const COACH_GARMENT_SVG = {
   meowl: '',
+  baby: '',
   owl: `<g ${outline}>
     <path fill="#657d91" d="M481 526 Q606 558 777 526 L749 665 L746 953 L641 1003 L605 972 L546 1001 L507 943 L507 661 Z"/>
     <path fill="#ece2c9" d="M516 535 Q618 570 743 535 L631 699 Z"/>

@@ -4,11 +4,11 @@ const INK='#49382d';
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,Number.isFinite(v)?v:0));
 const path=(d,fill='none',stroke=INK,width=5)=>({d,fill,stroke,width});
 const ellipse=(cx,cy,rx,ry,fill)=>({cx,cy,rx,ry,fill,stroke:'none',width:0});
-const IDS=['meowl','owl','paws','mellow','scout','evil'];
+const IDS=['meowl','baby','owl','paws','mellow','scout','evil'];
 export const coachFaceId=id=>IDS.includes(id)?id:'meowl';
-function eyeShape(cx,cy){
-  const ry=36;
-  return `M${cx-36} ${cy} C${cx-37} ${cy-ry*1.25} ${cx+35} ${cy-ry*1.25} ${cx+36} ${cy} C${cx+38} ${cy+ry*1.3} ${cx-36} ${cy+ry*1.3} ${cx-36} ${cy}Z`;
+function eyeShape(cx,cy,scale=1){
+  const ry=36*scale;
+  return `M${cx-36*scale} ${cy} C${cx-37*scale} ${cy-ry*1.25} ${cx+35*scale} ${cy-ry*1.25} ${cx+36*scale} ${cy} C${cx+38*scale} ${cy+ry*1.3} ${cx-36*scale} ${cy+ry*1.3} ${cx-36*scale} ${cy}Z`;
 }
 function markings(id){
   if(id==='evil')return [
@@ -21,10 +21,27 @@ function markings(id){
   return [path('M491 292 Q516 283 541 290','none','#9b7a50',5)];
 }
 export function coachEyeArt(coachId,{blink=0,lookX=0,lookY=0}={}){
-  return [...markings(coachFaceId(coachId)),...coachCommonEyeArt({blink,lookX,lookY})];
+  const id=coachFaceId(coachId);
+  return [...markings(id),...(id==='baby'?babyEyeArt({blink,lookX,lookY}):coachCommonEyeArt({blink,lookX,lookY}))];
 }
 
-/** Every coach uses the normal Meowl's exact eye shape, ink, blink and gaze. */
+// The same painted-eye design, a little larger and lower on the infant face.
+// The original brow and palette remain; no new blush or decorative eye effects.
+function babyEyeArt({blink,lookX,lookY}){
+  const scale=1.15,closed=clamp(blink,0,1),x=clamp(lookX,-1,1)*8*scale,y=clamp(lookY,-1,1)*6*scale,scene=[];
+  [[528,365],[706,368]].forEach(([cx,cy])=>{
+    const d=eyeShape(cx,cy,scale);
+    if(closed>.97){scene.push(path(`M${cx-29*scale} ${cy+13*scale} Q${cx} ${cy+24*scale} ${cx+29*scale} ${cy+13*scale}`,'none',INK,5));return;}
+    const top=cy-44*scale+closed*63*scale,bottom=cy+51*scale-closed*28*scale;
+    const shutter=`M${cx-53*scale} ${top} Q${cx} ${top-closed*9*scale} ${cx+53*scale} ${top} L${cx+53*scale} ${bottom} Q${cx} ${bottom+closed*9*scale} ${cx-53*scale} ${bottom}Z`;
+    const px=cx+x,py=cy+y+3*scale;
+    const inside=[path(d,'#332f26',INK,4),ellipse(px,py,22*scale,26*scale,'#2e2923'),ellipse(px+9*scale,py-13*scale,5*scale,5*scale,'#fff2d8')];
+    scene.push({clip:shutter,children:[{clip:d,children:inside},path(d,'none',INK,4)]});
+    if(closed>.02)scene.push({clip:d,children:[path(`M${cx-53*scale} ${top} Q${cx} ${top-closed*9*scale} ${cx+53*scale} ${top}`,'none',INK,4)]});
+  });return scene;
+}
+
+/** The original six coaches retain the normal Meowl's exact eyes and gaze. */
 export function coachCommonEyeArt({blink=0,lookX=0,lookY=0}={}){
   const closed=clamp(blink,0,1),x=clamp(lookX,-1,1)*8,y=clamp(lookY,-1,1)*6,scene=[];
   [[528,345],[706,348]].forEach(([cx,cy])=>{
@@ -41,6 +58,15 @@ export function coachCommonEyeArt({blink=0,lookX=0,lookY=0}={}){
 }
 export function coachMouthArt(coachId,amount=0){
   const id=coachFaceId(coachId),open=clamp(amount,0,1),line=id==='evil'?'#59474b':'#76563b',stem=path('M605 431 L605 445','none',line,5);
+  if(id==='baby'){
+    const babyStem=path('M605 431 L605 439','none',line,4);
+    if(open>.04){
+      const depth=6+open*17;
+      return [babyStem,path(`M593 441 Q605 446 617 441 Q620 ${441+depth} 605 ${444+depth} Q590 ${441+depth} 593 441Z`,'#694331',line,4),
+        ...(open>.55?[path(`M599 ${440+depth} Q605 ${437+depth} 611 ${440+depth}`,'none','#bc8374',3)]:[])];
+    }
+    return [babyStem,path('M593 446 Q600 444 605 439 Q610 444 617 446','none',line,4)];
+  }
   if(id==='evil'){
     const depth=2+open*21;
     return [stem,
