@@ -8,6 +8,14 @@
 .coach-view *, .coach-view *::before, .coach-view *::after { box-sizing: border-box; }
 .coach-heading { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .coach-avatar { flex: none; width: 72px; height: 72px; object-fit: contain; }
+.coach-portrait-control { flex: none; display: flex; flex-direction: column; align-items: center; width: 96px; min-width: 0; }
+.coach-portrait-play { display: grid; place-items: center; padding: 0; border: 0; border-radius: 12px; background: transparent; color: inherit; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.coach-portrait-play:focus-visible { outline: 2px solid var(--coach-accent, #b6d393); outline-offset: 3px; }
+.coach-play-feedback { display: block; min-height: 3.2em; max-width: 100%; margin-top: 4px; color: var(--muted, #aba99e); text-align: center; font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.coach-play-status { color: var(--coach-accent, #b6d393); }
+.coach-play-status:empty, .coach-play-hint[hidden] { display: none; }
+.coach-portrait-control:has(.coach-portrait-play:hover:enabled) .coach-play-hint, .coach-companion-figure:has(.coach-portrait-play:hover:enabled) .coach-play-hint { color: var(--coach-accent, #b6d393); }
+.coach-portrait-play[aria-busy="true"] { cursor: default; }
 .coach-identity { flex: 1; min-width: 0; }
 .coach-selected-name { display: block; color: var(--text, #f1f0e9); font-size: 20px; line-height: 1.25; font-weight: 650; letter-spacing: -.5px; }
 .coach-action-icon { width: 16px; height: 16px; display: inline-block; flex: none; vertical-align: middle; }

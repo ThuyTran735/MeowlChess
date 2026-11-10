@@ -4,7 +4,13 @@ MeowlChess is an independent browser extension for local analysis of completed c
 
 ## Game data
 
-For Chess.com or Lichess retrieval, you enter a public username; Lichess also accepts a completed-game link. The selected site's public API receives that username or game ID directly. Returned data can include player names, ratings, results, dates, game URLs, and moves.
+For Chess.com or Lichess retrieval, you enter a public username or use the signed-in account detected from an open chess tab; Lichess also accepts a completed-game link. When you find games, the selected site's public API receives that username or game ID directly. Returned data can include player names, ratings, results, dates, game URLs, and moves.
+
+### Automatic username detection
+
+Opening MeowlChess with its toolbar icon on Chess.com or Lichess lets it read that page's own account label. **Use signed-in account** in Games, or **Detect** in on-site settings, can request access to the selected website and read its open tabs. With that site access already granted, detection can also refresh when you return to a chess tab, it finishes loading, or you open MeowlChess or change the selected website. Incognito tabs are excluded. The detector reads only the site's account navigation widget, not game-player names or the profile you are visiting. Conflicting account labels are left unresolved.
+
+The detected username, website, and detection time are kept in extension-local storage, separately from your last game-search entry. They can fill an empty username field and identify your side for the coach. Explicit entries remain editable. Detection makes no network request and does not read cookies, passwords, authentication tokens, private messages, or account APIs. It does not start an engine or enable on-site reviews. A detected sign-out clears that website's detected account. This browser-specific cache is not included in backups.
 
 You can also choose, drag and drop, or paste PGNs exported from other websites, including files containing several games. The import picker remains in tab memory; a game is saved only after its full review completes. Imported files are read locally and are not uploaded. MeowlChess does not contact an arbitrary website named in a PGN. A completed review retains the game's PGN locally, including its headers and comments; only line endings, a leading byte-order mark, and surrounding whitespace are normalized.
 
@@ -62,10 +68,12 @@ Opening an original game, the GitHub repository, documentation, or policy link m
 
 - Optional `notifications`: requested only when you enable completion alerts. Used for newly saved reviews that finish while you are away from their tab.
 - Optional `https://api.github.com/*`: requested when you choose to check for updates or enable automatic update checks. Used only to retrieve public MeowlChess release metadata.
-- `storage`: local preferences. Saved reviews also use the browser's built-in IndexedDB storage for the extension.
+- `storage`: local preferences and detected account names. Saved reviews also use the browser's built-in IndexedDB storage for the extension.
+- `activeTab`: temporary access to the current page when you click MeowlChess's toolbar icon. Used to read the signed-in account label on Chess.com or Lichess.
+- `scripting`: runs the local username reader and the optional on-site panel. This permission alone does not grant access to a website.
 - `https://api.chess.com/*`: public Chess.com game archives.
 - `https://lichess.org/api/games/user/*` and `https://lichess.org/game/export/*`: Lichess public game exports. Chrome host permissions apply to the origin, even when a manifest entry includes a path.
-- Optional `scripting`, `https://www.chess.com/*`, `https://chess.com/*`, and `https://lichess.org/*`: requested when you enable the corresponding on-site review setting. These allow the extension to show its dropdown on that site.
+- Optional `https://www.chess.com/*`, `https://chess.com/*`, and `https://lichess.org/*`: requested when you explicitly detect an account or enable the corresponding on-site review setting. These allow username detection on open tabs of that site and, when on-site reviews are enabled, its dropdown. Lichess may already be accessible through the public-export host permissions above.
 
 On-site reviews are off by default. With your setting and browser permission, an isolated content script runs on the selected site. It checks the current URL and visible game-end notices, then displays a dropdown. For finished Chess.com bot games, or an exact completed multiplayer game whose public archive entry is delayed, it can open the site's normal **Share → PGN** dialog and read the completed PGN locally. It closes only the export dialog it opened. You may also explicitly choose a PGN file or paste one into the panel. MeowlChess does not use private game APIs or read account cookies. It does not read live board positions, clocks, account credentials, private messages, or browsing history. Lichess private player suffixes are stripped before game URLs are retained or matched. Public API requests omit login credentials.
 

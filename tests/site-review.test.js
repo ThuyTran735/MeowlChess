@@ -1234,7 +1234,7 @@ test('background registers only opted-in permitted sites and disables a site aft
     action: { onClicked: event('action') },
     storage: { local: { get: async () => settings, set: async value => Object.assign(settings, value) }, session: { get: async () => ({ siteReviewSession: structuredClone(sessionSnapshot) }), set: async value => { sessionSnapshot = value.siteReviewSession; } }, onChanged: event('storage') },
     permissions: { contains: async ({ permissions, origins }) => grant && permissions.includes('scripting') && origins.includes('https://www.chess.com/*'), onAdded: event('added'), onRemoved: event('removed') },
-    tabs: { query: async () => [{ id: 5 }], create: async value => opened.push(value), onRemoved: event('tabRemoved'), onUpdated: event('tabUpdated') },
+    tabs: { query: async () => [{ id: 5 }], create: async value => opened.push(value), onRemoved: event('tabRemoved'), onUpdated: event('tabUpdated'), onActivated: event('tabActivated') },
     scripting: {
       getRegisteredContentScripts: async () => [...scripts.values()],
       registerContentScripts: async entries => entries.forEach(entry => scripts.set(entry.id, entry)),

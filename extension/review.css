@@ -496,6 +496,12 @@ dialog::backdrop { background: #0009; }
 .site-review-option label { display: flex; align-items: center; gap: 7px; font-size: 12px; }
 .site-review-option input[type="text"] { width: 100%; min-width: 0; padding: 8px; font-size: 12px; border: 1px solid #ffffff26; border-radius: 4px; background: #242621; color: var(--text); }
 .site-review-option input:disabled { opacity: .55; }
+.site-account-entry { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.site-account-entry input { flex: 1; }
+.detect-account { flex: none; padding: 7px 9px; border: 1px solid var(--line); border-radius: 5px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
+.detect-account:hover:enabled { color: var(--text); background: #ffffff08; }
+.detect-account:disabled { opacity: .5; cursor: default; }
+#detect-account { margin-top: 7px; }
 .site-review-settings .site-review-help { font-size: 10px; margin-bottom: 0; }
 .site-review-settings #site-review-status:empty { display: none; }
 .site-review-settings #site-review-status { color: #bfd99b; margin: 9px 0 0; }

@@ -131,9 +131,9 @@ try {
   await delay(250);
   assert.equal(await companion.locator('.coach-reaction-puppet').count(), 0, 'Idle is a finite burst, not a continuous canvas loop.');
   assert.equal(await bubble.isVisible(), false, 'Idle movement does not reveal move commentary on Summary.');
-  assert.match(await greet.getAttribute('aria-label'), /Say hello to Meowl/);
+  assert.match(await greet.getAttribute('aria-label'), /Play with Meowl/);
   await greet.focus(); await greet.press('Enter');
-  assert.equal(await companion.locator('[data-reaction="greeting"]').count(), 1, 'Enter activates the native greeting button.');
+  assert.equal(await companion.locator('[data-reaction="play"]').count(), 1, 'Enter activates the native portrait play button.');
   await renderedAnimation();
   await companion.locator('.coach-reaction-puppet').evaluate(canvas => { window.greetingCanvasProbe = canvas; });
   await greet.evaluate(button => { button.click(); button.click(); }); await delay(50);
@@ -196,7 +196,7 @@ try {
   stage = 'mobile greeting and volume controls';
   assert.match(await greet.getAttribute('aria-label'), /Captain Paws/);
   await greet.tap();
-  assert.equal(await companion.locator('[data-reaction="greeting"]').count(), 1, 'A touch tap greets the selected coach.');
+  assert.equal(await companion.locator('[data-reaction="play"]').count(), 1, 'A touch tap plays with the selected coach.');
   await renderedAnimation(); await idle();
   await page.locator('#coach-tab').click();
   await page.locator('.coach-settings-summary').click();

@@ -29,6 +29,40 @@ test('account identity follows actual usernames, not board orientation or a prio
   assert.equal(detectCoachPlayerSide(game(), {}), null);
 });
 
+test('detected signed-in identity takes precedence over an opponent searched in Games', () => {
+  const stored = {
+    usernames: { chesscom: 'Bob', lichess: 'Alice' }, username: 'Bob',
+    siteReviewSettings: { chesscom: { username: 'Bob' } }, savedAccounts: { chesscom: ['Bob'] },
+    detectedAccounts: { chesscom: { username: 'aLiCe', detectedAt: 1 }, lichess: { username: 'Bob', detectedAt: 2 } },
+  };
+  assert.equal(detectCoachPlayerSide(game(), stored), 'w');
+  assert.equal(detectCoachPlayerSide(game('chesscom', 'Bob', 'Alice'), stored), 'b');
+  assert.equal(detectCoachPlayerSide(game('lichess'), stored), 'b');
+  assert.equal(resolveCoachFocus('opponent', detectCoachPlayerSide(game(), stored)), 'b');
+});
+
+test('a detected spectator does not become a searched player, and providers stay separate', () => {
+  const stored = { usernames: { chesscom: 'Alice' }, savedAccounts: { chesscom: ['Bob'] },
+    detectedAccounts: { chesscom: { username: 'Viewer', detectedAt: 1 } } };
+  assert.equal(detectCoachPlayerSide(game(), stored), null);
+  assert.equal(resolveCoachFocus('me', detectCoachPlayerSide(game(), stored)), null);
+  assert.equal(detectCoachPlayerSide(game('lichess'), stored), null);
+  assert.equal(detectCoachPlayerSide(game(), {
+    usernames: { chesscom: 'Alice' }, detectedAccounts: { lichess: { username: 'Bob', detectedAt: 1 } },
+  }), 'w');
+});
+
+test('malformed detection cache cannot override remembered or manual account lookup', () => {
+  const malformed = [null, [], 'Alice', {}, { username: 'Alice' },
+    { username: 'Alice', detectedAt: '1' }, { username: 'Alice', detectedAt: 0 },
+    { username: 'Alice', detectedAt: -1 }, { username: 'Alice', detectedAt: Infinity },
+    { username: 'Alice', detectedAt: NaN }, { username: 'https://chess.com/member/Alice', detectedAt: 1 },
+    { username: 'A'.repeat(51), detectedAt: 1 }];
+  for (const value of malformed) {
+    assert.equal(detectCoachPlayerSide(game(), { usernames: { chesscom: 'Bob' }, detectedAccounts: { chesscom: value } }), 'b');
+  }
+});
+
 test('provider accounts and the Chess.com-only legacy field never cross sites', () => {
   assert.equal(detectCoachPlayerSide(game(), { usernames: { lichess: 'Alice' } }), null);
   assert.equal(detectCoachPlayerSide(game('lichess'), { username: 'Alice' }), null);

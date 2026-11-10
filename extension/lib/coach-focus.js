@@ -64,6 +64,14 @@ export function detectCoachPlayerSide(game, stored = {}) {
     const username = name(value);
     return username === white ? 'w' : username === black ? 'b' : null;
   };
+  // A detected signed-in account identifies the viewer, whereas the game picker
+  // may contain an opponent or another account being studied. If that viewer is
+  // not in this game, keep "me" unknown until they choose their player manually.
+  const detected = stored?.detectedAccounts?.[source];
+  if (detected && typeof detected === 'object' && !Array.isArray(detected)
+    && name(detected.username) && Number.isFinite(detected.detectedAt) && detected.detectedAt > 0) {
+    return match(detected.username);
+  }
   // The legacy field belonged to Chess.com before per-site inputs existed.
   // An unrelated Lichess account must never inherit that name.
   const preferred = [stored?.usernames?.[source], source === 'chesscom' ? stored?.username : null,

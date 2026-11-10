@@ -36,8 +36,8 @@
                 </section><fieldset class="site-review-settings settings-section">
                   <legend>On-site reviews</legend>
                   <p>When a game ends, show progress and then its summary on the website.</p>
-                  <div class="site-review-option"><label><input id="site-chesscom-enabled" type="checkbox" disabled> Chess.com</label><input id="site-chesscom-username" type="text" placeholder="Your Chess.com username" aria-label="Chess.com account for automatic reviews" autocomplete="off" spellcheck="false" maxlength="50" disabled></div>
-                  <div class="site-review-option"><label><input id="site-lichess-enabled" type="checkbox" disabled> Lichess</label><input id="site-lichess-username" type="text" placeholder="Your Lichess username" aria-label="Lichess account for automatic reviews" autocomplete="off" spellcheck="false" maxlength="30" disabled></div>
+                  <div class="site-review-option"><label><input id="site-chesscom-enabled" type="checkbox" disabled> Chess.com</label><div class="site-account-entry"><input id="site-chesscom-username" type="text" placeholder="Your Chess.com username" aria-label="Chess.com account for automatic reviews" autocomplete="off" spellcheck="false" maxlength="50" disabled><button id="site-chesscom-detect" class="detect-account" type="button" disabled>Detect</button></div></div>
+                  <div class="site-review-option"><label><input id="site-lichess-enabled" type="checkbox" disabled> Lichess</label><div class="site-account-entry"><input id="site-lichess-username" type="text" placeholder="Your Lichess username" aria-label="Lichess account for automatic reviews" autocomplete="off" spellcheck="false" maxlength="30" disabled><button id="site-lichess-detect" class="detect-account" type="button" disabled>Detect</button></div></div>
                   <p class="site-review-help">Off by default. Enabling a site asks for browser permission. Uses your engine and speed above; Chess.com game data can take time to appear. Turn a site off to change its username.</p>
                   <p id="site-review-status" role="status" aria-live="polite"></p>
                 </fieldset>
@@ -53,7 +53,7 @@
       <div class="study-title"><div><span id="game-kind" class="eyebrow">GAME REVIEW</span><h1 id="game-title">Choose a game</h1><p id="game-subtitle" class="muted">Open Games to find or import a completed game.</p></div></div>
       <div class="board-layout">
         <aside id="coach-companion" class="coach-companion" aria-label="Your coach" hidden>
-          <figure class="coach-companion-figure"><button class="coach-companion-greet" type="button" aria-label="Say hello to Meowl" title="Tap to say hello to Meowl"><img id="coach-companion-avatar" class="coach-avatar coach-companion-avatar" src="icons/coaches/MeowlChess-coach-meowl.svg" width="220" height="220" alt="" draggable="false"></button><figcaption id="coach-companion-name">Meowl</figcaption></figure>
+          <figure class="coach-companion-figure"><button class="coach-companion-greet" type="button" aria-label="Play with Meowl" title="Tap to play with Meowl while idle"><img id="coach-companion-avatar" class="coach-avatar coach-companion-avatar" src="icons/coaches/MeowlChess-coach-meowl.svg" width="220" height="220" alt="" draggable="false"></button><figcaption id="coach-companion-name">Meowl</figcaption></figure>
           <div id="coach-companion-bubble" class="coach-companion-bubble" role="status" aria-live="polite" aria-atomic="true" hidden><strong id="coach-companion-heading" class="coach-walkthrough-heading"></strong><p id="coach-companion-text" class="coach-walkthrough-text"></p></div>
         </aside>
         <div class="board-column">
@@ -111,7 +111,7 @@
       </div>
     </section>
   </section>
-  <footer><span>MeowlChess v1.16.0 · Local analysis · <button id="open-tutorial" class="footer-link" type="button" disabled aria-haspopup="dialog" aria-controls="tutorial-dialog">Tutorial</button> · <a href="updates.html" target="_blank" rel="noopener">Updates &amp; backups</a></span><span>Completed games only · <a href="https://www.chess.com/legal/fair-play" target="_blank" rel="noopener noreferrer">Fair play</a></span></footer>
+  <footer><span>MeowlChess v1.17.0 · Local analysis · <button id="open-tutorial" class="footer-link" type="button" disabled aria-haspopup="dialog" aria-controls="tutorial-dialog">Tutorial</button> · <a href="updates.html" target="_blank" rel="noopener">Updates &amp; backups</a></span><span>Completed games only · <a href="https://www.chess.com/legal/fair-play" target="_blank" rel="noopener noreferrer">Fair play</a></span></footer>
 </main>
 
 <dialog id="library-dialog" class="library-dialog" aria-labelledby="library-title">
@@ -119,7 +119,7 @@
     <div class="dialog-heading"><div><h2 id="library-title">Games</h2><p class="muted">Choose a completed game to review.</p></div><button id="close-library" class="close-dialog" type="button" aria-label="Close games">×</button></div>
     <nav class="library-shortcuts" aria-label="Find a game"><button type="button" data-library-jump="online-games"><strong>Online games</strong><span>Chess.com · Lichess</span></button><button type="button" data-library-jump="saved-panel"><strong>Saved reviews</strong><span>Pick up where you left off</span></button><button type="button" data-library-jump="import-panel"><strong>Import PGN</strong><span>Files from any chess site</span></button></nav><div id="library-content" class="library-content">
       <section id="online-games" class="online-games" aria-label="Find completed games">
-        <h3 class="library-section-title">Find your games</h3><form id="username-form"><label for="game-source">Website</label><select id="game-source"><option value="chesscom">Chess.com</option><option value="lichess">Lichess</option></select><label id="username-label" for="username">Chess.com username</label><div class="input-group"><input id="username" name="username" placeholder="Username" autocomplete="username" maxlength="160" required><button id="load-button" type="submit" aria-label="Find completed games" title="Find completed games">Find games</button></div></form>
+        <h3 class="library-section-title">Find your games</h3><form id="username-form"><label for="game-source">Website</label><select id="game-source"><option value="chesscom">Chess.com</option><option value="lichess">Lichess</option></select><label id="username-label" for="username">Chess.com username</label><div class="input-group"><input id="username" name="username" placeholder="Username" autocomplete="username" maxlength="160" required><button id="load-button" type="submit" aria-label="Find completed games" title="Find completed games">Find games</button></div><button id="detect-account" class="detect-account" type="button">Use signed-in account</button></form>
         <div id="saved-account-row" class="saved-account-row" hidden>
           <label for="saved-account">Saved accounts</label>
           <div class="saved-account-controls"><select id="saved-account"><option value="">Choose a saved account</option></select><button id="forget-account" type="button" title="Remove this username from saved accounts" disabled>Forget</button></div>

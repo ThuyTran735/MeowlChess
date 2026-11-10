@@ -23,7 +23,8 @@ import { renderCoachText } from './lib/coach-notation.js';
 import { explainMoveRating } from './lib/rating-explanation.js';
 import { estimateGameRatings, gameRatingDescription } from './lib/game-rating.js';
 import { getPhasePerformance } from './lib/game-performance.js';
-import { createSiteReviewSettings } from './lib/site-settings.js';
+import { createSiteReviewSettings, accountDetectionMessage } from './lib/site-settings.js';
+import { SITE_PROVIDERS } from './lib/site-review.js';
 import { createReviewLibrary, reviewIdForGame } from './lib/library.js';
 import { createSummaryShare } from './lib/summary-share.js';
 import { installCompletionAlertSetting, notifyReviewComplete } from './lib/completion-alerts.js';
@@ -118,11 +119,56 @@ function openPickerGame(game) { return openSavedReview(null, { fallbackGame: gam
 const savedUsernames = {};
 let usernameSource = 'chesscom', usernameSaveQueue = Promise.resolve();
 let savedAccounts = normalizeAccounts(), accountSaveQueue = Promise.resolve(), accountSaves = 0;
+let detectedAccounts = {}, detectingAccount = false, usernameRevision = 0, detectedReadRevision = 0;
+const editedUsernames = new Set();
 function updateAccountControls() {
   const disabled = state.starting || state.busy || state.loading || state.libraryBusy || state.importing || !!state.positionController || accountSaves > 0;
   $('saved-account').disabled = disabled;
   $('forget-account').disabled = disabled || !$('saved-account').value;
+  $('detect-account').disabled = disabled || detectingAccount || !globalThis.chrome?.runtime?.sendMessage || !chrome?.permissions?.request;
 }
+function fillDetectedAccount(source) {
+  if (state.starting || source !== usernameSource || editedUsernames.has(source) || Object.hasOwn(savedUsernames, source) || $('username').value.trim()) return;
+  const name = accountUsername(source, detectedAccounts?.[source]?.username);
+  if (!name) return;
+  $('username').value = name; syncAccountSelection();
+  $('account-status').textContent = `Detected your signed-in ${SITE_PROVIDERS[source].label} account: ${name}.`;
+}
+async function refreshDetectedAccount(source) {
+  if (!globalThis.chrome?.runtime?.sendMessage) return;
+  const readRevision = detectedReadRevision;
+  try {
+    const result = await chrome.runtime.sendMessage({ type: 'meowl:detect-account', source });
+    if (readRevision !== detectedReadRevision) { fillDetectedAccount(source); return; }
+    if (result?.status !== 'detected' || result.source !== source || !accountUsername(source, result.username)) return;
+    detectedAccounts = { ...detectedAccounts, [source]: { username: result.username } };
+    fillDetectedAccount(source);
+  } catch { /* Detection is optional; manual entries remain available. */ }
+}
+$('detect-account').addEventListener('click', async () => {
+  if ($('detect-account').disabled) return;
+  const source = usernameSource, revision = usernameRevision, original = $('username').value;
+  const provider = SITE_PROVIDERS[source];
+  let request;
+  // Request only this website, directly in the button's user gesture.
+  try { request = chrome.permissions.request({ permissions: ['scripting'], origins: provider.origins }); }
+  catch { $('account-status').textContent = accountDetectionMessage(source, null); return; }
+  detectingAccount = true; updateAccountControls();
+  $('account-status').textContent = `Looking for your signed-in ${provider.label} account…`;
+  const current = () => revision === usernameRevision && source === usernameSource && original === $('username').value && $('library-dialog').open
+    && !state.busy && !state.loading && !state.importing && !state.positionController;
+  try {
+    if (!await request) { if (current()) $('account-status').textContent = accountDetectionMessage(source, { status: 'permission-required' }); return; }
+    const result = await chrome.runtime.sendMessage({ type: 'meowl:detect-account', source });
+    if (!current()) return;
+    const name = result?.status === 'detected' && result.source === source && accountUsername(source, result.username);
+    if (!name) { $('account-status').textContent = accountDetectionMessage(source, result); return; }
+    $('username').value = name; editedUsernames.add(source); usernameRevision++;
+    void rememberUsername(source, name); syncAccountSelection();
+    $('account-status').textContent = `Using your signed-in ${provider.label} account: ${name}.`;
+  } catch { if (current()) $('account-status').textContent = accountDetectionMessage(source, null); }
+  finally { detectingAccount = false; updateAccountControls(); }
+});
 function syncAccountSelection() {
   const source = $('game-source').value, name = $('username').value.trim().toLowerCase();
   $('saved-account').value = savedAccounts[source].find(item => item.toLowerCase() === name) || '';
@@ -159,12 +205,14 @@ function updateSavedAccounts(transform, { initial = false } = {}) {
 $('saved-account').addEventListener('change', () => {
   const name = $('saved-account').value;
   if (!name) { updateAccountControls(); return; }
+  editedUsernames.add(usernameSource); usernameRevision++;
   $('username').value = name; $('account-status').textContent = '';
   void rememberUsername(usernameSource, name); syncAccountSelection();
 });
 $('forget-account').addEventListener('click', async () => {
   const source = $('game-source').value, name = $('saved-account').value;
   if (!name) return;
+  editedUsernames.add(source); usernameRevision++;
   $('account-status').textContent = '';
   await updateSavedAccounts(current => forgetAccount(current, source, name));
   if (!savedAccounts[source].some(item => item.toLowerCase() === name.toLowerCase())) {
@@ -175,10 +223,19 @@ $('forget-account').addEventListener('click', async () => {
     }
   }
 });
-$('username').addEventListener('input', syncAccountSelection);
+$('username').addEventListener('input', () => {
+  editedUsernames.add(usernameSource); usernameRevision++; syncAccountSelection();
+  // Returning to an initially empty field does not fire a native change event.
+  // Remember that deliberate clear so detection cannot refill it after reload.
+  if (!$('username').value.trim()) void rememberUsername(usernameSource, '');
+});
 globalThis.chrome?.storage?.onChanged?.addListener((changes, area) => {
   if (area === 'local' && changes.savedAccounts) {
     savedAccounts = normalizeAccounts(changes.savedAccounts.newValue); renderSavedAccounts();
+  }
+  if (area === 'local' && changes.detectedAccounts) {
+    detectedReadRevision++; detectedAccounts = changes.detectedAccounts.newValue || {};
+    if (!detectingAccount) fillDetectedAccount(usernameSource);
   }
 });
 function rememberUsername(source, value, { ifCurrent } = {}) {
@@ -1332,7 +1389,7 @@ document.querySelector('.review-tabs').addEventListener('keydown', event => {
 });
 $('library-toggle').addEventListener('click', () => setLibraryOpen($('library-toggle').getAttribute('aria-expanded') !== 'true'));
 $('close-library').addEventListener('click', () => setLibraryOpen(false));
-$('library-dialog').addEventListener('close', () => $('library-toggle').setAttribute('aria-expanded', 'false'));
+$('library-dialog').addEventListener('close', () => { usernameRevision++; $('library-toggle').setAttribute('aria-expanded', 'false'); });
 $('username').addEventListener('change', () => { void rememberUsername(usernameSource, $('username').value); });
 $('username-form').addEventListener('submit', event => { event.preventDefault(); loadGames(); });
 $('demo-button').addEventListener('click', () => openPickerGame(sample));
@@ -1349,11 +1406,13 @@ $('next-key').addEventListener('click', () => { const ply = keyPlies().find(p =>
 $('deepen-button').addEventListener('click', () => deepenPosition(false));
 $('quick-position').addEventListener('click', () => deepenPosition(true));
 $('game-source').addEventListener('change', () => {
+  usernameRevision++;
   // An unchanged draft may be older than a username saved in another tab.
   const value = $('username').value.trim();
   if (value !== savedUsernames[usernameSource]) void rememberUsername(usernameSource, value, value === '' && savedUsernames[usernameSource] === undefined ? { ifCurrent: '' } : {});
   usernameSource = $('game-source').value;
   syncSource(); $('username').value = savedUsernames[usernameSource] ?? ''; renderSavedAccounts(); savePreferences();
+  fillDetectedAccount(usernameSource); void refreshDetectedAccount(usernameSource);
   $('library-status').textContent = 'Enter a username to find completed games.';
 });
 function importUnavailable() { return state.busy || state.loading || state.importing || state.libraryBusy || state.positionController || state.retry?.controller; }
@@ -1487,12 +1546,15 @@ window.addEventListener('beforeunload', () => { coachView.dispose(); moveSounds.
 syncEngine(); syncSource(); renderBoard(); refreshLibrary();
 async function initializeReview() {
   let remembered;
+  const query = new URLSearchParams(location.search);
+  const identityRevision = detectedReadRevision;
   try {
     if (globalThis.chrome?.storage?.local) {
-      const stored = await chrome.storage.local.get(['username', 'usernames', 'reviewSettings', 'savedAccounts']);
+      const stored = await chrome.storage.local.get(['username', 'usernames', 'reviewSettings', 'savedAccounts', 'detectedAccounts']);
+      if (identityRevision === detectedReadRevision) detectedAccounts = stored.detectedAccounts || {};
       const { username, usernames, reviewSettings } = stored;
       if (usernames && typeof usernames === 'object') for (const source of ['chesscom', 'lichess']) if (typeof usernames[source] === 'string') savedUsernames[source] = usernames[source];
-      if (username && !savedUsernames.chesscom && !usernames) savedUsernames.chesscom = username;
+      if (typeof username === 'string' && !usernames) savedUsernames.chesscom = username;
       restorePreferences(reviewSettings);
       if (Object.hasOwn(stored, 'savedAccounts')) savedAccounts = normalizeAccounts(stored.savedAccounts);
       else await updateSavedAccounts(current => {
@@ -1502,11 +1564,15 @@ async function initializeReview() {
       remembered = savedUsernames[$('game-source').value];
     }
   } catch { /* The game picker remains usable when preferences are unavailable. */ }
+  const launchSource = query.get('accountSource');
+  if (!query.has('reviewId') && query.get('siteSettings') !== '1' && Object.hasOwn(SITE_PROVIDERS, launchSource)) {
+    $('game-source').value = launchSource;
+    remembered = savedUsernames[launchSource];
+  }
   usernameSource = $('game-source').value;
   $('username').value = remembered ?? ''; renderSavedAccounts();
   syncEngine(); syncSource(); renderMoves(); renderBoard();
   // Finish the optional support prompt and guide before opening Games or fetching a remembered account.
-  const query = new URLSearchParams(location.search);
   const requestedReview = query.get('reviewId');
   const openSiteSettings = query.get('siteSettings') === '1';
   const validReview = /^game-[a-f0-9]{64}$/.test(requestedReview || '');
@@ -1514,6 +1580,7 @@ async function initializeReview() {
   await supportPrompt.start({ autoOpen });
   await tutorial.start({ autoOpen });
   state.starting = false; updateControls();
+  fillDetectedAccount(usernameSource); void refreshDetectedAccount(usernameSource);
   if (validReview) {
     const opened = await openSavedReview(requestedReview);
     if (opened && query.get('view') === 'coach') setReviewTab('coach', true);

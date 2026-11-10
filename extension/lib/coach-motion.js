@@ -2,6 +2,7 @@ import { createCoachPuppet, drawCoachPuppet, coachPoseAt, COACH_REACTION_DURATIO
 import { coachArtworkId, coachPuppetUrl } from './coach-portraits.js';
 import { COACH_ANIMATION_LABELS } from './coach-repertoire.js';
 import { createCoachIdleCycle } from './coach-idle-cycle.js';
+import { coachPlayAction, coachPlayPoseAt } from './coach-play.js';
 
 const COACH_IDS = new Set(['meowl', 'owl', 'paws', 'mellow', 'scout', 'evil', 'baby']);
 const MOVE_GRADES = new Set(['Brilliant', 'Great', 'Best', 'Excellent', 'Good', 'Book', 'Inaccuracy', 'Mistake', 'Miss', 'Blunder']);
@@ -352,7 +353,9 @@ export function createCoachMotion({ isEnabled = () => true, isVisible = () => tr
     }
     let pose = poseOverride ?? (reaction.kind === 'ambient'
       ? ambientPoseAt(elapsed, reaction.coachId, reaction.variation)
-      : reaction.kind === 'voice' ? {} : coachPoseAt(reaction.poseKind, poseTime, reaction.coachId, reaction.variation + phrase));
+      : reaction.kind === 'voice' ? {}
+        : reaction.kind === 'play' ? coachPlayPoseAt(poseTime, reaction.coachId, reaction.variation)
+          : coachPoseAt(reaction.poseKind, poseTime, reaction.coachId, reaction.variation + phrase));
     if (reaction.voiceControlled) {
       const voice = currentVoice(reaction.image);
       let mouth = 0;
@@ -437,8 +440,8 @@ export function createCoachMotion({ isEnabled = () => true, isVisible = () => tr
     next();
   }
 
-  function react(image, { kind = 'talk', coachId = 'meowl', grade, durationMs, waitForVoice = false } = {}) {
-    if (!Object.hasOwn(DURATIONS, kind) || image?.tagName !== 'IMG' || !image.isConnected || !image.getClientRects().length || !allowed()) return false;
+  function react(image, { kind = 'talk', coachId = 'meowl', grade, durationMs, waitForVoice = false, variant = 0 } = {}) {
+    if ((kind !== 'play' && !Object.hasOwn(DURATIONS, kind)) || image?.tagName !== 'IMG' || !image.isConnected || !image.getClientRects().length || !allowed()) return false;
     if (kind === 'idle' && reducedMotion?.matches) return false;
     coachId = COACH_IDS.has(coachId) ? coachId : 'meowl';
     const stamp = now(), current = active.get(image);
@@ -456,7 +459,8 @@ export function createCoachMotion({ isEnabled = () => true, isVisible = () => tr
     // The companion and its new chat portrait share one gesture. Later replies
     // cycle through complete routines, never randomized frames within a movement.
     const takeCount = COACH_ANIMATION_LABELS[poseKind]?.[coachId]?.length || 3;
-    const variation = previous && stamp - previous.at < 100 ? previous.variation
+    const variation = kind === 'play' ? coachPlayAction(coachId, variant).variant
+      : previous && stamp - previous.at < 100 ? previous.variation
       : poseKind === 'idle' ? idleCycle.next(coachId, takeCount)
       : previous ? (previous.variation + 1) % takeCount : 0;
     variations.set(key, { at: stamp, variation });
@@ -466,7 +470,8 @@ export function createCoachMotion({ isEnabled = () => true, isVisible = () => tr
     if (reducedMotion?.matches) actor.dataset.reducedMotion = 'true';
     actor.dataset.reaction = kind;
     if (MOVE_GRADES.has(grade)) actor.dataset.grade = grade;
-    const duration = kind === 'talk' && Number.isFinite(durationMs)
+    const duration = kind === 'play' ? coachPlayAction(coachId, variation).durationMs
+      : kind === 'talk' && Number.isFinite(durationMs)
       ? Math.min(6000, Math.max(DURATIONS.talk, durationMs)) : DURATIONS[kind];
     actor.style.setProperty('--coach-reaction-duration', `${duration}ms`);
     const effects = [];
@@ -509,6 +514,17 @@ export function createCoachMotion({ isEnabled = () => true, isVisible = () => tr
     return true;
   }
 
+  /** Quiet idle gestures may yield to a tap; speaking and reactions finish first. */
+  function isBusy(image) {
+    const reaction = active.get(image);
+    return !!currentVoice(image) || !!reaction && !['idle', 'ambient'].includes(reaction.kind);
+  }
+
+  function play(image, { coachId = 'meowl', variant = 0, waitForVoice = false } = {}) {
+    if (isBusy(image)) return false;
+    return react(image, { kind: 'play', coachId, variant, waitForVoice });
+  }
+
   const onVisibilityChange = () => { if (document.visibilityState === 'hidden') stop(); };
   const onMotionChange = () => {
     if (reducedMotion.matches) { for (const image of voices.keys()) clearVoice(image); clearIdle(); }
@@ -529,6 +545,8 @@ export function createCoachMotion({ isEnabled = () => true, isVisible = () => tr
   reducedMotion?.addEventListener?.('change', onMotionChange);
   return {
     react,
+    play,
+    isBusy,
     prepareVoice,
     setVoice,
     setIdle,

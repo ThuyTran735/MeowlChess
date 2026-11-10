@@ -53,7 +53,9 @@ Use the final manifest and [privacy notice](../PRIVACY.md) when completing the s
 | Storage | Remember preferences and accounts; keep local reviews and update-check preferences. |
 | Chess.com public API | Retrieve completed public games selected by the user. |
 | Lichess export API | Retrieve completed public games and PGNs selected by the user. |
-| Optional chess-site access and scripting | Display the opt-in on-site review panel and read completed-game exports. |
+| Active tab | Read the signed-in account label on the Chess.com or Lichess page when the toolbar icon is clicked. |
+| Scripting | Run the local account-label reader and, when enabled, the on-site review panel. Website access is granted separately. |
+| Optional chess-site access | Detect signed-in usernames on open chess tabs; display the opt-in on-site panel and read completed-game exports when enabled. |
 | Optional notifications | Tell the user when a newly saved review finishes while they are away. |
 | Optional GitHub API access | Fetch public release metadata for manually requested or opt-in update checks. |
 

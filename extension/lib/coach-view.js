@@ -1,6 +1,7 @@
 import { COACHES, answerCoach, createCoachWalkthrough } from './coach.js';
 import { coachPortraitUrl } from './coach-portraits.js';
 import { createCoachMotion } from './coach-motion.js';
+import { createCoachPlayCycle } from './coach-play.js';
 import { createCoachSounds } from './coach-sounds.js';
 import { getCoachSoundProfile } from './coach-sound-profiles.js';
 import { COACH_ANIMATION_LABELS } from './coach-repertoire.js';
@@ -10,7 +11,7 @@ import { createMoveNotation } from './move-notation.js';
 import { normalizeCoachPerspective, resolveCoachFocus, detectCoachPlayerSide } from './coach-focus.js';
 
 const STORAGE_KEY = 'coachPreferences';
-const IDENTITY_KEYS = ['username', 'usernames', 'siteReviewSettings', 'savedAccounts'];
+const IDENTITY_KEYS = ['username', 'usernames', 'siteReviewSettings', 'savedAccounts', 'detectedAccounts'];
 const DEFAULT_QUESTIONS = ['Summarize this game', 'What was the biggest mistake?', 'What should I practice?', 'Show Brilliant and Great moves'];
 const FINAL_RESULTS = new Set(['1-0', '0-1', '1/2-1/2']);
 const MAX_PAIRS = 12;
@@ -118,11 +119,17 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   let manualPlayerSide = null, resolvedPlayerSide = null;
   const focusedSide = () => resolveCoachFocus(selected.perspective, resolvedPlayerSide);
   let previousPly = null, celebratedPly = null;
-  let lastGreeting = -Infinity, lastPreview = -Infinity;
+  let lastPreview = -Infinity;
+  const playCycle = createCoachPlayCycle();
+  let playTimer = null, playing = false;
+  let soundRevision = 0, soundPending = false, soundBusyUntil = 0;
   let walkthroughTimer = null, walkthroughToken = 0, walkthroughPending = '', walkthroughKey = '', walkthroughAnswer = null, walkthroughSource = null;
   const reactionsVisible = () => !disposed && !document.hidden && !unavailableReason() && (context.active || context.moveReactionsActive);
   const companionReady = () => !!companion && !companion.container.hidden && !disposed && !document.hidden && !unavailableReason();
-  const effectsVisible = () => reactionsVisible() || companionReady();
+  const portraitReady = () => !disposed && !document.hidden && !context.blockedReason
+    && avatar.isConnected && !!avatar.getClientRects().length
+    && (companion ? !companion.container.hidden : context.active);
+  const effectsVisible = () => reactionsVisible() || companionReady() || portraitReady();
   const motion = createCoachMotion({ isEnabled: () => selected.motion, isVisible: effectsVisible });
   const sounds = createCoachSounds({ isEnabled: () => selected.sounds, isVisible: effectsVisible, getVolume: () => selected.volume });
   function syncIdle() {
@@ -130,10 +137,20 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
     if (companionReady() && selected.motion) motion.setIdle(companion.image, { coachId: selected.coach });
     else motion.stop();
   }
-  function stopReactions(options) { motion.stop(options); sounds.stop(); syncIdle(); }
+  function clearPlay() {
+    clearTimeout(playTimer); playTimer = null; playing = false;
+    playStatus.textContent = ''; playHint.hidden = false;
+    playButton?.removeAttribute('aria-busy');
+  }
+  function stopSounds() {
+    soundRevision++; soundPending = false; soundBusyUntil = 0; sounds.stop();
+  }
+  function stopReactions(options) { clearPlay(); motion.stop(options); stopSounds(); syncIdle(); }
   function playSound(kind, targets) {
     const coachId = selected.coach;
     const images = [...new Set(targets)].filter(image => image?.isConnected);
+    const token = ++soundRevision;
+    soundPending = true;
     void sounds.play({ kind, coach: coachId,
       async beforeStart() {
         const ready = await Promise.all(images.map(image => motion.prepareVoice(image, { coachId })));
@@ -141,9 +158,10 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
       },
       onStart(playback) {
         if (disposed || selected.coach !== coachId) return;
+        soundBusyUntil = performance.now() + playback.durationMs;
         for (const image of images) if (image?.isConnected) motion.setVoice(image, { coachId, ...playback });
       },
-    });
+    }).finally(() => { if (token === soundRevision) soundPending = false; });
   }
   function reactionForMove(ply) {
     const move = context.result?.moves?.[ply - 1];
@@ -195,6 +213,15 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   root.classList.add('coach-view');
   const heading = node('div', 'coach-heading');
   const avatar = companion?.image || portrait(selected.coach, 'coach-avatar', 72);
+  const portraitControl = companion ? null : node('div', 'coach-portrait-control');
+  const playButton = companion?.container.querySelector('.coach-companion-greet') || node('button', 'coach-portrait-play');
+  playButton.type = 'button'; playButton.classList.add('coach-portrait-play');
+  const playHint = node('span', 'coach-play-hint', 'Tap to play');
+  const playStatus = node('span', 'coach-play-status');
+  playStatus.setAttribute('role', 'status'); playStatus.setAttribute('aria-live', 'polite'); playStatus.setAttribute('aria-atomic', 'true');
+  const playFeedback = node('span', 'coach-play-feedback'); playFeedback.append(playHint, playStatus);
+  if (portraitControl) { playButton.append(avatar); portraitControl.append(playButton, playFeedback); }
+  else companion.container.querySelector('.coach-companion-figure')?.append(playFeedback);
   const identity = node('div', 'coach-identity');
   const coachLabel = node('label', 'coach-label', 'Your coach');
   coachLabel.htmlFor = `${id}-choice`;
@@ -208,7 +235,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   identity.append(coachLabel, coachName, choice);
   const clear = node('button', 'coach-clear', 'Clear'); clear.type = 'button';
   clear.prepend(actionIcon('clear')); clear.setAttribute('aria-label', 'Clear chat'); clear.title = 'Clear this conversation';
-  if (!companion) heading.append(avatar);
+  if (!companion) heading.append(portraitControl);
   heading.append(identity, clear);
   const description = node('p', 'coach-description');
   const roster = node('div', 'coach-roster'); roster.setAttribute('role', 'group'); roster.setAttribute('aria-label', 'Choose your coach');
@@ -348,7 +375,6 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   const scope = node('p', 'coach-scope', 'Based on your saved engine review. Chats stay in this tab and clear when you change games.');
   scope.id = `${id}-scope`;
   root.replaceChildren(heading, description, picker, controls, settings, preferenceStatus, positionCard, blocked, walkthrough, welcome, log, suggestions, form, status, scope);
-  const greet = companion?.container.querySelector('.coach-companion-greet');
   const companionPersonality = companion ? node('span', 'coach-companion-personality') : null;
   if (companionPersonality) companion.container.querySelector('.coach-companion-figure')?.append(companionPersonality);
   const companionToolbar = companion ? node('div', 'coach-companion-toolbar') : null;
@@ -449,7 +475,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
       && FINAL_RESULTS.has(context.result.game?.headers?.Result);
     companion.container.hidden = !completed;
     if (!completed || !reactionsVisible()) companion.bubble.hidden = true;
-    if (greet) greet.disabled = !companionReady();
+    playButton.disabled = !portraitReady();
     if (companionHint) {
       companionHint.hidden = showingWalkthrough();
       companionHint.textContent = context.blockedReason ? 'Your coach will be back when you return to the review.'
@@ -613,10 +639,12 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
     animationPreview.title = !selected.motion ? 'Turn on Coach animations to preview' : 'Play a gesture without changing the review';
     soundPreview.title = !selected.sounds ? 'Turn on Meow sounds to preview' : !selected.volume ? 'Raise the volume to preview' : 'Play a cat sound at this volume';
     if (!selected.motion) motion.stop();
-    if (!selected.sounds) sounds.stop();
+    if (!selected.sounds) stopSounds();
     root.dataset.coach = selected.coach;
     const coach = COACHES.find(item => item.id === selected.coach) || COACHES[0];
     coachName.textContent = coach.name;
+    playButton.setAttribute('aria-label', `Play with ${coach.name}`);
+    playButton.title = `Tap to play with ${coach.name} while idle`;
     soundProfile.textContent = getCoachSoundProfile(coach.id).description;
     soundPreview.setAttribute('aria-label', `Preview ${coach.name}'s voice at this volume`);
     for (const [kind, label] of ANIMATION_KINDS) {
@@ -644,7 +672,6 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
       companionSound.setAttribute('aria-pressed', String(selected.sounds));
       if (companion.name) companion.name.textContent = coach.name;
       if (companionPersonality) companionPersonality.textContent = (coach.traits || []).join(' · ');
-      if (greet) { greet.setAttribute('aria-label', `Say hello to ${coach.name}`); greet.title = `Tap to say hello to ${coach.name}`; }
     }
     if (personalityChanged) renderSuggestions();
     renderCompanion(); renderWalkthrough(); renderMoveReaction(); renderControls();
@@ -652,6 +679,7 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
 
   function renderControls() {
     const reason = unavailableReason(), available = !reason;
+    playButton.disabled = !portraitReady();
     soundPreview.disabled = !selected.sounds || !selected.volume || !effectsVisible();
     animationPreview.disabled = !selected.motion || !effectsVisible();
     animationChoice.disabled = animationPreview.disabled;
@@ -840,14 +868,14 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
   });
   listen(soundToggle, 'change', () => {
     selected = preferences({ ...selected, sounds: soundToggle.checked }); revision++;
-    sounds.stop(); renderPreferences(); void writePreferences({ sounds: selected.sounds });
+    stopSounds(); renderPreferences(); void writePreferences({ sounds: selected.sounds });
     if (selected.sounds && reactionsVisible()) void sounds.unlock();
   });
   listen(volume, 'input', () => {
     selected = preferences({ ...selected, volume: Number(volume.value) / 100 }); revision++;
     // Protect the in-progress slider value from another window's preference event.
     pendingPreferences = { ...pendingPreferences, volume: selected.volume };
-    sounds.stop();
+    stopSounds();
     volumeValue.textContent = `${Math.round(selected.volume * 100)}%`;
     volume.setAttribute('aria-valuetext', selected.volume ? `${Math.round(selected.volume * 100)} percent` : 'Muted');
     soundPreview.disabled = !selected.sounds || !selected.volume || !effectsVisible();
@@ -870,11 +898,21 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
       waitForVoice: kind !== 'idle' && selected.sounds && selected.volume > 0 });
     if (kind !== 'idle') playSound(kind, [avatar]);
   });
-  if (greet) listen(greet, 'click', () => {
-    if (!companionReady() || Date.now() - lastGreeting < 1800) return;
-    lastGreeting = Date.now(); stopReactions({ settle: true });
-    motion.react(avatar, { kind: 'greeting', coachId: selected.coach, waitForVoice: selected.sounds && selected.volume > 0 });
-    playSound('greeting', [avatar]);
+  listen(playButton, 'click', event => {
+    event.stopPropagation();
+    if (!portraitReady() || submitting || walkthroughPending || playing || soundPending
+      || performance.now() < soundBusyUntil || motion.isBusy(avatar)) return;
+    const interaction = playCycle.next(selected.coach);
+    playing = true; playButton.setAttribute('aria-busy', 'true');
+    playHint.hidden = true; playStatus.textContent = interaction.text;
+    motion.play(avatar, { coachId: selected.coach, variant: interaction.variant,
+      waitForVoice: selected.sounds && selected.volume > 0 });
+    playSound(interaction.soundKind, [avatar]);
+    playTimer = setTimeout(clearPlay, Math.max(3600, interaction.durationMs + 300));
+  });
+  listen(playButton, 'keydown', event => {
+    // Keep native Enter/Space activation without also navigating the game.
+    if (['Enter', ' ', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) event.stopPropagation();
   });
   listen(commentaryToggle, 'change', () => {
     selected = preferences({ ...selected, commentary: commentaryToggle.checked }); revision++;
@@ -980,12 +1018,13 @@ export function createCoachView(root, { onNavigate, onOpen, moveReactionTarget =
       renderMoveReaction({ mayCelebrate: positionChanged || surfaceChanged });
     },
     dispose() {
-      disposed = true; cancelWalkthrough(); walkthroughSource = null; motion.dispose(); sounds.dispose();
+      disposed = true; clearPlay(); cancelWalkthrough(); walkthroughSource = null; motion.dispose(); sounds.dispose();
       unsubscribeUnlock(); unlockReadVersion++;
       if (moveReactionTarget?.container) moveReactionTarget.container.hidden = true;
       if (companion) { companion.container.hidden = true; companion.bubble.hidden = true; }
       companionAsk?.remove();
       companionPersonality?.remove();
+      playFeedback.remove();
       companionToolbar?.remove(); companionFooter?.remove();
       events.abort(); storageEvents?.removeListener?.(storageChanged);
       conversation = []; context = { game: null, result: null, ply: 0, blockedReason: '', active: false, moveReactionsActive: false };

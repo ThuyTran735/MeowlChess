@@ -3,6 +3,7 @@ import { createReviewLibrary, reviewIdForGame } from './lib/library.js';
 import { ANALYSIS_VERSION } from './lib/review.js';
 import { createCompletionAlertService } from './lib/completion-alert-service.js';
 import { createUpdateService } from './lib/updates.js';
+import { createAccountDetectionService, accountSource } from './lib/account-detection-service.js';
 import { createSiteReviewBroker, createSiteReviewLibraryBridge, normalizeSiteSettings, normalizeSiteAnalysis, SITE_CONTENT_SCRIPT, SITE_PROVIDERS } from './lib/site-review.js';
 
 const SETTINGS_KEY = 'siteReviewSettings';
@@ -13,6 +14,7 @@ const SITE_SCRIPTS = ['site-panel.js', 'site-bot.js', SITE_CONTENT_SCRIPT];
 const permissionFor = source => ({ permissions: ['scripting'], origins: SITE_PROVIDERS[source].origins });
 const hasPermission = source => chrome.permissions.contains(permissionFor(source));
 const libraryBridge = createSiteReviewLibraryBridge({ library: createReviewLibrary({ analysisVersion: ANALYSIS_VERSION }), idForGame: reviewIdForGame });
+const accountDetection = createAccountDetectionService({ storage: chrome.storage.local, tabs: chrome.tabs, scripting: chrome.scripting, permissions: chrome.permissions });
 
 const broker = createSiteReviewBroker({
   extensionId: chrome.runtime.id,
@@ -73,8 +75,12 @@ async function clearCompletionAlerts() {
   });
 }
 
-chrome.action.onClicked.addListener(() => {
-  chrome.tabs.create({ url: chrome.runtime.getURL('review.html') });
+chrome.action.onClicked.addListener(tab => {
+  // activeTab grants this one page only when the user opens MeowlChess from it.
+  const source = accountSource(tab?.url);
+  if (!source) { void chrome.tabs.create({ url: chrome.runtime.getURL('review.html') }); return; }
+  void accountDetection.detectTab(tab, { activeGrant: true })
+    .finally(() => chrome.tabs.create({ url: chrome.runtime.getURL(`review.html?accountSource=${source}`) })).catch(() => {});
 });
 
 let reconciliation = Promise.resolve();
@@ -149,13 +155,25 @@ chrome.permissions.onRemoved.addListener(permissions => {
   void scheduleReconcile({ inject: true }).catch(() => {});
 });
 chrome.permissions.onAdded.addListener(() => { registerNotificationClicks(); void scheduleReconcile({ inject: true }).catch(() => {}); });
-chrome.tabs.onRemoved.addListener(tabId => broker.invalidate(tabId));
-chrome.tabs.onUpdated.addListener((tabId, changes) => {
+chrome.tabs.onRemoved.addListener(tabId => { broker.invalidate(tabId); accountDetection.invalidate(tabId); });
+chrome.tabs.onUpdated.addListener((tabId, changes, tab) => {
+  if (changes.url || changes.status === 'loading') accountDetection.invalidate(tabId);
+  if (changes.status === 'complete' && tab?.active && accountSource(tab.url)) void accountDetection.detectTab(tab);
   if (changes.url) broker.pageChanged(tabId, changes.url);
   if (changes.status === 'loading') broker.documentChanged(tabId);
 });
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  void chrome.tabs.get(tabId).then(tab => accountSource(tab.url) && accountDetection.detectTab(tab)).catch(() => {});
+});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === 'meowl:detect-account') {
+    if (sender?.id !== chrome.runtime.id || sender.url?.split(/[?#]/)[0] !== chrome.runtime.getURL('review.html')) {
+      sendResponse({ status: 'unavailable' }); return false;
+    }
+    accountDetection.detect(message.source).then(sendResponse, () => sendResponse({ status: 'unavailable' }));
+    return true;
+  }
   if (message?.type === 'meowl:version' && sender?.id === chrome.runtime.id) {
     sendResponse({ version: chrome.runtime.getManifest().version }); return false;
   }
